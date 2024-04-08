@@ -22,6 +22,8 @@
  *
  */
 
+#include "runtime/sharedRuntime.hpp"
+
 #ifndef SHARE_CODE_SCCACHE_HPP
 #define SHARE_CODE_SCCACHE_HPP
 
@@ -269,6 +271,8 @@ private:
   uint     _C2_blobs_length;
   uint     _final_blobs_length;
 
+  bool _extrs_complete;
+  bool _early_stubs_complete;
   bool _complete;
   bool _opto_complete;
   bool _c1_complete;
@@ -278,11 +282,15 @@ public:
     _extrs_addr = nullptr;
     _stubs_addr = nullptr;
     _blobs_addr = nullptr;
+    _extrs_complete = false;
+    _early_stubs_complete = false;
     _complete = false;
     _opto_complete = false;
     _c1_complete = false;
   }
   ~SCAddressTable();
+  void init_extrs();
+  void init_early_stubs();
   void init();
   void init_opto();
   void init_c1();
@@ -345,7 +353,7 @@ public:
   SCCReader(SCCache* cache, SCCEntry* entry, CompileTask* task);
 
   bool compile(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler);
-  bool compile_blob(CodeBuffer* buffer, int* pc_offset);
+  bool compile_blob(CodeBuffer* buffer, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
 
   Klass* read_klass(const methodHandle& comp_method, bool shared);
   Method* read_method(const methodHandle& comp_method, bool shared);
@@ -458,6 +466,8 @@ public:
   void load_strings();
   int store_strings();
 
+  static void init_extrs_table();
+  static void init_early_stubs_table();
   static void init_table();
   static void init_opto_table();
   static void init_c1_table();
@@ -505,9 +515,17 @@ public:
   bool write_metadata(Metadata* m);
   bool write_metadata(OopRecorder* oop_recorder);
 
-  static bool load_exception_blob(CodeBuffer* buffer, int* pc_offset);
-  static bool store_exception_blob(CodeBuffer* buffer, int pc_offset);
+  static bool load_exception_blob(CodeBuffer* buffer, OopMapSet* &oop_maps);
+  static bool store_exception_blob(CodeBuffer* buffer, OopMapSet* oop_maps);
 
+  static bool load_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool store_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
+
+private:
+  static bool load_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
+  static bool store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* oop_maps, GrowableArray<int>* extra_args);
+
+public:
   static bool load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level);
 
   static SCCEntry* store_nmethod(const methodHandle& method,

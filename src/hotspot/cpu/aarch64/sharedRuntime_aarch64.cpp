@@ -30,6 +30,7 @@
 #include "code/codeCache.hpp"
 #include "code/compiledIC.hpp"
 #include "code/debugInfoRec.hpp"
+#include "code/SCCache.hpp"
 #include "code/vtableStubs.hpp"
 #include "compiler/oopMap.hpp"
 #include "gc/shared/barrierSetAssembler.hpp"
@@ -2209,10 +2210,31 @@ void SharedRuntime::generate_deopt_blob() {
   }
 #endif
   CodeBuffer buffer("deopt_blob", 2048+pad, 1024);
+  GrowableArray<int> extra_args;
+  OopMapSet *oop_maps;
+
+  if (SCCache::load_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(deopt), oop_maps, &extra_args)) {
+    assert(oop_maps != nullptr, "expected oop maps");
+    assert(extra_args.length() >= 4, "unexpected arg count");
+    // Set deopt blob
+    _deopt_blob = DeoptimizationBlob::create(&buffer, oop_maps, 0, extra_args.at(0), extra_args.at(1), extra_args.at(2));
+    _deopt_blob->set_unpack_with_exception_in_tls_offset(extra_args.at(3));
+#if INCLUDE_JVMCI
+    if (EnableJVMCI) {
+      assert(extra_args.length() == 6, "unexpected arg count");
+      _deopt_blob->set_uncommon_trap_offset(extra_args.at(4));
+      _deopt_blob->set_implicit_exception_uncommon_trap_offset(extra_args.at(5));
+    } else {
+      assert(extra_args.length() == 4, "unexpected arg count");
+    }
+#endif
+    return;
+  }
+
   MacroAssembler* masm = new MacroAssembler(&buffer);
   int frame_size_in_words;
   OopMap* map = nullptr;
-  OopMapSet *oop_maps = new OopMapSet();
+  oop_maps = new OopMapSet();
   RegisterSaver reg_save(COMPILER2_OR_JVMCI != 0);
 
   // -------------
@@ -2563,6 +2585,18 @@ void SharedRuntime::generate_deopt_blob() {
   // Make sure all code is generated
   masm->flush();
 
+  extra_args.append(exception_offset);
+  extra_args.append(reexecute_offset);
+  extra_args.append(frame_size_in_words);
+  extra_args.append(exception_in_tls_offset);
+#if INCLUDE_JVMCI
+  if (EnableJVMCI) {
+    extra_args.append(uncommon_trap_offset);
+    extra_args.append(implicit_exception_uncommon_trap_offset);
+  }
+#endif 
+  SCCache::store_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(deopt), oop_maps, &extra_args);
+
   _deopt_blob = DeoptimizationBlob::create(&buffer, oop_maps, 0, exception_offset, reexecute_offset, frame_size_in_words);
   _deopt_blob->set_unpack_with_exception_in_tls_offset(exception_in_tls_offset);
 #if INCLUDE_JVMCI
@@ -2589,14 +2623,24 @@ uint SharedRuntime::out_preserve_stack_slots() {
 #ifdef COMPILER2
 //------------------------------generate_uncommon_trap_blob--------------------
 void SharedRuntime::generate_uncommon_trap_blob() {
+
+  assert(SimpleRuntimeFrame::framesize % 4 == 0, "sp not 16-byte aligned");
+
   // Allocate space for the code
   ResourceMark rm;
   // Setup code generation tools
   CodeBuffer buffer("uncommon_trap_blob", 2048, 1024);
+  OopMapSet *oop_maps = nullptr;
+
+  if (SCCache::load_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(uncommon_trap), oop_maps)) {
+    assert(oop_maps != nullptr, "expected oop maps");
+    // Set exception blob
+    _uncommon_trap_blob =  UncommonTrapBlob::create(&buffer, oop_maps,
+                                                 SimpleRuntimeFrame::framesize >> 1);
+    return;
+  }
+
   MacroAssembler* masm = new MacroAssembler(&buffer);
-
-  assert(SimpleRuntimeFrame::framesize % 4 == 0, "sp not 16-byte aligned");
-
   address start = __ pc();
 
   // Push self-frame.  We get here with a return address in LR
@@ -2638,7 +2682,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   __ bind(retaddr);
 
   // Set an oopmap for the call site
-  OopMapSet* oop_maps = new OopMapSet();
+  oop_maps = new OopMapSet();
   OopMap* map = new OopMap(SimpleRuntimeFrame::framesize, 0);
 
   // location of rfp is known implicitly by the frame sender code
@@ -2772,8 +2816,11 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // Make sure all code is generated
   masm->flush();
 
+  SCCache::store_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(uncommon_trap), oop_maps);
   _uncommon_trap_blob =  UncommonTrapBlob::create(&buffer, oop_maps,
                                                  SimpleRuntimeFrame::framesize >> 1);
+  
+  return;
 }
 #endif // COMPILER2
 
@@ -2783,15 +2830,24 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 // Generate a special Compile2Runtime blob that saves all registers,
 // and setup oopmap.
 //
-SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_type) {
+SafepointBlob* SharedRuntime::generate_handler_blob(sharedRuntimeStubID id, address call_ptr, int poll_type) {
   ResourceMark rm;
-  OopMapSet *oop_maps = new OopMapSet();
+  OopMapSet *oop_maps = nullptr;
   OopMap* map;
 
   // Allocate space for the code.  Setup code generation tools.
   CodeBuffer buffer("handler_blob", 2048, 1024);
-  MacroAssembler* masm = new MacroAssembler(&buffer);
+  GrowableArray<int> extra_args;
 
+  if (SCCache::load_runtime_blob(&buffer, id, oop_maps, &extra_args)) {
+    // return pre-existing blob
+    assert(oop_maps != nullptr, "expected oop maps");
+    // TODO sanity check the frame size?
+    assert(extra_args.length() == 1, "unexpected arg count");
+    return SafepointBlob::create(&buffer, oop_maps, extra_args.at(0));
+  }
+
+  MacroAssembler* masm = new MacroAssembler(&buffer);
   address start   = __ pc();
   address call_pc = nullptr;
   int frame_size_in_words;
@@ -2837,6 +2893,7 @@ SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_t
   // will allow deoptimization at this safepoint to find all possible
   // debug-info recordings, as well as let GC find all oops.
 
+  oop_maps = new OopMapSet();
   oop_maps->add_gc_map( __ pc() - start, map);
 
   Label noException;
@@ -2896,6 +2953,8 @@ SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_t
   // Make sure all code is generated
   masm->flush();
 
+  extra_args.append(frame_size_in_words);
+  SCCache::store_runtime_blob(&buffer, id, oop_maps, &extra_args);
   // Fill-out other meta info
   return SafepointBlob::create(&buffer, oop_maps, frame_size_in_words);
 }
@@ -2908,19 +2967,29 @@ SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_t
 // but since this is generic code we don't know what they are and the caller
 // must do any gc of the args.
 //
-RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const char* name) {
+RuntimeStub* SharedRuntime::generate_resolve_blob(sharedRuntimeStubID id, address destination, const char* name) {
   assert (StubRoutines::forward_exception_entry() != nullptr, "must be generated before");
 
   // allocate space for the code
   ResourceMark rm;
 
   CodeBuffer buffer(name, 1000, 512);
-  MacroAssembler* masm                = new MacroAssembler(&buffer);
+  OopMapSet *oop_maps = nullptr;
+  GrowableArray<int> extra_args;
 
+  if (SCCache::load_runtime_blob(&buffer, id, oop_maps, &extra_args)) {
+    // return pre-existing blob
+    assert(oop_maps != nullptr, "expected oop maps");
+    // TODO sanity check the frame size and frame complete offset?
+    assert(extra_args.length() == 2, "unexpected arg count");
+    return RuntimeStub::new_runtime_stub(name, &buffer, extra_args.at(0), extra_args.at(1), oop_maps, true);
+  }
+
+  MacroAssembler* masm                = new MacroAssembler(&buffer);
   int frame_size_in_words;
   RegisterSaver reg_save(false /* save_vectors */);
 
-  OopMapSet *oop_maps = new OopMapSet();
+  oop_maps = new OopMapSet();
   OopMap* map = nullptr;
 
   int start = __ offset();
@@ -2984,6 +3053,11 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const cha
   // make sure all code is generated
   masm->flush();
 
+  // save blob for next time
+  extra_args.append(frame_complete);
+  extra_args.append(frame_size_in_words);
+  SCCache::store_runtime_blob(&buffer, id, oop_maps, &extra_args);
+
   // return the  blob
   // frame_size_words or bytes??
   return RuntimeStub::new_runtime_stub(name, &buffer, frame_complete, frame_size_in_words, oop_maps, true);
@@ -3029,6 +3103,15 @@ void OptoRuntime::generate_exception_blob() {
   ResourceMark rm;
   // Setup code generation tools
   CodeBuffer buffer("exception_blob", 2048, 1024);
+  int pc_offset = 0;
+  OopMapSet *oop_maps = nullptr;
+  if (SCCache::load_exception_blob(&buffer, oop_maps)) {
+    // Set exception blob
+    assert(oop_maps != nullptr, "expected oop maps");
+    _exception_blob =  ExceptionBlob::create(&buffer, oop_maps, SimpleRuntimeFrame::framesize >> 1);
+    return;
+  }
+
   MacroAssembler* masm = new MacroAssembler(&buffer);
 
   // TODO check various assumptions made here
@@ -3080,8 +3163,9 @@ void OptoRuntime::generate_exception_blob() {
   // handle_exception_stub), since they were restored when we got the
   // exception.
 
-  OopMapSet* oop_maps = new OopMapSet();
+  // OopMapSet* oop_maps = new OopMapSet();
 
+  oop_maps = new OopMapSet();
   oop_maps->add_gc_map(the_pc - start, new OopMap(SimpleRuntimeFrame::framesize, 0));
 
   __ reset_last_Java_frame(false);
@@ -3121,6 +3205,7 @@ void OptoRuntime::generate_exception_blob() {
   // Make sure all code is generated
   masm->flush();
 
+  SCCache::store_exception_blob(&buffer, oop_maps);
   // Set exception blob
   _exception_blob =  ExceptionBlob::create(&buffer, oop_maps, SimpleRuntimeFrame::framesize >> 1);
 }

@@ -164,6 +164,12 @@ void SCCache::init2() {
     close();
     exit_vm_on_load_failure();
   }
+  // initialize the table of external routines so we can save
+  // generated code blobs that reference them
+  init_extrs_table();
+  // initialize the table of initial stubs so we can save
+  // generated code blobs that reference them
+  init_early_stubs_table();
 }
 
 void SCCache::print_timers_on(outputStream* st) {
@@ -233,6 +239,8 @@ void SCCache::close() {
 
         LogStreamHandle(Info, scc, codecache) info_scc;
         if (info_scc.is_enabled()) {
+          // need a lock to traverse the code cache
+          MutexLocker locker(CodeCache_lock, Mutex::_no_safepoint_check_flag);
           NMethodIterator iter(NMethodIterator::all);
           while (iter.next()) {
             nmethod* nm = iter.method();
@@ -567,6 +575,20 @@ SCCache::SCCache(const char* cache_path, int fd, uint load_size) {
     log_info(scc, init)("Allocated store buffer at address " INTPTR_FORMAT " of size %d", p2i(_store_buffer), CachedCodeMaxSize);
   }
   _table = new SCAddressTable();
+}
+
+void SCCache::init_extrs_table() {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->init_extrs();
+  }
+}
+
+void SCCache::init_early_stubs_table() {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->init_early_stubs();
+  }
 }
 
 void SCCache::init_table() {
@@ -1987,7 +2009,15 @@ bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code
   return true;
 }
 
-bool SCCache::load_exception_blob(CodeBuffer* buffer, int* pc_offset) {
+bool SCCache::load_exception_blob(CodeBuffer* buffer, OopMapSet* &oop_maps) {
+  return load_blob(buffer, (uint32_t)999, oop_maps, nullptr);
+}
+
+bool SCCache::load_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+  return load_blob(buffer, (uint32_t)id, oop_maps, extra_args);
+}
+
+bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
 #ifdef ASSERT
   LogStreamHandle(Debug, scc, nmethod) log;
   if (log.is_enabled()) {
@@ -1999,27 +2029,24 @@ bool SCCache::load_exception_blob(CodeBuffer* buffer, int* pc_offset) {
   if (cache == nullptr) {
     return false;
   }
-  SCCEntry* entry = cache->find_entry(SCCEntry::Blob, 999);
+  SCCEntry* entry = cache->find_entry(SCCEntry::Blob, id);
   if (entry == nullptr) {
     return false;
   }
   SCCReader reader(cache, entry, nullptr);
-  return reader.compile_blob(buffer, pc_offset);
+  return reader.compile_blob(buffer, oop_maps, extra_args);
 }
 
-bool SCCReader::compile_blob(CodeBuffer* buffer, int* pc_offset) {
+bool SCCReader::compile_blob(CodeBuffer* buffer, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint entry_position = _entry->offset();
-
-  // Read pc_offset
-  *pc_offset = *(int*)addr(entry_position);
 
   // Read name
   uint name_offset = entry_position + _entry->name_offset();
   uint name_size = _entry->name_size(); // Includes '/0'
   const char* name = addr(name_offset);
 
-  log_info(scc, stubs)("%d (L%d): Reading blob '%s' with pc_offset %d from Startup Code Cache '%s'",
-                       compile_id(), comp_level(), name, *pc_offset, _cache->cache_path());
+  log_info(scc, stubs)("%d (L%d): Reading blob '%s' from Startup Code Cache '%s'",
+                       compile_id(), comp_level(), name, _cache->cache_path());
 
   if (strncmp(buffer->name(), name, (name_size - 1)) != 0) {
     log_warning(scc)("%d (L%d): Saved blob's name '%s' is different from '%s'",
@@ -2045,8 +2072,32 @@ bool SCCReader::compile_blob(CodeBuffer* buffer, int* pc_offset) {
     return false;
   }
 
-  log_info(scc, stubs)("%d (L%d): Read blob '%s' from Startup Code Cache '%s'",
+  uint offset = read_position();
+  int has_map = *(int*)addr(offset);
+  set_read_position(offset + sizeof(int));
+  if (has_map) {
+    log_info(scc, stubs)("%d (L%d): Reading blob '%s' oop_maps from Startup Code Cache '%s'",
                        compile_id(), comp_level(), name, _cache->cache_path());
+    oop_maps = read_oop_maps();
+  } else {
+    oop_maps = nullptr;
+  }
+
+  offset = read_position();
+  int extras_count = *(int*)addr(offset);
+  offset += sizeof(int);
+  assert((extras_count == 0) == (extra_args == nullptr), "wrong caller expectations");
+  set_read_position(offset);
+  for (int i = 0; i < extras_count; i++) {
+    int arg = *(int*)addr(offset);
+    offset += sizeof(int);
+    log_info(scc, stubs)("%d (L%d): Reading blob '%s'  extra_args[%d] == 0x%x from Startup Code Cache '%s'",
+                         compile_id(), comp_level(), name, i, arg, _cache->cache_path());
+    extra_args->push(arg);
+  }
+
+  log_info(scc, stubs)("%d (L%d): Read blob '%s' with '%d' args from Startup Code Cache '%s'",
+                       compile_id(), comp_level(), name, extras_count, _cache->cache_path());
 #ifdef ASSERT
   LogStreamHandle(Debug, scc, nmethod) log;
   if (log.is_enabled()) {
@@ -2279,7 +2330,15 @@ bool SCCache::write_code(CodeBuffer* buffer, uint& code_size) {
   return true;
 }
 
-bool SCCache::store_exception_blob(CodeBuffer* buffer, int pc_offset) {
+bool SCCache::store_exception_blob(CodeBuffer* buffer, OopMapSet *oop_maps) {
+  return store_blob(buffer, (uint32_t)999, oop_maps, nullptr);
+}
+
+bool SCCache::store_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+  return store_blob(buffer, (uint32_t)id, oop_maps, extra_args);
+}
+
+bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   SCCache* cache = open_for_write();
   if (cache == nullptr) {
     return false;
@@ -2299,17 +2358,11 @@ bool SCCache::store_exception_blob(CodeBuffer* buffer, int pc_offset) {
   }
   uint entry_position = cache->_write_position;
 
-  // Write pc_offset
-  uint n = cache->write_bytes(&pc_offset, sizeof(int));
-  if (n != sizeof(int)) {
-    return false;
-  }
-
   // Write name
   const char* name = buffer->name();
   uint name_offset = cache->_write_position - entry_position;
   uint name_size = (uint)strlen(name) + 1; // Includes '/0'
-  n = cache->write_bytes(name, name_size);
+  uint n = cache->write_bytes(name, name_size);
   if (n != name_size) {
     return false;
   }
@@ -2329,11 +2382,47 @@ bool SCCache::store_exception_blob(CodeBuffer* buffer, int pc_offset) {
   if (!cache->write_relocations(buffer, reloc_size)) {
     return false;
   }
+  int has_map = (oop_maps != nullptr);
+
+  n = cache->write_bytes(&has_map, sizeof(int));
+  if (n != sizeof(int)) {
+    return false;
+  }
+  if (has_map) {
+    log_info(scc, stubs)("Writing blob '%s' oop_map to Startup Code Cache '%s'", buffer->name(), cache->_cache_path);
+    if (!cache->write_oop_maps(oop_maps)) {
+      return false;
+    }
+  }
+
+  int extras_count;
+  if (extra_args == nullptr) {
+    extras_count = 0;
+    n = cache->write_bytes(&extras_count, sizeof(int));
+    if (n != sizeof(int)) {
+      return false;
+    }
+  } else {
+    extras_count = extra_args->length();
+    assert(extras_count > 0, "wrong caller expectations");
+    n = cache->write_bytes(&extras_count, sizeof(int));
+    if (n != sizeof(int)) {
+      return false;
+    }
+    for (int i = 0; i < extras_count; i++) {
+      int arg = extra_args->at(i);
+      log_info(scc, stubs)("Writing blob '%s' extra_args[%d] == 0x%x to Startup Code Cache '%s'", buffer->name(), i, arg, cache->_cache_path);
+     n = cache->write_bytes(&arg, sizeof(int));
+      if (n != sizeof(int)) {
+        return false;
+      }
+    }
+  }
 
   uint entry_size = cache->_write_position - entry_position;
   SCCEntry* entry = new(cache) SCCEntry(entry_position, entry_size, name_offset, name_size,
                                           code_offset, code_size, reloc_offset, reloc_size,
-                                          SCCEntry::Blob, (uint32_t)999);
+                                        SCCEntry::Blob, id);
   log_info(scc, stubs)("Wrote stub '%s' to Startup Code Cache '%s'", name, cache->_cache_path);
   return true;
 }
@@ -3512,17 +3601,11 @@ void SCCReader::print_on(outputStream* st) {
     assert(type##_length <= type##_max, "increase size"); \
   }
 
-static bool initializing = false;
-void SCAddressTable::init() {
-  if (_complete || initializing) return; // Done already
-  initializing = true;
+static bool initializing_extrs = false;
+void SCAddressTable::init_extrs() {
+  if (_extrs_complete || initializing_extrs) return; // Done already
+  initializing_extrs = true;
   _extrs_addr = NEW_C_HEAP_ARRAY(address, _extrs_max, mtCode);
-  _stubs_addr = NEW_C_HEAP_ARRAY(address, _stubs_max, mtCode);
-  _blobs_addr = NEW_C_HEAP_ARRAY(address, _blobs_max, mtCode);
-
-  // Divide _blobs_addr array to chunks because they could be initialized in parrallel
-  _C2_blobs_addr = _blobs_addr + _shared_blobs_max;// C2 blobs addresses stored after shared blobs
-  _C1_blobs_addr = _C2_blobs_addr + _C2_blobs_max; // C1 blobs addresses stored after C2 blobs
 
   _extrs_length = 0;
   _stubs_length = 0;
@@ -3534,6 +3617,9 @@ void SCAddressTable::init() {
   // Runtime methods
 #ifdef COMPILER2
   SET_ADDRESS(_extrs, OptoRuntime::handle_exception_C);
+  SET_ADDRESS(_extrs, Deoptimization::uncommon_trap);
+  SET_ADDRESS(_extrs, Deoptimization::fetch_unroll_info);
+  SET_ADDRESS(_extrs, Deoptimization::unpack_frames);
 #endif
 #ifdef COMPILER1
   SET_ADDRESS(_extrs, Runtime1::is_instance_of);
@@ -3543,6 +3629,13 @@ void SCAddressTable::init() {
   SET_ADDRESS(_extrs, CompressedOops::ptrs_base_addr());
   SET_ADDRESS(_extrs, G1BarrierSetRuntime::write_ref_field_post_entry);
   SET_ADDRESS(_extrs, G1BarrierSetRuntime::write_ref_field_pre_entry);
+
+  SET_ADDRESS(_extrs, SharedRuntime::handle_wrong_method);
+  SET_ADDRESS(_extrs, SharedRuntime::handle_wrong_method_abstract);
+  SET_ADDRESS(_extrs, SharedRuntime::handle_wrong_method_ic_miss);
+  SET_ADDRESS(_extrs, SharedRuntime::resolve_opt_virtual_call_C);
+  SET_ADDRESS(_extrs, SharedRuntime::resolve_virtual_call_C);
+  SET_ADDRESS(_extrs, SharedRuntime::resolve_static_call_C);
 
   SET_ADDRESS(_extrs, SharedRuntime::complete_monitor_unlocking_C);
   SET_ADDRESS(_extrs, SharedRuntime::enable_stack_reserved_zone);
@@ -3570,6 +3663,8 @@ void SCAddressTable::init() {
   SET_ADDRESS(_extrs, SharedRuntime::lmul);
   SET_ADDRESS(_extrs, SharedRuntime::lrem);
   SET_ADDRESS(_extrs, &JvmtiExport::_should_notify_object_alloc);
+
+  SET_ADDRESS(_extrs, SafepointSynchronize::handle_polling_page_exception);
 
   BarrierSet* bs = BarrierSet::barrier_set(); 
   if (bs->is_a(BarrierSet::CardTableBarrierSet)) {
@@ -3602,9 +3697,38 @@ void SCAddressTable::init() {
   SET_ADDRESS(_extrs, LIR_Assembler::double_signflip_pool);
 #endif
 
+  _extrs_complete = true;
+  log_info(scc,init)("External addresses recorded");
+}
+
+static bool initializing_early_stubs = false;
+void SCAddressTable::init_early_stubs() {
+  if (_complete || initializing_early_stubs) return; // Done already
+  initializing_early_stubs = true;
+  _stubs_addr = NEW_C_HEAP_ARRAY(address, _stubs_max, mtCode);
+  _stubs_length = 0;
+  SET_ADDRESS(_stubs, StubRoutines::forward_exception_entry());
+  _early_stubs_complete = true;
+  log_info(scc,init)("early stubs recorded");
+}
+
+static bool initializing = false;
+void SCAddressTable::init() {
+  if (_complete || initializing) return; // Done already
+  initializing = true;
+  _blobs_addr = NEW_C_HEAP_ARRAY(address, _blobs_max, mtCode);
+
+  // Divide _blobs_addr array to chunks because they could be initialized in parrallel
+  _C2_blobs_addr = _blobs_addr + _shared_blobs_max;// C2 blobs addresses stored after shared blobs
+  _C1_blobs_addr = _C2_blobs_addr + _C2_blobs_max; // C1 blobs addresses stored after C2 blobs
+
+  _blobs_length = 0;       // for shared blobs
+  _C1_blobs_length = 0;
+  _C2_blobs_length = 0;
+  _final_blobs_length = 0; // Depends on numnber of C1 blobs
+
   // Stubs
   SET_ADDRESS(_stubs, StubRoutines::method_entry_barrier());
-  SET_ADDRESS(_stubs, StubRoutines::forward_exception_entry());
 /*
   SET_ADDRESS(_stubs, StubRoutines::throw_AbstractMethodError_entry());
   SET_ADDRESS(_stubs, StubRoutines::throw_IncompatibleClassChangeError_entry());
@@ -3789,7 +3913,7 @@ void SCAddressTable::init() {
   assert(_blobs_length <= _shared_blobs_max, "increase _shared_blobs_max to %d", _blobs_length);
   _final_blobs_length = _blobs_length;
   _complete = true;
-  log_info(scc,init)("External addresses and stubs recorded");
+  log_info(scc,init)("Stubs recorded");
 }
 
 void SCAddressTable::init_opto() {
@@ -3964,7 +4088,7 @@ void SCCache::add_new_C_string(const char* str) {
 }
 
 void SCAddressTable::add_C_string(const char* str) {
-  if (str != nullptr && _complete && (_opto_complete || _c1_complete)) {
+  if (str != nullptr && _extrs_complete) {
     // Check previous strings address
     for (int i = 0; i < _C_strings_count; i++) {
       if (_C_strings[i] == str) {
@@ -4028,7 +4152,7 @@ int search_address(address addr, address* table, uint length) {
 }
 
 address SCAddressTable::address_for_id(int idx) {
-  if (!_complete) {
+  if (!_extrs_complete) {
     fatal("SCA table is not complete");
   }
   if (idx == -1) {
@@ -4063,7 +4187,7 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
   if (addr == (address)-1) { // Static call stub has jump to itself
     return id;
   }
-  if (!_complete) {
+  if (!_extrs_complete) {
     fatal("SCA table is not complete");
   }
   // Seach for C string
