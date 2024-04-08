@@ -28,6 +28,7 @@
 #include "asm/macroAssembler.inline.hpp"
 #include "asm/register.hpp"
 #include "atomic_aarch64.hpp"
+#include "code/SCCache.hpp"
 #include "compiler/oopMap.hpp"
 #include "gc/shared/barrierSet.hpp"
 #include "gc/shared/barrierSetAssembler.hpp"
@@ -4651,6 +4652,11 @@ class StubGenerator: public StubCodeGenerator {
     StubCodeMark mark(this, "StubRoutines", "multiplyToLen");
 
     address start = __ pc();
+
+    if (SCCache::load_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start)) {
+      return start;
+    }
+
     const Register x     = r0;
     const Register xlen  = r1;
     const Register y     = r2;
@@ -4672,6 +4678,7 @@ class StubGenerator: public StubCodeGenerator {
     __ leave(); // required for proper stackwalking of RuntimeStub frame
     __ ret(lr);
 
+    SCCache::store_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start);
     return start;
   }
 
@@ -4682,6 +4689,10 @@ class StubGenerator: public StubCodeGenerator {
     __ align(CodeEntryAlignment);
     StubCodeMark mark(this, "StubRoutines", "squareToLen");
     address start = __ pc();
+
+    if (SCCache::load_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start)) {
+      return start;
+    }
 
     const Register x     = r0;
     const Register xlen  = r1;
@@ -4708,6 +4719,8 @@ class StubGenerator: public StubCodeGenerator {
     __ pop(spilled_regs, sp);
     __ leave();
     __ ret(lr);
+
+    SCCache::store_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start);
     return start;
   }
 
@@ -4716,6 +4729,10 @@ class StubGenerator: public StubCodeGenerator {
     StubCodeMark mark(this, "StubRoutines", "mulAdd");
 
     address start = __ pc();
+
+    if (SCCache::load_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start)) {
+      return start;
+    }
 
     const Register out     = r0;
     const Register in      = r1;
@@ -4729,6 +4746,7 @@ class StubGenerator: public StubCodeGenerator {
     __ leave();
     __ ret(lr);
 
+    SCCache::store_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start);
     return start;
   }
 

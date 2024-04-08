@@ -3625,9 +3625,10 @@ void OptoRuntime::generate_exception_blob() {
   // Setup code generation tools
   CodeBuffer buffer("exception_blob", 2048, 1024);
   int pc_offset = 0;
-  if (SCCache::load_exception_blob(&buffer, &pc_offset)) {
-    OopMapSet* oop_maps = new OopMapSet();
-    oop_maps->add_gc_map(pc_offset, new OopMap(SimpleRuntimeFrame::framesize, 0));
+  OopMapSet* oop_maps;
+  if (SCCache::load_exception_blob(&buffer, &pc_offset, oop_maps)) {
+    //OopMapSet* oop_maps = new OopMapSet();
+    //oop_maps->add_gc_map(pc_offset, new OopMap(SimpleRuntimeFrame::framesize, 0));
 
     // Set exception blob
     _exception_blob =  ExceptionBlob::create(&buffer, oop_maps, SimpleRuntimeFrame::framesize >> 1);
@@ -3678,7 +3679,8 @@ void OptoRuntime::generate_exception_blob() {
   // handle_exception_stub), since they were restored when we got the
   // exception.
 
-  OopMapSet* oop_maps = new OopMapSet();
+  // OopMapSet* oop_maps = new OopMapSet();
+  oop_maps = new OopMapSet();
 
   pc_offset = the_pc - start;
   oop_maps->add_gc_map(pc_offset, new OopMap(SimpleRuntimeFrame::framesize, 0));
