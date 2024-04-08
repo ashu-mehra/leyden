@@ -4652,10 +4652,11 @@ class StubGenerator: public StubCodeGenerator {
     StubCodeMark mark(this, "StubRoutines", "multiplyToLen");
 
     address start = __ pc();
- 
+
     if (SCCache::load_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start)) {
       return start;
     }
+
     const Register x     = r0;
     const Register xlen  = r1;
     const Register y     = r2;
@@ -4692,6 +4693,7 @@ class StubGenerator: public StubCodeGenerator {
     if (SCCache::load_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start)) {
       return start;
     }
+
     const Register x     = r0;
     const Register xlen  = r1;
     const Register z     = r2;
@@ -4731,6 +4733,7 @@ class StubGenerator: public StubCodeGenerator {
     if (SCCache::load_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start)) {
       return start;
     }
+
     const Register out     = r0;
     const Register in      = r1;
     const Register offset  = r2;

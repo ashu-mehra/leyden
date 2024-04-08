@@ -42,6 +42,42 @@ class vframeStream;
 // Java exceptions), locking/unlocking mechanisms, statistical
 // information, etc.
 
+// template(name, decl type)
+#define SHARED_RUNTIME_STUBS_DO(template1, template2)                  \
+  SHARED_RUNTIME_STUBS_DO_NOT_C2(template1)                            \
+  SHARED_RUNTIME_STUBS_DO_C2(template2)                                \
+
+#define SHARED_RUNTIME_STUBS_DO_NOT_C2(template)                       \
+  template(wrong_method, RuntimeStub)                                  \
+  template(wrong_method_abstract, RuntimeStub)                         \
+  template(ic_miss, RuntimeStub)                                 \
+  template(resolve_opt_virtual_call, RuntimeStub)                      \
+  template(resolve_virtual_call, RuntimeStub)                          \
+  template(resolve_static_call, RuntimeStub)                           \
+  template(deopt, DeoptimizationBlob)                                  \
+  template(polling_page_vectors_safepoint_handler, SafepointBlob)      \
+  template(polling_page_safepoint_handler, SafepointBlob)              \
+  template(polling_page_return_handler, SafepointBlob)                 \
+
+#ifdef COMPILER2
+#define SHARED_RUNTIME_STUBS_DO_C2(template)                            \
+  template(uncommon_trap, UncommonTrapBlob)                             \
+
+#endif // COMPILER2
+
+#define SHARED_RUNTIME_STUB_ENUM_NAME_(name) name##_enum
+#define SHARED_RUNTIME_STUB_ENUM_NAME(name) sharedRuntimeStubID::SHARED_RUNTIME_STUB_ENUM_NAME_(name)
+
+enum class sharedRuntimeStubID : int {
+  NO_STUBID = 0,
+  #define SHARED_RUNTIME_STUB_ENUM(name, type) SHARED_RUNTIME_STUB_ENUM_NAME_(name),
+  SHARED_RUNTIME_STUBS_DO(SHARED_RUNTIME_STUB_ENUM, SHARED_RUNTIME_STUB_ENUM)
+  #undef SHARED_RUNTIME_STUB_ENUM
+  STUBID_LIMIT,
+  FIRST_STUBID = NO_STUBID + 1,    // inclusive lower limit
+  LAST_STUBID = STUBID_LIMIT - 1,  // inclusive upper limit
+};
+
 class SharedRuntime: AllStatic {
   friend class VMStructs;
 
@@ -75,8 +111,8 @@ class SharedRuntime: AllStatic {
 
  private:
   enum { POLL_AT_RETURN,  POLL_AT_LOOP, POLL_AT_VECTOR_LOOP };
-  static SafepointBlob* generate_handler_blob(address call_ptr, int poll_type);
-  static RuntimeStub*   generate_resolve_blob(address destination, const char* name);
+  static SafepointBlob* generate_handler_blob(sharedRuntimeStubID id, address call_ptr, int poll_type);
+  static RuntimeStub*   generate_resolve_blob(sharedRuntimeStubID id, address destination, const char* name);
 
  public:
   static void generate_stubs(void);
