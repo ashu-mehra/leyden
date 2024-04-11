@@ -4010,7 +4010,11 @@ SCAddressTable::~SCAddressTable() {
   }
 }
 
+#ifdef PRODUCT
 #define MAX_STR_COUNT 200
+#else
+#define MAX_STR_COUNT 500
+#endif
 static const char* _C_strings[MAX_STR_COUNT] = {nullptr};
 static int _C_strings_count = 0;
 static int _C_strings_s[MAX_STR_COUNT] = {0};
@@ -4101,9 +4105,7 @@ void SCAddressTable::add_C_string(const char* str) {
       _C_strings_id[_C_strings_count] = -1; // Init
       _C_strings[_C_strings_count++] = str;
     } else {
-      CompileTask* task = ciEnv::current()->task();
-      log_info(scc)("%d (L%d): Number of C strings > max %d %s",
-                       task->compile_id(), task->comp_level(), MAX_STR_COUNT, str);
+      log_info(scc)("Number of C strings > max %d %s", MAX_STR_COUNT, str);
     }
   }
 }
