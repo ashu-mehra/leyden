@@ -1742,7 +1742,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 // setup oopmap, and calls safepoint code to stop the compiled code for
 // a safepoint.
 //
-SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_type) {
+SafepointBlob* SharedRuntime::generate_handler_blob(sharedRuntimeStubID id, address call_ptr, int poll_type) {
   assert(StubRoutines::forward_exception_entry() != nullptr, "must be generated before");
 
   ResourceMark rm;
@@ -1812,7 +1812,7 @@ SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_t
   return SafepointBlob::create(&buffer, oop_maps, frame_size_words);
 }
 
-RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const char* name) {
+RuntimeStub* SharedRuntime::generate_resolve_blob(sharedRuntimeStubID id, address destination, const char* name) {
   assert(StubRoutines::forward_exception_entry() != nullptr, "must be generated before");
 
   ResourceMark rm;
