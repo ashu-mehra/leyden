@@ -2211,7 +2211,7 @@ void SharedRuntime::generate_deopt_blob() {
 #endif
   CodeBuffer buffer("deopt_blob", 2048+pad, 1024);
   GrowableArray<int> extra_args;
-  OopMapSet *oop_maps;
+  OopMapSet *oop_maps = nullptr;
 
   if (SCCache::load_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(deopt), oop_maps, &extra_args)) {
     assert(oop_maps != nullptr, "expected oop maps");
@@ -2819,7 +2819,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   SCCache::store_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(uncommon_trap), oop_maps);
   _uncommon_trap_blob =  UncommonTrapBlob::create(&buffer, oop_maps,
                                                  SimpleRuntimeFrame::framesize >> 1);
-  
+
   return;
 }
 #endif // COMPILER2
@@ -3103,7 +3103,6 @@ void OptoRuntime::generate_exception_blob() {
   ResourceMark rm;
   // Setup code generation tools
   CodeBuffer buffer("exception_blob", 2048, 1024);
-  int pc_offset = 0;
   OopMapSet *oop_maps = nullptr;
   if (SCCache::load_exception_blob(&buffer, oop_maps)) {
     // Set exception blob
@@ -3162,8 +3161,6 @@ void OptoRuntime::generate_exception_blob() {
   // Callee-saved registers will be the same as the frame above (i.e.,
   // handle_exception_stub), since they were restored when we got the
   // exception.
-
-  // OopMapSet* oop_maps = new OopMapSet();
 
   oop_maps = new OopMapSet();
   oop_maps->add_gc_map(the_pc - start, new OopMap(SimpleRuntimeFrame::framesize, 0));
