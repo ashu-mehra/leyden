@@ -30,6 +30,7 @@
 #include "interpreter/interpreter.hpp"
 #include "memory/allStatic.hpp"
 #include "runtime/deoptimization.hpp"
+#include "runtime/sharedRuntime.hpp"
 
 class StubAssembler;
 
@@ -73,8 +74,6 @@ class StubAssembler;
   stub(predicate_failed_trap)        \
   last_entry(number_of_ids)
 
-#define DECLARE_STUB_ID(x)       x ## _id ,
-#define DECLARE_LAST_STUB_ID(x)  x
 #define STUB_NAME(x)             #x " Runtime1 stub",
 #define LAST_STUB_NAME(x)        #x " Runtime1 stub"
 
@@ -86,11 +85,17 @@ class StubAssemblerCodeGenClosure: public Closure {
 class Runtime1: public AllStatic {
   friend class VMStructs;
   friend class ArrayCopyStub;
+  // SCAddressTable needs to access runtime1 stub callbacks
+  friend class SCAddressTable;
 
  public:
+#define DECLARE_STUB_ID(x)       x ## _id ,
+#define DECLARE_LAST_STUB_ID(x)  x
   enum StubID {
     RUNTIME1_STUBS(DECLARE_STUB_ID, DECLARE_LAST_STUB_ID)
   };
+#undef DECLARE_STUB_ID
+#undef DECLARE_LAST_STUB_ID
 
   // statistics
 #ifndef PRODUCT
@@ -197,6 +202,17 @@ class Runtime1: public AllStatic {
 
   static void init_counters();
   static void print_counters_on(outputStream* st);
+
+  // translate c1 runtime blob ids to/from unique codes
+
+  static uint32_t c1_to_blobId(Runtime1::StubID id) {
+    return SharedRuntime::encode_c1_id((int)id);
+  }
+  static Runtime1::StubID blob_to_c1Id(uint32_t blobId) {
+    int tag = SharedRuntime::decode_c1_id(blobId);
+    assert (tag >= 0 && tag < Runtime1::StubID::number_of_ids, "invalid c1 blob id tag");
+    return (Runtime1::StubID)tag;
+  }
 };
 
 #endif // SHARE_C1_C1_RUNTIME1_HPP

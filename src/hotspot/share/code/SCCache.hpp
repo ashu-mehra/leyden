@@ -23,6 +23,12 @@
  */
 
 #include "runtime/sharedRuntime.hpp"
+#ifdef COMPILER1
+#include "c1/c1_Runtime1.hpp"
+#endif
+#ifdef COMPILER2
+#include "opto/runtime.hpp"
+#endif
 
 #ifndef SHARE_CODE_SCCACHE_HPP
 #define SHARE_CODE_SCCACHE_HPP
@@ -275,6 +281,7 @@ private:
   bool _early_stubs_complete;
   bool _complete;
   bool _opto_complete;
+  bool _early_c1_complete;
   bool _c1_complete;
 
 public:
@@ -286,6 +293,7 @@ public:
     _early_stubs_complete = false;
     _complete = false;
     _opto_complete = false;
+    _early_c1_complete = false;
     _c1_complete = false;
   }
   ~SCAddressTable();
@@ -293,6 +301,7 @@ public:
   void init_early_stubs();
   void init();
   void init_opto();
+  void init_early_c1();
   void init_c1();
   void add_C_string(const char* str);
   int  id_for_C_string(address str);
@@ -470,6 +479,7 @@ public:
   static void init_early_stubs_table();
   static void init_table();
   static void init_opto_table();
+  static void init_early_c1_table();
   static void init_c1_table();
   address address_for_id(int id) const { return _table->address_for_id(id); }
 
@@ -515,11 +525,18 @@ public:
   bool write_metadata(Metadata* m);
   bool write_metadata(OopRecorder* oop_recorder);
 
-  static bool load_exception_blob(CodeBuffer* buffer, OopMapSet* &oop_maps);
-  static bool store_exception_blob(CodeBuffer* buffer, OopMapSet* oop_maps);
+  static bool load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool store_runtime_blob(CodeBuffer* buffer,  SharedRuntime::StubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
 
-  static bool load_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
-  static bool store_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
+#ifdef COMPILER1
+  static bool load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
+#endif
+
+#ifdef COMPILER2
+  static bool load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
+#endif
 
 private:
   static bool load_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);

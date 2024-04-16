@@ -36,6 +36,7 @@
 #include "code/codeBlob.hpp"
 #include "code/compiledIC.hpp"
 #include "code/pcDesc.hpp"
+#include "code/SCCache.hpp"
 #include "code/scopeDesc.hpp"
 #include "code/vtableStubs.hpp"
 #include "compiler/compilationPolicy.hpp"
@@ -208,7 +209,22 @@ CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const ch
   // create code buffer for code storage
   CodeBuffer code(buffer_blob);
 
-  OopMapSet* oop_maps;
+  OopMapSet* oop_maps = nullptr;
+  GrowableArray<int> extra_args;
+
+  if (stub_id >= 0 && SCCache::load_c1_blob(&code, (Runtime1::StubID)stub_id, oop_maps, &extra_args)) {
+    assert(oop_maps != nullptr || !expect_oop_map, "expected oop maps");
+    assert(extra_args.length() == 2, "expected 2 extra arguments");
+    CodeBlob* blob = RuntimeStub::new_runtime_stub(name,
+                                                   &code,
+                                                   CodeOffsets::frame_never_safe,
+                                                   extra_args.at(0),
+                                                   oop_maps,
+                                                   extra_args.at(1) != 0);
+    assert(blob != nullptr, "blob must exist");
+    return blob;
+  }
+
   int frame_size;
   bool must_gc_arguments;
 
@@ -237,6 +253,11 @@ CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const ch
                                                  oop_maps,
                                                  must_gc_arguments);
   assert(blob != nullptr, "blob must exist");
+  if (stub_id >= 0) {
+    extra_args.append(frame_size);
+    extra_args.append(must_gc_arguments ? 1 : 0);
+    SCCache::store_c1_blob(&code, (Runtime1::StubID)stub_id, oop_maps, &extra_args);
+  }
   return blob;
 }
 
@@ -262,6 +283,7 @@ void Runtime1::generate_blob_for(BufferBlob* buffer_blob, StubID id) {
   CodeBlob* blob = generate_blob(buffer_blob, id, name_for(id), expect_oop_map, &cl);
   // install blob
   _blobs[id] = blob;
+  // record forward exception blob early as it is used by other blobs
 }
 
 void Runtime1::initialize(BufferBlob* blob) {
@@ -269,7 +291,10 @@ void Runtime1::initialize(BufferBlob* blob) {
   // platform-dependent initialization
   initialize_pd();
   // generate stubs
-  for (int id = 0; id < number_of_ids; id++) generate_blob_for(blob, (StubID)id);
+  for (int id = 0; id <= forward_exception_id; id++) generate_blob_for(blob, (StubID)id);
+  // record current blob addresses for use by later blobs
+  SCCache::init_early_c1_table();
+  for (int id = forward_exception_id + 1; id < number_of_ids; id++) generate_blob_for(blob, (StubID)id);
   // printing
 #ifndef PRODUCT
   if (PrintSimpleStubs) {
