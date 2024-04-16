@@ -2574,7 +2574,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 // setup oopmap, and calls safepoint code to stop the compiled code for
 // a safepoint.
 //
-SafepointBlob* SharedRuntime::generate_handler_blob(sharedRuntimeStubID id, address call_ptr, int poll_type) {
+SafepointBlob* SharedRuntime::generate_handler_blob(SharedRuntime::StubID id, address call_ptr, int poll_type) {
 
   // Account for thread arg in our frame
   const int additional_words = 1;
@@ -2727,7 +2727,7 @@ SafepointBlob* SharedRuntime::generate_handler_blob(sharedRuntimeStubID id, addr
 // but since this is generic code we don't know what they are and the caller
 // must do any gc of the args.
 //
-RuntimeStub* SharedRuntime::generate_resolve_blob(sharedRuntimeStubID id, address destination, const char* name) {
+RuntimeStub* SharedRuntime::generate_resolve_blob(SharedRuntime::StubID id, address destination, const char* name) {
   assert (StubRoutines::forward_exception_entry() != nullptr, "must be generated before");
 
   // allocate space for the code
