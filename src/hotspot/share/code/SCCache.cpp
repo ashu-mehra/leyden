@@ -3617,9 +3617,9 @@ void SCCReader::print_on(outputStream* st) {
 
 #define _extrs_max 120
 #define _stubs_max 120
-#define _blobs_max 100
+#define _blobs_max 120
 #define _shared_blobs_max 40
-#define _C2_blobs_max 20
+#define _C2_blobs_max 30
 #define _C1_blobs_max (_blobs_max - _shared_blobs_max - _C2_blobs_max)
 #define _all_max 340
 
