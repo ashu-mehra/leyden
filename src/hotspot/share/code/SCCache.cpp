@@ -605,6 +605,12 @@ void SCCache::init_opto_table() {
   }
 }
 
+void SCCache::init_early_c1_table() {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->init_early_c1();
+  }
+}
 void SCCache::init_c1_table() {
   SCCache* cache = SCCache::cache();
   if (cache != nullptr && cache->_table != nullptr) {
@@ -2009,13 +2015,24 @@ bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code
   return true;
 }
 
-bool SCCache::load_exception_blob(CodeBuffer* buffer, OopMapSet* &oop_maps) {
-  return load_blob(buffer, (uint32_t)999, oop_maps, nullptr);
+bool SCCache::load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+  uint32_t blobId = SharedRuntime::shared_to_blobId(id);
+  return load_blob(buffer, blobId, oop_maps, extra_args);
 }
 
-bool SCCache::load_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
-  return load_blob(buffer, (uint32_t)id, oop_maps, extra_args);
+#ifdef COMPILER1
+bool SCCache::load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+  uint32_t blobId = Runtime1::c1_to_blobId(id);
+  return load_blob(buffer, blobId, oop_maps, extra_args);
 }
+#endif
+
+#ifdef COMPILER2
+bool SCCache::load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+  uint32_t blobId = OptoRuntime::opto_to_blobId(id);
+  return load_blob(buffer, blobId, oop_maps, extra_args);
+}
+#endif
 
 bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
 #ifdef ASSERT
@@ -2330,13 +2347,24 @@ bool SCCache::write_code(CodeBuffer* buffer, uint& code_size) {
   return true;
 }
 
-bool SCCache::store_exception_blob(CodeBuffer* buffer, OopMapSet *oop_maps) {
-  return store_blob(buffer, (uint32_t)999, oop_maps, nullptr);
+bool SCCache::store_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+  uint32_t blobId = SharedRuntime::shared_to_blobId(id);
+  return store_blob(buffer, blobId, oop_maps, extra_args);
 }
 
-bool SCCache::store_runtime_blob(CodeBuffer* buffer, sharedRuntimeStubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
-  return store_blob(buffer, (uint32_t)id, oop_maps, extra_args);
+#ifdef COMPILER1
+bool SCCache::store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+  uint32_t blobId = Runtime1::c1_to_blobId(id);
+  return store_blob(buffer, blobId, oop_maps, extra_args);
 }
+#endif
+
+#ifdef COMPILER2
+bool SCCache::store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+  uint32_t blobId = OptoRuntime::opto_to_blobId(id);
+  return store_blob(buffer, blobId, oop_maps, extra_args);
+}
+#endif
 
 bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   SCCache* cache = open_for_write();
@@ -3587,13 +3615,13 @@ void SCCReader::print_on(outputStream* st) {
   st->print_cr("  name: %s", name);
 }
 
-#define _extrs_max 80
+#define _extrs_max 120
 #define _stubs_max 120
-#define _blobs_max 80
-#define _shared_blobs_max 16
-#define _C2_blobs_max 21
+#define _blobs_max 100
+#define _shared_blobs_max 40
+#define _C2_blobs_max 20
 #define _C1_blobs_max (_blobs_max - _shared_blobs_max - _C2_blobs_max)
-#define _all_max 280
+#define _all_max 340
 
 #define SET_ADDRESS(type, addr)                           \
   {                                                       \
@@ -3624,6 +3652,32 @@ void SCAddressTable::init_extrs() {
 #ifdef COMPILER1
   SET_ADDRESS(_extrs, Runtime1::is_instance_of);
   SET_ADDRESS(_extrs, Runtime1::trace_block_entry);
+  SET_ADDRESS(_extrs, Runtime1::exception_handler_for_pc);
+  SET_ADDRESS(_extrs, Runtime1::check_abort_on_vm_exception);
+  SET_ADDRESS(_extrs, SharedRuntime::exception_handler_for_return_address);
+  SET_ADDRESS(_extrs, Runtime1::new_instance);
+  SET_ADDRESS(_extrs, Runtime1::counter_overflow);
+  SET_ADDRESS(_extrs, Runtime1::new_type_array);
+  SET_ADDRESS(_extrs, Runtime1::new_object_array);
+  SET_ADDRESS(_extrs, Runtime1::new_multi_array);
+  SET_ADDRESS(_extrs, SharedRuntime::register_finalizer);
+  SET_ADDRESS(_extrs, Runtime1::monitorenter);
+  SET_ADDRESS(_extrs, Runtime1::monitorexit);
+  SET_ADDRESS(_extrs, Runtime1::deoptimize);
+  SET_ADDRESS(_extrs, Runtime1::access_field_patching);
+  SET_ADDRESS(_extrs, Runtime1::move_klass_patching);
+  SET_ADDRESS(_extrs, Runtime1::move_mirror_patching);
+  SET_ADDRESS(_extrs, Runtime1::move_appendix_patching);
+  SET_ADDRESS(_extrs, static_cast<int (*)(oopDesc*)>(SharedRuntime::dtrace_object_alloc));
+  SET_ADDRESS(_extrs, Runtime1::predicate_failed_trap);
+  SET_ADDRESS(_extrs, Runtime1::unimplemented_entry);
+  SET_ADDRESS(_extrs, Runtime1::throw_range_check_exception);
+  SET_ADDRESS(_extrs, Runtime1::throw_index_exception);
+  SET_ADDRESS(_extrs, Runtime1::throw_div0_exception);
+  SET_ADDRESS(_extrs, Runtime1::throw_null_pointer_exception);
+  SET_ADDRESS(_extrs, Runtime1::throw_array_store_exception);
+  SET_ADDRESS(_extrs, Runtime1::throw_class_cast_exception);
+  SET_ADDRESS(_extrs, Runtime1::throw_incompatible_class_change_error);
 #endif
 
   SET_ADDRESS(_extrs, CompressedOops::ptrs_base_addr());
@@ -3666,7 +3720,7 @@ void SCAddressTable::init_extrs() {
 
   SET_ADDRESS(_extrs, SafepointSynchronize::handle_polling_page_exception);
 
-  BarrierSet* bs = BarrierSet::barrier_set(); 
+  BarrierSet* bs = BarrierSet::barrier_set();
   if (bs->is_a(BarrierSet::CardTableBarrierSet)) {
     SET_ADDRESS(_extrs, ci_card_table_address_as<address>());
   }
@@ -3675,6 +3729,9 @@ void SCAddressTable::init_extrs() {
 
   SET_ADDRESS(_extrs, os::javaTimeMillis);
   SET_ADDRESS(_extrs, os::javaTimeNanos);
+#ifndef PRODUCT
+  SET_ADDRESS(_extrs, os::breakpoint);
+#endif
 
   SET_ADDRESS(_extrs, &JvmtiVTMSTransitionDisabler::_VTMS_notify_jvmti_events);
   SET_ADDRESS(_extrs, StubRoutines::crc_table_addr());
@@ -3897,7 +3954,18 @@ void SCAddressTable::init() {
   SET_ADDRESS(_blobs, SharedRuntime::get_resolve_opt_virtual_call_stub());
   SET_ADDRESS(_blobs, SharedRuntime::get_resolve_virtual_call_stub());
   SET_ADDRESS(_blobs, SharedRuntime::get_resolve_static_call_stub());
+  // deopt blob has multiple entry points that need relinking
   SET_ADDRESS(_blobs, SharedRuntime::deopt_blob()->entry_point());
+  SET_ADDRESS(_blobs, SharedRuntime::deopt_blob()->unpack());
+  SET_ADDRESS(_blobs, SharedRuntime::deopt_blob()->unpack_with_exception());
+  SET_ADDRESS(_blobs, SharedRuntime::deopt_blob()->unpack_with_reexecution());
+  SET_ADDRESS(_blobs, SharedRuntime::deopt_blob()->unpack_with_exception_in_tls());
+#if INCLUDE_JVMCI
+  if (EnableJVMCI) {
+    SET_ADDRESS(_blobs, SharedRuntime::deopt_blob()->uncommon_trap());
+    SET_ADDRESS(_blobs, SharedRuntime::deopt_blob()->implicit_exception_uncommon_trap());
+  }
+#endif
   SET_ADDRESS(_blobs, SharedRuntime::polling_page_safepoint_handler_blob()->entry_point());
   SET_ADDRESS(_blobs, SharedRuntime::polling_page_return_handler_blob()->entry_point());
 #ifdef COMPILER2
@@ -3948,10 +4016,34 @@ void SCAddressTable::init_opto() {
   log_info(scc,init)("OptoRuntime Blobs recorded");
 }
 
-void SCAddressTable::init_c1() {
+void SCAddressTable::init_early_c1() {
 #ifdef COMPILER1
   // Runtime1 Blobs
-  for (int i = 0; i < Runtime1::number_of_ids; i++) {
+  for (int i = 0; i <= Runtime1::forward_exception_id; i++) {
+    Runtime1::StubID id = (Runtime1::StubID)i;
+    if (Runtime1::blob_for(id) == nullptr) {
+      log_info(scc, init)("C1 blob %s is missing", Runtime1::name_for(id));
+      continue;
+    }
+    if (Runtime1::entry_for(id) == nullptr) {
+      log_info(scc, init)("C1 blob %s is missing entry", Runtime1::name_for(id));
+      continue;
+    }
+    address entry = Runtime1::entry_for(id);
+    SET_ADDRESS(_C1_blobs, entry);
+  }
+#endif // COMPILER1
+  assert(_C1_blobs_length <= _C1_blobs_max, "increase _C1_blobs_max to %d", _C1_blobs_length);
+  _final_blobs_length = MAX2(_final_blobs_length, (_shared_blobs_max + _C2_blobs_max + _C1_blobs_length));
+  _early_c1_complete = true;
+}
+
+void SCAddressTable::init_c1() {
+  assert(_early_c1_complete, "missed init_early_c1 call!");
+#ifdef COMPILER1
+
+  // Runtime1 Blobs
+  for (int i = Runtime1::forward_exception_id + 1; i < Runtime1::number_of_ids; i++) {
     Runtime1::StubID id = (Runtime1::StubID)i;
     if (Runtime1::blob_for(id) == nullptr) {
       log_info(scc, init)("C1 blob %s is missing", Runtime1::name_for(id));
@@ -4190,7 +4282,7 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
     return id;
   }
   if (!_extrs_complete) {
-    fatal("SCA table is not complete");
+    fatal("SCA table is not complete (missing externals)");
   }
   // Seach for C string
   id = id_for_C_string(addr);
@@ -4213,6 +4305,9 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
   } else {
     CodeBlob* cb = CodeCache::find_blob(addr);
     if (cb != nullptr) {
+      if (!_complete) {
+        fatal("SCA table is not complete (missing stubs)");
+      }
       // Search in code blobs
       id = search_address(addr, _blobs_addr, _final_blobs_length);
       if (id < 0) {

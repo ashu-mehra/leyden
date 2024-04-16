@@ -115,12 +115,12 @@ PerfTickCounters* SharedRuntime::_perf_ic_miss_total_time             = nullptr;
 
 //----------------------------generate_stubs-----------------------------------
 void SharedRuntime::generate_stubs() {
-  _wrong_method_blob                   = generate_resolve_blob(SHARED_RUNTIME_STUB_ENUM_NAME(wrong_method), CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method),          "wrong_method_stub");
-  _wrong_method_abstract_blob          = generate_resolve_blob(SHARED_RUNTIME_STUB_ENUM_NAME(wrong_method_abstract), CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method_abstract), "wrong_method_abstract_stub");
-  _ic_miss_blob                        = generate_resolve_blob(SHARED_RUNTIME_STUB_ENUM_NAME(ic_miss), CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method_ic_miss),  "ic_miss_stub");
-  _resolve_opt_virtual_call_blob       = generate_resolve_blob(SHARED_RUNTIME_STUB_ENUM_NAME(resolve_opt_virtual_call), CAST_FROM_FN_PTR(address, SharedRuntime::resolve_opt_virtual_call_C),   "resolve_opt_virtual_call");
-  _resolve_virtual_call_blob           = generate_resolve_blob(SHARED_RUNTIME_STUB_ENUM_NAME(resolve_virtual_call), CAST_FROM_FN_PTR(address, SharedRuntime::resolve_virtual_call_C),       "resolve_virtual_call");
-  _resolve_static_call_blob            = generate_resolve_blob(SHARED_RUNTIME_STUB_ENUM_NAME(resolve_static_call), CAST_FROM_FN_PTR(address, SharedRuntime::resolve_static_call_C),        "resolve_static_call");
+  _wrong_method_blob                   = generate_resolve_blob(SharedRuntime::StubID::wrong_method_id, CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method),          "wrong_method_stub");
+  _wrong_method_abstract_blob          = generate_resolve_blob(SharedRuntime::StubID::wrong_method_abstract_id, CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method_abstract), "wrong_method_abstract_stub");
+  _ic_miss_blob                        = generate_resolve_blob(SharedRuntime::StubID::ic_miss_id, CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method_ic_miss),  "ic_miss_stub");
+  _resolve_opt_virtual_call_blob       = generate_resolve_blob(SharedRuntime::StubID::resolve_opt_virtual_call_id, CAST_FROM_FN_PTR(address, SharedRuntime::resolve_opt_virtual_call_C),   "resolve_opt_virtual_call");
+  _resolve_virtual_call_blob           = generate_resolve_blob(SharedRuntime::StubID::resolve_virtual_call_id, CAST_FROM_FN_PTR(address, SharedRuntime::resolve_virtual_call_C),       "resolve_virtual_call");
+  _resolve_static_call_blob            = generate_resolve_blob(SharedRuntime::StubID::resolve_static_call_id, CAST_FROM_FN_PTR(address, SharedRuntime::resolve_static_call_C),        "resolve_static_call");
   _resolve_static_call_entry           = _resolve_static_call_blob->entry_point();
 
   AdapterHandlerLibrary::initialize();
@@ -129,11 +129,11 @@ void SharedRuntime::generate_stubs() {
   // Vectors are generated only by C2 and JVMCI.
   bool support_wide = is_wide_vector(MaxVectorSize);
   if (support_wide) {
-    _polling_page_vectors_safepoint_handler_blob = generate_handler_blob(SHARED_RUNTIME_STUB_ENUM_NAME(polling_page_vectors_safepoint_handler), CAST_FROM_FN_PTR(address, SafepointSynchronize::handle_polling_page_exception), POLL_AT_VECTOR_LOOP);
+    _polling_page_vectors_safepoint_handler_blob = generate_handler_blob(SharedRuntime::StubID::polling_page_vectors_safepoint_handler_id, CAST_FROM_FN_PTR(address, SafepointSynchronize::handle_polling_page_exception), POLL_AT_VECTOR_LOOP);
   }
 #endif // COMPILER2_OR_JVMCI
-  _polling_page_safepoint_handler_blob = generate_handler_blob(SHARED_RUNTIME_STUB_ENUM_NAME(polling_page_safepoint_handler), CAST_FROM_FN_PTR(address, SafepointSynchronize::handle_polling_page_exception), POLL_AT_LOOP);
-  _polling_page_return_handler_blob    = generate_handler_blob(SHARED_RUNTIME_STUB_ENUM_NAME(polling_page_return_handler), CAST_FROM_FN_PTR(address, SafepointSynchronize::handle_polling_page_exception), POLL_AT_RETURN);
+  _polling_page_safepoint_handler_blob = generate_handler_blob(SharedRuntime::StubID::polling_page_safepoint_handler_id, CAST_FROM_FN_PTR(address, SafepointSynchronize::handle_polling_page_exception), POLL_AT_LOOP);
+  _polling_page_return_handler_blob    = generate_handler_blob(SharedRuntime::StubID::polling_page_return_handler_id, CAST_FROM_FN_PTR(address, SafepointSynchronize::handle_polling_page_exception), POLL_AT_RETURN);
 
   generate_deopt_blob();
 
