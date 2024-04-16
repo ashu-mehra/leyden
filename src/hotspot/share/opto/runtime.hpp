@@ -30,6 +30,7 @@
 #include "opto/optoreg.hpp"
 #include "opto/type.hpp"
 #include "runtime/deoptimization.hpp"
+#include "runtime/sharedRuntime.hpp"
 #include "runtime/vframe.hpp"
 
 //------------------------------OptoRuntime------------------------------------
@@ -98,10 +99,29 @@ private:
 
 typedef const TypeFunc*(*TypeFunc_generator)();
 
+#define OPTO_RUNTIME_STUBS_DO(template, last_entry)    \
+  template(exception)                                  \
+  template(uncommon_trap)                              \
+  last_entry(number_of_ids)                            \
+
 class OptoRuntime : public AllStatic {
   friend class Matcher;  // allow access to stub names
   friend class SCAddressTable;
- private:
+
+public:
+
+  enum class StubID : int {
+#   define STUB_ENUM_ID(name) name ## _id
+#   define DECLARE_STUB_ID(name) STUB_ENUM_ID(name),
+#   define DECLARE_LAST_STUB_ID(name) name
+    OPTO_RUNTIME_STUBS_DO(DECLARE_STUB_ID, DECLARE_LAST_STUB_ID)
+#   undef STUB_ENUM_ID
+#   undef DECLARE_STUB_ID
+#   undef DECLARE_LAST_STUB_ID
+  };
+
+
+private:
   // define stubs
   static address generate_stub(ciEnv* ci_env, TypeFunc_generator gen, address C_function, const char* name, int is_fancy_jump, bool pass_tls, bool return_pc);
 
@@ -327,6 +347,17 @@ private:
  public:
   static void init_counters();
   static void print_counters_on(outputStream* st);
+
+  // translate opto runtime blob ids to/from unique codes
+
+  static uint32_t opto_to_blobId(OptoRuntime::StubID id) {
+    return SharedRuntime::encode_opto_id((int)id);
+  }
+  static OptoRuntime::StubID blob_to_optoId(uint32_t blobId) {
+    int tag = SharedRuntime::decode_opto_id(blobId);
+    assert (tag >= 0 && tag < (int)OptoRuntime::StubID::number_of_ids, "invalid opto blob id tag");
+    return (OptoRuntime::StubID)tag;
+  }
 };
 
 #endif // SHARE_OPTO_RUNTIME_HPP

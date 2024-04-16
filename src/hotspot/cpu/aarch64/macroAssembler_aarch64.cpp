@@ -29,6 +29,7 @@
 #include "ci/ciEnv.hpp"
 #include "ci/ciUtilities.hpp"
 #include "code/compiledIC.hpp"
+#include "code/SCCache.hpp"
 #include "compiler/compileTask.hpp"
 #include "compiler/disassembler.hpp"
 #include "compiler/oopMap.hpp"
@@ -709,6 +710,14 @@ static inline bool target_needs_far_branch(address addr) {
   }
   // codecache size: 128M..240M
   return !CodeCache::is_non_nmethod(addr);
+}
+
+bool MacroAssembler::codestub_branch_needs_far_jump() {
+  if (SCCache::is_on_for_write()) {
+    // To calculate far_codestub_branch_size correctly.
+    return true;
+  }
+  return CodeCache::max_distance_to_non_nmethod() > branch_range;
 }
 
 void MacroAssembler::far_call(Address entry, Register tmp) {

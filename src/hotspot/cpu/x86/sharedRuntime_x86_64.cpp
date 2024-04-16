@@ -2639,7 +2639,7 @@ void SharedRuntime::generate_deopt_blob() {
   GrowableArray<int> extra_args;
   OopMapSet *oop_maps = nullptr;
 
-  if (SCCache::load_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(deopt), oop_maps, &extra_args)) {
+  if (SCCache::load_runtime_blob(&buffer, SharedRuntime::StubID::deopt_id, oop_maps, &extra_args)) {
     assert(oop_maps != nullptr, "expected oop maps");
     assert(extra_args.length() >= 4, "unexpected arg count");
     // Set deopt blob
@@ -3009,7 +3009,7 @@ void SharedRuntime::generate_deopt_blob() {
     extra_args.append(implicit_exception_uncommon_trap_offset);
   }
 #endif 
-  SCCache::store_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(deopt), oop_maps, &extra_args);
+  SCCache::store_runtime_blob(&buffer, SharedRuntime::StubID::deopt_id, oop_maps, &extra_args);
 
   _deopt_blob = DeoptimizationBlob::create(&buffer, oop_maps, 0, exception_offset, reexecute_offset, frame_size_in_words);
   _deopt_blob->set_unpack_with_exception_in_tls_offset(exception_in_tls_offset);
@@ -3030,7 +3030,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   CodeBuffer buffer("uncommon_trap_blob", 2048, 1024);
   OopMapSet *oop_maps = nullptr;
 
-  if (SCCache::load_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(uncommon_trap), oop_maps)) {
+  if (SCCache::load_opto_blob(&buffer, OptoRuntime::StubID::uncommon_trap_id, oop_maps)) {
     assert(oop_maps != nullptr, "expected oop maps");
     // Set exception blob
     _uncommon_trap_blob =  UncommonTrapBlob::create(&buffer, oop_maps,
@@ -3202,7 +3202,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // Make sure all code is generated
   masm->flush();
 
-  SCCache::store_runtime_blob(&buffer, SHARED_RUNTIME_STUB_ENUM_NAME(uncommon_trap), oop_maps);
+  SCCache::store_opto_blob(&buffer, OptoRuntime::StubID::uncommon_trap_id, oop_maps);
   _uncommon_trap_blob =  UncommonTrapBlob::create(&buffer, oop_maps,
                                                  SimpleRuntimeFrame::framesize >> 1);
 }
@@ -3213,7 +3213,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 // Generate a special Compile2Runtime blob that saves all registers,
 // and setup oopmap.
 //
-SafepointBlob* SharedRuntime::generate_handler_blob(sharedRuntimeStubID id, address call_ptr, int poll_type) {
+SafepointBlob* SharedRuntime::generate_handler_blob(SharedRuntime::StubID id, address call_ptr, int poll_type) {
   assert(StubRoutines::forward_exception_entry() != nullptr,
          "must be generated before");
 
@@ -3385,7 +3385,7 @@ SafepointBlob* SharedRuntime::generate_handler_blob(sharedRuntimeStubID id, addr
 // but since this is generic code we don't know what they are and the caller
 // must do any gc of the args.
 //
-RuntimeStub* SharedRuntime::generate_resolve_blob(sharedRuntimeStubID id, address destination, const char* name) {
+RuntimeStub* SharedRuntime::generate_resolve_blob(SharedRuntime::StubID id, address destination, const char* name) {
   assert (StubRoutines::forward_exception_entry() != nullptr, "must be generated before");
 
   // allocate space for the code
@@ -3784,7 +3784,7 @@ void OptoRuntime::generate_exception_blob() {
   // Setup code generation tools
   CodeBuffer buffer("exception_blob", 2048, 1024);
   OopMapSet* oop_maps = nullptr;
-  if (SCCache::load_exception_blob(&buffer, oop_maps)) {
+  if (SCCache::load_opto_blob(&buffer, OptoRuntime::StubID::exception_id, oop_maps)) {
     // Set exception blob
     assert(oop_maps != nullptr, "expected oop maps");
     _exception_blob =  ExceptionBlob::create(&buffer, oop_maps, SimpleRuntimeFrame::framesize >> 1);
@@ -3877,7 +3877,7 @@ void OptoRuntime::generate_exception_blob() {
   // Make sure all code is generated
   masm->flush();
 
-  SCCache::store_exception_blob(&buffer, oop_maps);
+  SCCache::store_opto_blob(&buffer, OptoRuntime::StubID::exception_id, oop_maps);
   // Set exception blob
   _exception_blob =  ExceptionBlob::create(&buffer, oop_maps, SimpleRuntimeFrame::framesize >> 1);
 }
