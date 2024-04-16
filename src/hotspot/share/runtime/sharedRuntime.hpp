@@ -42,46 +42,35 @@ class vframeStream;
 // Java exceptions), locking/unlocking mechanisms, statistical
 // information, etc.
 
-// template(name, decl type)
-#define SHARED_RUNTIME_STUBS_DO(template1, template2)                  \
-  SHARED_RUNTIME_STUBS_DO_NOT_C2(template1)                            \
-  SHARED_RUNTIME_STUBS_DO_C2(template2)                                \
-
-#define SHARED_RUNTIME_STUBS_DO_NOT_C2(template)                       \
-  template(wrong_method, RuntimeStub)                                  \
-  template(wrong_method_abstract, RuntimeStub)                         \
-  template(ic_miss, RuntimeStub)                                 \
-  template(resolve_opt_virtual_call, RuntimeStub)                      \
-  template(resolve_virtual_call, RuntimeStub)                          \
-  template(resolve_static_call, RuntimeStub)                           \
-  template(deopt, DeoptimizationBlob)                                  \
-  template(polling_page_vectors_safepoint_handler, SafepointBlob)      \
-  template(polling_page_safepoint_handler, SafepointBlob)              \
-  template(polling_page_return_handler, SafepointBlob)                 \
-
-#ifdef COMPILER2
-#define SHARED_RUNTIME_STUBS_DO_C2(template)                            \
-  template(uncommon_trap, UncommonTrapBlob)                             \
-
-#endif // COMPILER2
-
-#define SHARED_RUNTIME_STUB_ENUM_NAME_(name) name##_enum
-#define SHARED_RUNTIME_STUB_ENUM_NAME(name) sharedRuntimeStubID::SHARED_RUNTIME_STUB_ENUM_NAME_(name)
-
-enum class sharedRuntimeStubID : int {
-  NO_STUBID = 0,
-  #define SHARED_RUNTIME_STUB_ENUM(name, type) SHARED_RUNTIME_STUB_ENUM_NAME_(name),
-  SHARED_RUNTIME_STUBS_DO(SHARED_RUNTIME_STUB_ENUM, SHARED_RUNTIME_STUB_ENUM)
-  #undef SHARED_RUNTIME_STUB_ENUM
-  STUBID_LIMIT,
-  FIRST_STUBID = NO_STUBID + 1,    // inclusive lower limit
-  LAST_STUBID = STUBID_LIMIT - 1,  // inclusive upper limit
-};
+#define SHARED_RUNTIME_STUBS_DO(template, last_entry)     \
+  template(wrong_method)                                  \
+  template(wrong_method_abstract)                         \
+  template(ic_miss)                                       \
+  template(resolve_opt_virtual_call)                      \
+  template(resolve_virtual_call)                          \
+  template(resolve_static_call)                           \
+  template(deopt)                                         \
+  template(polling_page_vectors_safepoint_handler)        \
+  template(polling_page_safepoint_handler)                \
+  template(polling_page_return_handler)                   \
+  last_entry(number_of_ids)                               \
 
 class SharedRuntime: AllStatic {
   friend class VMStructs;
 
- private:
+public:
+  enum class StubID : int {
+#   define STUB_ENUM_ID(name) name ## _id
+#   define DECLARE_STUB_ID(name) STUB_ENUM_ID(name),
+#   define DECLARE_LAST_STUB_ID(name) name
+    SHARED_RUNTIME_STUBS_DO(DECLARE_STUB_ID, DECLARE_LAST_STUB_ID)
+#   undef STUB_ENUM_ID
+#   undef DECLARE_STUB_ID
+#   undef DECLARE_LAST_STUB_ID
+  };
+
+
+private:
   static methodHandle resolve_sub_helper(bool is_virtual, bool is_optimized, TRAPS);
 
   // Shared stub locations
@@ -113,8 +102,8 @@ class SharedRuntime: AllStatic {
 
  private:
   enum { POLL_AT_RETURN,  POLL_AT_LOOP, POLL_AT_VECTOR_LOOP };
-  static SafepointBlob* generate_handler_blob(sharedRuntimeStubID id, address call_ptr, int poll_type);
-  static RuntimeStub*   generate_resolve_blob(sharedRuntimeStubID id, address destination, const char* name);
+  static SafepointBlob* generate_handler_blob(SharedRuntime::StubID id, address call_ptr, int poll_type);
+  static RuntimeStub*   generate_resolve_blob(SharedRuntime::StubID id, address destination, const char* name);
 
  public:
   static void generate_stubs(void);
@@ -628,6 +617,72 @@ class SharedRuntime: AllStatic {
 #endif // PRODUCT
 
   static void print_statistics() PRODUCT_RETURN;
+
+  // Blob ids for shared, C1 and C2 runtime generated blobs can be packed
+  // into a 32 bit integer word by tagging an int tag from any of the 3
+  // associated enum ranges with an enum type-specific high bits
+
+private:
+  static const uint32_t SHARED_BLOB_TAG = 0;
+  static const uint32_t C1_BLOB_TAG = 1 << 30;
+  static const uint32_t OPTO_BLOB_TAG = 2 << 30;
+  static const uint32_t BLOB_TAG_MASK = 3 << 30;
+
+  static uint32_t blobId_tag(uint32_t blobId) {
+    return blobId & BLOB_TAG_MASK;
+  }
+
+  static uint32_t blobId_value(uint32_t blobId) {
+    return blobId & ~BLOB_TAG_MASK;
+  }
+
+  // stub id encode and decode routinesthis includes variants that are
+  // exposes to c1/opto runtime classes. note these private methods
+  // accept/return raw enum tags (ints) rather than the actual enums
+  // so we don't have to include the c1/opto headers heer
+
+  static uint32_t encode_shared_id(int id) {
+    assert((id & BLOB_TAG_MASK) == 0, "shared stub id overflows into tag range");
+    return SHARED_BLOB_TAG || (uint32_t)id;
+  }
+  static int decode_shared_id(uint32_t id) {
+    assert((id & BLOB_TAG_MASK) == SHARED_BLOB_TAG, "invalid shared stub tag");
+    return (int) (id & ~BLOB_TAG_MASK);
+  }
+#ifdef COMPILER1
+  friend class Runtime1;
+  static uint32_t encode_c1_id(int id) {
+    assert((id & BLOB_TAG_MASK) == 0, "runtime1 stub id overflows into tag range");
+    return C1_BLOB_TAG || (uint32_t)id;
+  }
+  static int decode_c1_id(uint32_t id) {
+    assert((id & BLOB_TAG_MASK) == C1_BLOB_TAG, "invalid runtime1 stub tag");
+    return (int) (id & ~BLOB_TAG_MASK);
+  }
+#endif
+#ifdef COMPILER1
+  friend class OptoRuntime;
+  static uint32_t encode_opto_id(int id) {
+    assert((id & BLOB_TAG_MASK) == 0, "opto stub id overflows into tag range");
+    return OPTO_BLOB_TAG || (uint32_t)id;
+  }
+  static int decode_opto_id(uint32_t id) {
+    assert((id & BLOB_TAG_MASK) == OPTO_BLOB_TAG, "invalid opto stub tag");
+    return (int) (id & ~BLOB_TAG_MASK);
+  }
+#endif
+
+  // translate shared runtime blob ids to/from unique codes
+
+public:
+  static uint32_t shared_to_blobId(SharedRuntime::StubID id) {
+    return encode_shared_id((int)id);
+  }
+  static SharedRuntime::StubID blob_to_sharedId(uint32_t blobId) {
+    int tag = decode_opto_id(blobId);
+    assert (tag >= 0 && tag < (int)SharedRuntime::StubID::number_of_ids, "invalid shared blob id tag");
+    return (SharedRuntime::StubID)tag;
+  }
 };
 
 
@@ -751,7 +806,6 @@ class AdapterHandlerLibrary: public AllStatic {
 #ifndef PRODUCT
   static void print_statistics_on(outputStream* st);
 #endif // PRODUCT
-
 };
 
 #endif // SHARE_RUNTIME_SHAREDRUNTIME_HPP
