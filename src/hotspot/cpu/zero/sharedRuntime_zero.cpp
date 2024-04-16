@@ -106,11 +106,11 @@ void SharedRuntime::generate_deopt_blob() {
   _deopt_blob = generate_empty_deopt_blob();
 }
 
-SafepointBlob* SharedRuntime::generate_handler_blob(sharedRuntimeStubID id, address call_ptr, int poll_type) {
+SafepointBlob* SharedRuntime::generate_handler_blob(SharedRuntime::StubID id, address call_ptr, int poll_type) {
   return generate_empty_safepoint_blob();
 }
 
-RuntimeStub* SharedRuntime::generate_resolve_blob(sharedRuntimeStubID id, address destination, const char* name) {
+RuntimeStub* SharedRuntime::generate_resolve_blob(SharedRuntime::StubID id, address destination, const char* name) {
   return generate_empty_runtime_stub("resolve_blob");
 }
 
