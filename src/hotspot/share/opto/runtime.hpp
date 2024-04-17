@@ -102,6 +102,26 @@ typedef const TypeFunc*(*TypeFunc_generator)();
 #define OPTO_RUNTIME_STUBS_DO(template, last_entry)    \
   template(exception)                                  \
   template(uncommon_trap)                              \
+  template(new_instance_Java)                          \
+  template(new_array_Java)                             \
+  template(new_array_nozero_Java)                      \
+  template(multianewarray2_Java)                       \
+  template(multianewarray3_Java)                       \
+  template(multianewarray4_Java)                       \
+  template(multianewarray5_Java)                       \
+  template(multianewarrayN_Java)                       \
+  template(notify_jvmti_vthread_start)                 \
+  template(notify_jvmti_vthread_end)                   \
+  template(notify_jvmti_vthread_mount)                 \
+  template(notify_jvmti_vthread_unmount)               \
+  template(complete_monitor_locking_Java)              \
+  template(complete_monitor_locking_C)                 \
+  template(monitor_notify_Java)                        \
+  template(monitor_notifyAll_Java)                     \
+  template(rethrow_Java)                               \
+  template(slow_arraycopy_Java)                        \
+  template(register_finalizer_Java)                    \
+  template(class_init_barrier_Java)                    \
   last_entry(number_of_ids)                            \
 
 class OptoRuntime : public AllStatic {
@@ -123,7 +143,7 @@ public:
 
 private:
   // define stubs
-  static address generate_stub(ciEnv* ci_env, TypeFunc_generator gen, address C_function, const char* name, int is_fancy_jump, bool pass_tls, bool return_pc);
+  static address generate_stub(ciEnv* ci_env, TypeFunc_generator gen, address C_function, const char* name, int stub_id, int is_fancy_jump, bool pass_tls, bool return_pc);
 
   // References to generated stubs
   static address _new_instance_Java;
