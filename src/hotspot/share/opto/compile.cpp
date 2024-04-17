@@ -28,6 +28,7 @@
 #include "ci/ciReplay.hpp"
 #include "classfile/javaClasses.hpp"
 #include "code/exceptionHandlerTable.hpp"
+#include "code/SCCache.hpp"
 #include "code/nmethod.hpp"
 #include "compiler/compilationFailureInfo.hpp"
 #include "compiler/compilationMemoryStatistic.hpp"
@@ -621,6 +622,7 @@ Compile::Compile( ciEnv* ci_env, ciMethod* target, int osr_bci,
                   _ilt(nullptr),
                   _stub_function(nullptr),
                   _stub_name(nullptr),
+                  _stub_id(-1),
                   _stub_entry_point(nullptr),
                   _max_node_limit(MaxNodeLimit),
                   _post_loop_opts_phase(false),
@@ -892,6 +894,7 @@ Compile::Compile( ciEnv* ci_env,
                   TypeFunc_generator generator,
                   address stub_function,
                   const char *stub_name,
+                  int stub_id,
                   int is_fancy_jump,
                   bool pass_tls,
                   bool return_pc,
@@ -903,6 +906,7 @@ Compile::Compile( ciEnv* ci_env,
     _entry_bci(InvocationEntryBci),
     _stub_function(stub_function),
     _stub_name(stub_name),
+    _stub_id(stub_id),
     _stub_entry_point(nullptr),
     _max_node_limit(MaxNodeLimit),
     _post_loop_opts_phase(false),
@@ -956,6 +960,27 @@ Compile::Compile( ciEnv* ci_env,
     _allowed_reasons(0) {
   C = this;
 
+  // try to reuse an existing stub
+  {
+    CodeBuffer buffer("C2 stub temporary buffer");
+    OopMapSet* oop_maps = nullptr;
+    GrowableArray<int> extra_args;
+    OptoRuntime::StubID stub_id = (OptoRuntime::StubID)_stub_id;
+    if (SCCache::load_opto_blob(&buffer, stub_id, oop_maps, &extra_args)) {
+      assert(oop_maps != nullptr, "expected oop maps");
+      assert(extra_args.length() == 1, "expected 1 extra argument from C2 stub load");
+      int frame_size_in_words = extra_args.at(0);
+      RuntimeStub *rs = RuntimeStub::new_runtime_stub(stub_name,
+                                                      &buffer,
+                                                      CodeOffsets::frame_never_safe,
+                                                      // _code_offsets.value(CodeOffsets::Frame_Complete),
+                                                      frame_size_in_words,
+                                                      oop_maps,
+                                                      false);
+      assert(rs != nullptr && rs->is_runtime_stub(), "sanity check");
+      _stub_entry_point = rs->entry_point();
+    }
+  }
   TraceTime t1(nullptr, &_t_totalCompilation, CITime, false);
   TraceTime t2(nullptr, &_t_stubCompilation, CITime, false);
 

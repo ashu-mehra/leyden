@@ -139,8 +139,8 @@ static bool check_compiled_frame(JavaThread* thread) {
 #endif // ASSERT
 
 
-#define gen(env, var, type_func_gen, c_func, fancy_jump, pass_tls, return_pc) \
-  var = generate_stub(env, type_func_gen, CAST_FROM_FN_PTR(address, c_func), #var, fancy_jump, pass_tls, return_pc); \
+#define gen(env, var, stub_id, type_func_gen, c_func, fancy_jump, pass_tls, return_pc) \
+  var = generate_stub(env, type_func_gen, CAST_FROM_FN_PTR(address, c_func), #var, (int) stub_id, fancy_jump, pass_tls, return_pc); \
   if (var == nullptr) { return false; }
 
 bool OptoRuntime::generate(ciEnv* env) {
@@ -150,30 +150,31 @@ bool OptoRuntime::generate(ciEnv* env) {
 
   // Note: tls: Means fetching the return oop out of the thread-local storage
   //
-  //   variable/name                       type-function-gen              , runtime method                  ,fncy_jp, tls,retpc
-  // -------------------------------------------------------------------------------------------------------------------------------
-  gen(env, _new_instance_Java              , new_instance_Type            , new_instance_C                  ,    0 , true, false);
-  gen(env, _new_array_Java                 , new_array_Type               , new_array_C                     ,    0 , true, false);
-  gen(env, _new_array_nozero_Java          , new_array_Type               , new_array_nozero_C              ,    0 , true, false);
-  gen(env, _multianewarray2_Java           , multianewarray2_Type         , multianewarray2_C               ,    0 , true, false);
-  gen(env, _multianewarray3_Java           , multianewarray3_Type         , multianewarray3_C               ,    0 , true, false);
-  gen(env, _multianewarray4_Java           , multianewarray4_Type         , multianewarray4_C               ,    0 , true, false);
-  gen(env, _multianewarray5_Java           , multianewarray5_Type         , multianewarray5_C               ,    0 , true, false);
-  gen(env, _multianewarrayN_Java           , multianewarrayN_Type         , multianewarrayN_C               ,    0 , true, false);
-#if INCLUDE_JVMTI
-  gen(env, _notify_jvmti_vthread_start     , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_start, 0, true, false);
-  gen(env, _notify_jvmti_vthread_end       , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_end,   0, true, false);
-  gen(env, _notify_jvmti_vthread_mount     , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_mount, 0, true, false);
-  gen(env, _notify_jvmti_vthread_unmount   , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_unmount, 0, true, false);
-#endif
-  gen(env, _complete_monitor_locking_Java  , complete_monitor_enter_Type  , SharedRuntime::complete_monitor_locking_C, 0, false, false);
-  gen(env, _monitor_notify_Java            , monitor_notify_Type          , monitor_notify_C                ,    0 , false, false);
-  gen(env, _monitor_notifyAll_Java         , monitor_notify_Type          , monitor_notifyAll_C             ,    0 , false, false);
-  gen(env, _rethrow_Java                   , rethrow_Type                 , rethrow_C                       ,    2 , true , true );
+  //   variable/name                       , stub_id                                                , type-function-gen            , runtime method                  ,fncy_jp, tls, retpc
+  // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  gen(env, _slow_arraycopy_Java            , slow_arraycopy_Type          , SharedRuntime::slow_arraycopy_C ,    0 , false, false);
-  gen(env, _register_finalizer_Java        , register_finalizer_Type      , register_finalizer              ,    0 , false, false);
-  gen(env, _class_init_barrier_Java        , class_init_barrier_Type      , class_init_barrier              ,    0 , false, false);
+    gen(env, _new_instance_Java            , OptoRuntime::StubID::new_instance_Java_id              , new_instance_Type            , new_instance_C                  ,    0 , true, false);
+  gen(env, _new_array_Java                 , OptoRuntime::StubID::new_array_Java_id                 , new_array_Type               , new_array_C                     ,    0 , true, false);
+  gen(env, _new_array_nozero_Java          , OptoRuntime::StubID::new_array_nozero_Java_id          , new_array_Type               , new_array_nozero_C              ,    0 , true, false);
+  gen(env, _multianewarray2_Java           , OptoRuntime::StubID::multianewarray2_Java_id           , multianewarray2_Type         , multianewarray2_C               ,    0 , true, false);
+  gen(env, _multianewarray3_Java           , OptoRuntime::StubID::multianewarray3_Java_id           , multianewarray3_Type         , multianewarray3_C               ,    0 , true, false);
+  gen(env, _multianewarray4_Java           , OptoRuntime::StubID::multianewarray4_Java_id           , multianewarray4_Type         , multianewarray4_C               ,    0 , true, false);
+  gen(env, _multianewarray5_Java           , OptoRuntime::StubID::multianewarray5_Java_id           , multianewarray5_Type         , multianewarray5_C               ,    0 , true, false);
+  gen(env, _multianewarrayN_Java           , OptoRuntime::StubID::multianewarrayN_Java_id           , multianewarrayN_Type         , multianewarrayN_C               ,    0 , true, false);
+#if INCLUDE_JVMTI
+  gen(env, _notify_jvmti_vthread_start     , OptoRuntime::StubID::notify_jvmti_vthread_start_id     , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_start, 0, true, false);
+  gen(env, _notify_jvmti_vthread_end       , OptoRuntime::StubID::notify_jvmti_vthread_end_id       , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_end,   0, true, false);
+  gen(env, _notify_jvmti_vthread_mount     , OptoRuntime::StubID::notify_jvmti_vthread_mount_id     , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_mount, 0, true, false);
+  gen(env, _notify_jvmti_vthread_unmount   , OptoRuntime::StubID::notify_jvmti_vthread_unmount_id   , notify_jvmti_vthread_Type    , SharedRuntime::notify_jvmti_vthread_unmount, 0, true, false);
+#endif
+  gen(env, _complete_monitor_locking_Java  , OptoRuntime::StubID::complete_monitor_locking_Java_id  , complete_monitor_enter_Type  , SharedRuntime::complete_monitor_locking_C, 0, false, false);
+  gen(env, _monitor_notify_Java            , OptoRuntime::StubID::monitor_notify_Java_id            , monitor_notify_Type          , monitor_notify_C                ,    0 , false, false);
+  gen(env, _monitor_notifyAll_Java         , OptoRuntime::StubID::monitor_notifyAll_Java_id         , monitor_notify_Type          , monitor_notifyAll_C             ,    0 , false, false);
+  gen(env, _rethrow_Java                   , OptoRuntime::StubID::rethrow_Java_id                   , rethrow_Type                 , rethrow_C                       ,    2 , true , true );
+
+  gen(env, _slow_arraycopy_Java            , OptoRuntime::StubID::slow_arraycopy_Java_id            , slow_arraycopy_Type          , SharedRuntime::slow_arraycopy_C ,    0 , false, false);
+  gen(env, _register_finalizer_Java        , OptoRuntime::StubID::register_finalizer_Java_id        , register_finalizer_Type      , register_finalizer              ,    0 , false, false);
+  gen(env, _class_init_barrier_Java        , OptoRuntime::StubID::class_init_barrier_Java_id        , class_init_barrier_Type      , class_init_barrier              ,    0 , false, false);
 
   return true;
 }
@@ -184,14 +185,14 @@ bool OptoRuntime::generate(ciEnv* env) {
 // Helper method to do generation of RunTimeStub's
 address OptoRuntime::generate_stub(ciEnv* env,
                                    TypeFunc_generator gen, address C_function,
-                                   const char *name, int is_fancy_jump,
-                                   bool pass_tls,
+                                   const char *name, int stub_id,
+                                   int is_fancy_jump, bool pass_tls,
                                    bool return_pc) {
 
   // Matching the default directive, we currently have no method to match.
   DirectiveSet* directive = DirectivesStack::getDefaultDirective(CompilerThread::current()->compiler());
   ResourceMark rm;
-  Compile C(env, gen, C_function, name, is_fancy_jump, pass_tls, return_pc, directive);
+  Compile C(env, gen, C_function, name, stub_id, is_fancy_jump, pass_tls, return_pc, directive);
   DirectivesStack::release(directive);
   return  C.stub_entry_point();
 }

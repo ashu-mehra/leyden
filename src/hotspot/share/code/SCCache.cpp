@@ -3645,6 +3645,27 @@ void SCAddressTable::init_extrs() {
   // Runtime methods
 #ifdef COMPILER2
   SET_ADDRESS(_extrs, OptoRuntime::handle_exception_C);
+  SET_ADDRESS(_extrs, OptoRuntime::new_instance_C);
+  SET_ADDRESS(_extrs, OptoRuntime::new_array_C);
+  SET_ADDRESS(_extrs, OptoRuntime::new_array_nozero_C);
+  SET_ADDRESS(_extrs, OptoRuntime::multianewarray2_C);
+  SET_ADDRESS(_extrs, OptoRuntime::multianewarray3_C);
+  SET_ADDRESS(_extrs, OptoRuntime::multianewarray4_C);
+  SET_ADDRESS(_extrs, OptoRuntime::multianewarray5_C);
+  SET_ADDRESS(_extrs, OptoRuntime::multianewarrayN_C);
+#if INCLUDE_JVMTI
+  SET_ADDRESS(_extrs, SharedRuntime::notify_jvmti_vthread_start);
+  SET_ADDRESS(_extrs, SharedRuntime::notify_jvmti_vthread_end);
+  SET_ADDRESS(_extrs, SharedRuntime::notify_jvmti_vthread_mount);
+  SET_ADDRESS(_extrs, SharedRuntime::notify_jvmti_vthread_unmount);
+#endif
+  SET_ADDRESS(_extrs, SharedRuntime::complete_monitor_locking_C);
+  SET_ADDRESS(_extrs, OptoRuntime::monitor_notify_C);
+  SET_ADDRESS(_extrs, OptoRuntime::monitor_notifyAll_C);
+  SET_ADDRESS(_extrs, OptoRuntime::rethrow_C);
+  SET_ADDRESS(_extrs, SharedRuntime::slow_arraycopy_C);
+  SET_ADDRESS(_extrs, OptoRuntime::register_finalizer);
+  SET_ADDRESS(_extrs, OptoRuntime::class_init_barrier);
   SET_ADDRESS(_extrs, Deoptimization::uncommon_trap);
   SET_ADDRESS(_extrs, Deoptimization::fetch_unroll_info);
   SET_ADDRESS(_extrs, Deoptimization::unpack_frames);

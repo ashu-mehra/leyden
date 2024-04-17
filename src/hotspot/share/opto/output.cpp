@@ -28,6 +28,7 @@
 #include "code/compiledIC.hpp"
 #include "code/debugInfo.hpp"
 #include "code/debugInfoRec.hpp"
+#include "code/SCCache.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/compilerDirectives.hpp"
 #include "compiler/disassembler.hpp"
@@ -3463,17 +3464,25 @@ void PhaseOutput::install_stub(const char* stub_name) {
       assert(C->fixed_slots() == 0, "no fixed slots used for runtime stubs");
 
       // Make the NMethod
+      int frame_size = frame_size_in_words();
+      OopMapSet* oop_maps = oop_map_set();
+      CodeBuffer* buffer = code_buffer();
       // For now we mark the frame as never safe for profile stackwalking
       RuntimeStub *rs = RuntimeStub::new_runtime_stub(stub_name,
-                                                      code_buffer(),
+                                                      buffer,
                                                       CodeOffsets::frame_never_safe,
                                                       // _code_offsets.value(CodeOffsets::Frame_Complete),
-                                                      frame_size_in_words(),
-                                                      oop_map_set(),
+                                                      frame_size,
+                                                      oop_maps,
                                                       false);
       assert(rs != nullptr && rs->is_runtime_stub(), "sanity check");
 
       C->set_stub_entry_point(rs->entry_point());
+      // try to save the stub in the cache
+      OptoRuntime::StubID stub_id = (OptoRuntime::StubID)C->stub_id();
+      GrowableArray<int> extra_args;
+      extra_args.append(frame_size);
+      SCCache::store_opto_blob(buffer, stub_id, oop_maps, &extra_args);
     }
   }
 }
