@@ -2381,6 +2381,11 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, G
     buffer->decode();
   }
 #endif
+  // we need to take a lock to stop C1 and C2 compiler threads racing to
+  // write blobs in parallel
+  // TODO - maybe move this up to selected callers so we only lock
+  // when saving a c1 or opto blob
+  MutexLocker locker(CodeCache_lock, Mutex::_no_safepoint_check_flag);
   if (!cache->align_write()) {
     return false;
   }
