@@ -2382,10 +2382,10 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, G
   }
 #endif
   // we need to take a lock to stop C1 and C2 compiler threads racing to
-  // write blobs in parallel
+  // write blobs in parallel with each other or with later nmethods
   // TODO - maybe move this up to selected callers so we only lock
   // when saving a c1 or opto blob
-  MutexLocker locker(CodeCache_lock, Mutex::_no_safepoint_check_flag);
+  MutexLocker ml(Compile_lock);
   if (!cache->align_write()) {
     return false;
   }
