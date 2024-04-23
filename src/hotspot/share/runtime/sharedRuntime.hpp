@@ -617,22 +617,34 @@ private:
   static void print_statistics() PRODUCT_RETURN;
 
   // Blob ids for shared, C1 and C2 runtime generated blobs can be packed
-  // into a 32 bit integer word by tagging an int tag from any of the 3
-  // associated enum ranges with an enum type-specific high bits
+  // into a 32 bit integer word by anding an int enum tag from any of the
+  // 3 enum ranges with an enum type-specific tag in the high 2 bits
 
 private:
-  static const uint32_t SHARED_BLOB_TAG = 0;
-  static const uint32_t C1_BLOB_TAG = 1 << 30;
-  static const uint32_t OPTO_BLOB_TAG = 2 << 30;
-  static const uint32_t BLOB_TAG_MASK = 3 << 30;
+  static const uint32_t BLOB_TAG_SHIFT = 30;
+  static const uint32_t SHARED_BLOB_TAG = 0U << BLOB_TAG_SHIFT;
+  static const uint32_t C1_BLOB_TAG     = 1U << BLOB_TAG_SHIFT;
+  static const uint32_t OPTO_BLOB_TAG   = 2U << BLOB_TAG_SHIFT;
+  static const uint32_t BLOB_TAG_MASK   = 3U << BLOB_TAG_SHIFT;
 
-  static uint32_t blobId_tag(uint32_t blobId) {
-    return blobId & BLOB_TAG_MASK;
+  static int decode_id(uint32_t blobId) {
+    return (blobId & ~BLOB_TAG_MASK);
   }
 
-  static uint32_t blobId_value(uint32_t blobId) {
-    return blobId & ~BLOB_TAG_MASK;
+  static uint32_t decode_tag(uint32_t blobId) {
+    return (blobId & BLOB_TAG_MASK);
   }
+
+  static uint32_t encode_id(int id, uint32_t tag)  {
+    assert(in_range(id), "stub id is too large");
+    return tag | (uint32_t)id;
+  }
+
+  static bool is_shared(uint32_t blobId) { return decode_tag(blobId) == SHARED_BLOB_TAG;}
+  static bool is_c1(uint32_t blobId) { return decode_tag(blobId) == C1_BLOB_TAG;}
+  static bool is_opto(uint32_t blobId) { return decode_tag(blobId) == OPTO_BLOB_TAG;}
+
+  static bool in_range(int id) { return (id & BLOB_TAG_MASK) == 0; }
 
   // stub id encode and decode routinesthis includes variants that are
   // exposes to c1/opto runtime classes. note these private methods
@@ -640,33 +652,30 @@ private:
   // so we don't have to include the c1/opto headers heer
 
   static uint32_t encode_shared_id(int id) {
-    assert((id & BLOB_TAG_MASK) == 0, "shared stub id overflows into tag range");
-    return SHARED_BLOB_TAG || (uint32_t)id;
+    return encode_id(id,  SHARED_BLOB_TAG);
   }
-  static int decode_shared_id(uint32_t id) {
-    assert((id & BLOB_TAG_MASK) == SHARED_BLOB_TAG, "invalid shared stub tag");
-    return (int) (id & ~BLOB_TAG_MASK);
+  static int decode_shared_id(uint32_t blobId) {
+    assert(is_shared(blobId), "not a shared id");
+    return decode_id(blobId);
   }
 #ifdef COMPILER1
   friend class Runtime1;
   static uint32_t encode_c1_id(int id) {
-    assert((id & BLOB_TAG_MASK) == 0, "runtime1 stub id overflows into tag range");
-    return C1_BLOB_TAG || (uint32_t)id;
+    return encode_id(id,  C1_BLOB_TAG);
   }
-  static int decode_c1_id(uint32_t id) {
-    assert((id & BLOB_TAG_MASK) == C1_BLOB_TAG, "invalid runtime1 stub tag");
-    return (int) (id & ~BLOB_TAG_MASK);
+  static int decode_c1_id(uint32_t blobId) {
+    assert(is_c1(blobId), "not a c1 id");
+    return decode_id(blobId);
   }
 #endif
 #ifdef COMPILER1
   friend class OptoRuntime;
   static uint32_t encode_opto_id(int id) {
-    assert((id & BLOB_TAG_MASK) == 0, "opto stub id overflows into tag range");
-    return OPTO_BLOB_TAG || (uint32_t)id;
+    return encode_id(id,  OPTO_BLOB_TAG);
   }
-  static int decode_opto_id(uint32_t id) {
-    assert((id & BLOB_TAG_MASK) == OPTO_BLOB_TAG, "invalid opto stub tag");
-    return (int) (id & ~BLOB_TAG_MASK);
+  static int decode_opto_id(uint32_t blobId) {
+    assert(is_opto(blobId), "not an opto id");
+    return decode_id(blobId);
   }
 #endif
 
