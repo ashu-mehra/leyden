@@ -962,11 +962,11 @@ Compile::Compile( ciEnv* ci_env,
 
   // try to reuse an existing stub
   {
-    CodeBuffer buffer("C2 stub temporary buffer");
+    CodeBuffer buffer(stub_name, 2048, 1024);
     OopMapSet* oop_maps = nullptr;
     GrowableArray<int> extra_args;
     OptoRuntime::StubID stub_id = (OptoRuntime::StubID)_stub_id;
-    if (SCCache::load_opto_blob(&buffer, stub_id, oop_maps, &extra_args)) {
+    if (SCCache::load_opto_blob(&buffer, stub_id, stub_name, oop_maps, &extra_args)) {
       assert(oop_maps != nullptr, "expected oop maps");
       assert(extra_args.length() == 1, "expected 1 extra argument from C2 stub load");
       int frame_size_in_words = extra_args.at(0);

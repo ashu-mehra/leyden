@@ -2015,26 +2015,26 @@ bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code
   return true;
 }
 
-bool SCCache::load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = SharedRuntime::shared_to_blobId(id);
-  return load_blob(buffer, blobId, oop_maps, extra_args);
+  return load_blob(buffer, blobId, name, oop_maps, extra_args);
 }
 
 #ifdef COMPILER1
-bool SCCache::load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = Runtime1::c1_to_blobId(id);
-  return load_blob(buffer, blobId, oop_maps, extra_args);
+  return load_blob(buffer, blobId, name, oop_maps, extra_args);
 }
 #endif
 
 #ifdef COMPILER2
-bool SCCache::load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = OptoRuntime::opto_to_blobId(id);
-  return load_blob(buffer, blobId, oop_maps, extra_args);
+  return load_blob(buffer, blobId, name, oop_maps, extra_args);
 }
 #endif
 
-bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
 #ifdef ASSERT
   LogStreamHandle(Debug, scc, nmethod) log;
   if (log.is_enabled()) {
@@ -2046,28 +2046,32 @@ bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* &oop_maps, G
   if (cache == nullptr) {
     return false;
   }
+  log_info(scc, stubs)("Looking up blob %s (0x%x) in Startup Code Cache '%s'",
+                       name, id, _cache->cache_path());
+
   SCCEntry* entry = cache->find_entry(SCCEntry::Blob, id);
   if (entry == nullptr) {
     return false;
   }
+
   SCCReader reader(cache, entry, nullptr);
-  return reader.compile_blob(buffer, oop_maps, extra_args);
+  return reader.compile_blob(buffer, name, oop_maps, extra_args);
 }
 
-bool SCCReader::compile_blob(CodeBuffer* buffer, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+bool SCCReader::compile_blob(CodeBuffer* buffer, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint entry_position = _entry->offset();
 
   // Read name
   uint name_offset = entry_position + _entry->name_offset();
   uint name_size = _entry->name_size(); // Includes '/0'
-  const char* name = addr(name_offset);
+  const char* stored_name = addr(name_offset);
 
   log_info(scc, stubs)("%d (L%d): Reading blob '%s' from Startup Code Cache '%s'",
                        compile_id(), comp_level(), name, _cache->cache_path());
 
-  if (strncmp(buffer->name(), name, (name_size - 1)) != 0) {
+  if (strncmp(stored_name, name, (name_size - 1)) != 0) {
     log_warning(scc)("%d (L%d): Saved blob's name '%s' is different from '%s'",
-                     compile_id(), comp_level(), name, buffer->name());
+                     compile_id(), comp_level(), stored_name, name);
     ((SCCache*)_cache)->set_failed();
     exit_vm_on_load_failure();
     return false;
@@ -2094,7 +2098,7 @@ bool SCCReader::compile_blob(CodeBuffer* buffer, OopMapSet* &oop_maps, GrowableA
   set_read_position(offset + sizeof(int));
   if (has_map) {
     log_info(scc, stubs)("%d (L%d): Reading blob '%s' oop_maps from Startup Code Cache '%s'",
-                       compile_id(), comp_level(), name, _cache->cache_path());
+                       compile_id(), comp_level(), stored_name, _cache->cache_path());
     oop_maps = read_oop_maps();
   } else {
     oop_maps = nullptr;
@@ -2109,12 +2113,12 @@ bool SCCReader::compile_blob(CodeBuffer* buffer, OopMapSet* &oop_maps, GrowableA
     int arg = *(int*)addr(offset);
     offset += sizeof(int);
     log_info(scc, stubs)("%d (L%d): Reading blob '%s'  extra_args[%d] == 0x%x from Startup Code Cache '%s'",
-                         compile_id(), comp_level(), name, i, arg, _cache->cache_path());
+                         compile_id(), comp_level(), stored_name, i, arg, _cache->cache_path());
     extra_args->push(arg);
   }
 
   log_info(scc, stubs)("%d (L%d): Read blob '%s' with '%d' args from Startup Code Cache '%s'",
-                       compile_id(), comp_level(), name, extras_count, _cache->cache_path());
+                       compile_id(), comp_level(), stored_name, extras_count, _cache->cache_path());
 #ifdef ASSERT
   LogStreamHandle(Debug, scc, nmethod) log;
   if (log.is_enabled()) {
@@ -2347,31 +2351,31 @@ bool SCCache::write_code(CodeBuffer* buffer, uint& code_size) {
   return true;
 }
 
-bool SCCache::store_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::store_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = SharedRuntime::shared_to_blobId(id);
-  return store_blob(buffer, blobId, oop_maps, extra_args);
+  return store_blob(buffer, blobId, name, oop_maps, extra_args);
 }
 
 #ifdef COMPILER1
-bool SCCache::store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = Runtime1::c1_to_blobId(id);
-  return store_blob(buffer, blobId, oop_maps, extra_args);
+  return store_blob(buffer, blobId, name, oop_maps, extra_args);
 }
 #endif
 
 #ifdef COMPILER2
-bool SCCache::store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = OptoRuntime::opto_to_blobId(id);
-  return store_blob(buffer, blobId, oop_maps, extra_args);
+  return store_blob(buffer, blobId, name, oop_maps, extra_args);
 }
 #endif
 
-bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   SCCache* cache = open_for_write();
   if (cache == nullptr) {
     return false;
   }
-  log_info(scc, stubs)("Writing blob '%s' to Startup Code Cache '%s'", buffer->name(), cache->_cache_path);
+  log_info(scc, stubs)("Writing blob '%s' (0x%x) to Startup Code Cache '%s'", name, id, cache->_cache_path);
 
 #ifdef ASSERT
   LogStreamHandle(Debug, scc, nmethod) log;
@@ -2392,7 +2396,6 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, G
   uint entry_position = cache->_write_position;
 
   // Write name
-  const char* name = buffer->name();
   uint name_offset = cache->_write_position - entry_position;
   uint name_size = (uint)strlen(name) + 1; // Includes '/0'
   uint n = cache->write_bytes(name, name_size);
@@ -2422,7 +2425,7 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, G
     return false;
   }
   if (has_map) {
-    log_info(scc, stubs)("Writing blob '%s' oop_map to Startup Code Cache '%s'", buffer->name(), cache->_cache_path);
+    log_info(scc, stubs)("Writing blob '%s' (0x%x) oop_map to Startup Code Cache '%s'", name, id, cache->_cache_path);
     if (!cache->write_oop_maps(oop_maps)) {
       return false;
     }
@@ -2444,7 +2447,7 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, G
     }
     for (int i = 0; i < extras_count; i++) {
       int arg = extra_args->at(i);
-      log_info(scc, stubs)("Writing blob '%s' extra_args[%d] == 0x%x to Startup Code Cache '%s'", buffer->name(), i, arg, cache->_cache_path);
+      log_info(scc, stubs)("Writing blob '%s' (0x%x) extra_args[%d] == 0x%x to Startup Code Cache '%s'", name, id, i, arg, cache->_cache_path);
      n = cache->write_bytes(&arg, sizeof(int));
       if (n != sizeof(int)) {
         return false;
@@ -2456,7 +2459,7 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet *oop_maps, G
   SCCEntry* entry = new(cache) SCCEntry(entry_position, entry_size, name_offset, name_size,
                                           code_offset, code_size, reloc_offset, reloc_size,
                                         SCCEntry::Blob, id);
-  log_info(scc, stubs)("Wrote stub '%s' to Startup Code Cache '%s'", name, cache->_cache_path);
+  log_info(scc, stubs)("Wrote blob '%s' (0x%x) to Startup Code Cache '%s'", name, id, cache->_cache_path);
   return true;
 }
 
@@ -3761,6 +3764,9 @@ void SCAddressTable::init_extrs() {
 
   SET_ADDRESS(_extrs, &JvmtiVTMSTransitionDisabler::_VTMS_notify_jvmti_events);
   SET_ADDRESS(_extrs, StubRoutines::crc_table_addr());
+#if defined(AARCH64)
+  SET_ADDRESS(_extrs, JavaThread::aarch64_get_thread_helper);
+#endif
 #ifndef PRODUCT
   SET_ADDRESS(_extrs, &SharedRuntime::_partial_subtype_ctr);
   SET_ADDRESS(_extrs, JavaThread::verify_cross_modify_fence_failure);

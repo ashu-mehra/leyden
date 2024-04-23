@@ -140,7 +140,7 @@ static bool check_compiled_frame(JavaThread* thread) {
 
 
 #define gen(env, var, stub_id, type_func_gen, c_func, fancy_jump, pass_tls, return_pc) \
-  var = generate_stub(env, type_func_gen, CAST_FROM_FN_PTR(address, c_func), #var, (int) stub_id, fancy_jump, pass_tls, return_pc); \
+  var = generate_stub(env, type_func_gen, CAST_FROM_FN_PTR(address, c_func), "opto" # var, (int) stub_id, fancy_jump, pass_tls, return_pc); \
   if (var == nullptr) { return false; }
 
 bool OptoRuntime::generate(ciEnv* env) {

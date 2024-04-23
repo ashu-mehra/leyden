@@ -3482,7 +3482,7 @@ void PhaseOutput::install_stub(const char* stub_name) {
       OptoRuntime::StubID stub_id = (OptoRuntime::StubID)C->stub_id();
       GrowableArray<int> extra_args;
       extra_args.append(frame_size);
-      SCCache::store_opto_blob(buffer, stub_id, oop_maps, &extra_args);
+      SCCache::store_opto_blob(buffer, stub_id, stub_name, oop_maps, &extra_args);
     }
   }
 }
