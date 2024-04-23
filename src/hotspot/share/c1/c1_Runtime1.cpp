@@ -206,8 +206,9 @@ class StubIDStubAssemblerCodeGenClosure: public StubAssemblerCodeGenClosure {
 
 CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const char* name, bool expect_oop_map, StubAssemblerCodeGenClosure* cl) {
   ResourceMark rm;
-  // create code buffer for code storage
-  CodeBuffer code(buffer_blob);
+  // create a scratch code buffer for code storage instead of writing
+  // to the compiler thread's buffer blob
+  CodeBuffer code(name, buffer_blob->content_size(), buffer_blob->relocation_size());
 
   OopMapSet* oop_maps = nullptr;
   GrowableArray<int> extra_args;
@@ -256,7 +257,7 @@ CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const ch
   if (stub_id >= 0) {
     extra_args.append(frame_size);
     extra_args.append(must_gc_arguments ? 1 : 0);
-    SCCache::store_c1_blob(&code, (Runtime1::StubID)stub_id, oop_maps, &extra_args);
+    SCCache::store_c1_blob(&code, (Runtime1::StubID)stub_id, name, oop_maps, &extra_args);
   }
   return blob;
 }
@@ -283,7 +284,6 @@ void Runtime1::generate_blob_for(BufferBlob* buffer_blob, StubID id) {
   CodeBlob* blob = generate_blob(buffer_blob, id, name_for(id), expect_oop_map, &cl);
   // install blob
   _blobs[id] = blob;
-  // record forward exception blob early as it is used by other blobs
 }
 
 void Runtime1::initialize(BufferBlob* blob) {
