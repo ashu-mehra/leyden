@@ -2209,11 +2209,12 @@ void SharedRuntime::generate_deopt_blob() {
     pad += 512; // Increase the buffer size when compiling for JVMCI
   }
 #endif
-  CodeBuffer buffer("deopt_blob", 2048+pad, 1024);
+  const char* name = "deopt_blob";
+  CodeBuffer buffer(name, 2048+pad, 1024);
   GrowableArray<int> extra_args;
   OopMapSet *oop_maps = nullptr;
 
-  if (SCCache::load_runtime_blob(&buffer, SharedRuntime::StubID::deopt_id, oop_maps, &extra_args)) {
+  if (SCCache::load_runtime_blob(&buffer, SharedRuntime::StubID::deopt_id, name, oop_maps, &extra_args)) {
     assert(oop_maps != nullptr, "expected oop maps");
     assert(extra_args.length() >= 4, "unexpected arg count");
     // Set deopt blob
@@ -2595,7 +2596,7 @@ void SharedRuntime::generate_deopt_blob() {
     extra_args.append(implicit_exception_uncommon_trap_offset);
   }
 #endif 
-  SCCache::store_runtime_blob(&buffer, SharedRuntime::StubID::deopt_id, oop_maps, &extra_args);
+  SCCache::store_runtime_blob(&buffer, SharedRuntime::StubID::deopt_id, name, oop_maps, &extra_args);
 
   _deopt_blob = DeoptimizationBlob::create(&buffer, oop_maps, 0, exception_offset, reexecute_offset, frame_size_in_words);
   _deopt_blob->set_unpack_with_exception_in_tls_offset(exception_in_tls_offset);
@@ -2629,10 +2630,11 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // Allocate space for the code
   ResourceMark rm;
   // Setup code generation tools
-  CodeBuffer buffer("uncommon_trap_blob", 2048, 1024);
+  const char* name = "uncommon_trap_blob";
+  CodeBuffer buffer(name, 2048, 1024);
   OopMapSet *oop_maps = nullptr;
 
-  if (SCCache::load_opto_blob(&buffer, OptoRuntime::StubID::uncommon_trap_id, oop_maps)) {
+  if (SCCache::load_opto_blob(&buffer, OptoRuntime::StubID::uncommon_trap_id, name, oop_maps)) {
     assert(oop_maps != nullptr, "expected oop maps");
     // Set exception blob
     _uncommon_trap_blob =  UncommonTrapBlob::create(&buffer, oop_maps,
@@ -2816,7 +2818,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // Make sure all code is generated
   masm->flush();
 
-  SCCache::store_opto_blob(&buffer, OptoRuntime::StubID::uncommon_trap_id, oop_maps);
+  SCCache::store_opto_blob(&buffer, OptoRuntime::StubID::uncommon_trap_id, name, oop_maps);
   _uncommon_trap_blob =  UncommonTrapBlob::create(&buffer, oop_maps,
                                                  SimpleRuntimeFrame::framesize >> 1);
 
@@ -2836,10 +2838,11 @@ SafepointBlob* SharedRuntime::generate_handler_blob(SharedRuntime::StubID id, ad
   OopMap* map;
 
   // Allocate space for the code.  Setup code generation tools.
+  const char* name = "handler_blob";
   CodeBuffer buffer("handler_blob", 2048, 1024);
   GrowableArray<int> extra_args;
 
-  if (SCCache::load_runtime_blob(&buffer, id, oop_maps, &extra_args)) {
+  if (SCCache::load_runtime_blob(&buffer, id, name, oop_maps, &extra_args)) {
     // return pre-existing blob
     assert(oop_maps != nullptr, "expected oop maps");
     // TODO sanity check the frame size?
@@ -2954,7 +2957,7 @@ SafepointBlob* SharedRuntime::generate_handler_blob(SharedRuntime::StubID id, ad
   masm->flush();
 
   extra_args.append(frame_size_in_words);
-  SCCache::store_runtime_blob(&buffer, id, oop_maps, &extra_args);
+  SCCache::store_runtime_blob(&buffer, id, name, oop_maps, &extra_args);
   // Fill-out other meta info
   return SafepointBlob::create(&buffer, oop_maps, frame_size_in_words);
 }
@@ -2977,7 +2980,7 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(SharedRuntime::StubID id, addr
   OopMapSet *oop_maps = nullptr;
   GrowableArray<int> extra_args;
 
-  if (SCCache::load_runtime_blob(&buffer, id, oop_maps, &extra_args)) {
+  if (SCCache::load_runtime_blob(&buffer, id, name, oop_maps, &extra_args)) {
     // return pre-existing blob
     assert(oop_maps != nullptr, "expected oop maps");
     // TODO sanity check the frame size and frame complete offset?
@@ -3056,7 +3059,7 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(SharedRuntime::StubID id, addr
   // save blob for next time
   extra_args.append(frame_complete);
   extra_args.append(frame_size_in_words);
-  SCCache::store_runtime_blob(&buffer, id, oop_maps, &extra_args);
+  SCCache::store_runtime_blob(&buffer, id, name, oop_maps, &extra_args);
 
   // return the  blob
   // frame_size_words or bytes??
@@ -3102,9 +3105,10 @@ void OptoRuntime::generate_exception_blob() {
   // Allocate space for the code
   ResourceMark rm;
   // Setup code generation tools
-  CodeBuffer buffer("exception_blob", 2048, 1024);
+  const char* name = "exception_blob";
+  CodeBuffer buffer(name, 2048, 1024);
   OopMapSet *oop_maps = nullptr;
-  if (SCCache::load_opto_blob(&buffer, OptoRuntime::StubID::exception_id, oop_maps)) {
+  if (SCCache::load_opto_blob(&buffer, OptoRuntime::StubID::exception_id, name, oop_maps)) {
     // Set exception blob
     assert(oop_maps != nullptr, "expected oop maps");
     _exception_blob =  ExceptionBlob::create(&buffer, oop_maps, SimpleRuntimeFrame::framesize >> 1);
@@ -3202,7 +3206,7 @@ void OptoRuntime::generate_exception_blob() {
   // Make sure all code is generated
   masm->flush();
 
-  SCCache::store_opto_blob(&buffer, OptoRuntime::StubID::exception_id, oop_maps);
+  SCCache::store_opto_blob(&buffer, OptoRuntime::StubID::exception_id, name, oop_maps);
   // Set exception blob
   _exception_blob =  ExceptionBlob::create(&buffer, oop_maps, SimpleRuntimeFrame::framesize >> 1);
 }
