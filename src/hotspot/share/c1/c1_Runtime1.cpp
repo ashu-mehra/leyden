@@ -213,7 +213,7 @@ CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const ch
   OopMapSet* oop_maps = nullptr;
   GrowableArray<int> extra_args;
 
-  if (stub_id >= 0 && SCCache::load_c1_blob(&code, (Runtime1::StubID)stub_id, oop_maps, &extra_args)) {
+  if (stub_id >= 0 && SCCache::load_c1_blob(&code, (Runtime1::StubID)stub_id, name, oop_maps, &extra_args)) {
     assert(oop_maps != nullptr || !expect_oop_map, "expected oop maps");
     assert(extra_args.length() == 2, "expected 2 extra arguments");
     CodeBlob* blob = RuntimeStub::new_runtime_stub(name,
