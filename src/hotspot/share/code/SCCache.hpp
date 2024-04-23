@@ -362,7 +362,7 @@ public:
   SCCReader(SCCache* cache, SCCEntry* entry, CompileTask* task);
 
   bool compile(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler);
-  bool compile_blob(CodeBuffer* buffer, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
+  bool compile_blob(CodeBuffer* buffer, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
 
   Klass* read_klass(const methodHandle& comp_method, bool shared);
   Method* read_method(const methodHandle& comp_method, bool shared);
@@ -525,22 +525,22 @@ public:
   bool write_metadata(Metadata* m);
   bool write_metadata(OopRecorder* oop_recorder);
 
-  static bool load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
-  static bool store_runtime_blob(CodeBuffer* buffer,  SharedRuntime::StubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool store_runtime_blob(CodeBuffer* buffer,  SharedRuntime::StubID id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
 
 #ifdef COMPILER1
-  static bool load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
-  static bool store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
 #endif
 
 #ifdef COMPILER2
-  static bool load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
-  static bool store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args = nullptr);
+  static bool store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
 #endif
 
 private:
-  static bool load_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
-  static bool store_blob(CodeBuffer* buffer, uint32_t id, OopMapSet* oop_maps, GrowableArray<int>* extra_args);
+  static bool load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
+  static bool store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args);
 
 public:
   static bool load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level);
