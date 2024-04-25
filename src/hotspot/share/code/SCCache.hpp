@@ -539,8 +539,8 @@ public:
 #endif
 
 private:
-  static bool load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
-  static bool store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args);
+  static bool load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level);
+  static bool store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level);
 
 public:
   static bool load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level);

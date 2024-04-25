@@ -1135,6 +1135,11 @@ bool SCCache::finish_write() {
 
     SCCEntry* entries_address = _store_entries; // Pointer to latest entry
     uint not_entrant_nb = 0;
+    uint stubs_count = 0;
+    uint shared_blobs_count = 0;
+    uint c1_blobs_count = 0;
+    uint opto_blobs_count = 0;
+    uint total_blobs_count = 0;
     uint max_size = 0;
     // Add old entries first
     if (_for_read && (_load_header != nullptr)) {
@@ -1193,6 +1198,18 @@ bool SCCache::finish_write() {
       } else if (entries_address[i].for_preload() && entries_address[i].method() != nullptr) {
         // record entrant first version code for pre-loading
         preload_entries[preload_entries_cnt++] = entries_count;
+      } else if (entries_address[i].kind() == SCCEntry::Stub) {
+        stubs_count++;
+      } else if (entries_address[i].kind() == SCCEntry::Blob) {
+        total_blobs_count++;
+        if (entries_address[i].comp_level() == CompLevel_none) {
+          shared_blobs_count++;
+        } else if (entries_address[i].comp_level() == CompLevel_simple) {
+          c1_blobs_count++;
+        } else {
+          assert(entries_address[i].comp_level() == CompLevel_full_optimization, "must be!");
+          opto_blobs_count++;
+        }
       }
       {
         entries_address[i].set_next(nullptr); // clear pointers before storing data
@@ -1252,7 +1269,11 @@ bool SCCache::finish_write() {
     copy_bytes((_store_buffer + entries_offset), (address)current, entries_size);
     current += entries_size;
     log_info(scc, exit)("Wrote %d SCCEntry entries (%d were not entrant, %d max size) to Startup Code Cache '%s'", entries_count, not_entrant_nb, max_size, _cache_path);
-
+    log_info(scc, exit)("  Stubs: total=%d", stubs_count);
+    log_info(scc, exit)("  Shared Blobs: total=%d",shared_blobs_count);
+    log_info(scc, exit)("  C1 Blobs: total=%d", c1_blobs_count);
+    log_info(scc, exit)("  Opto Blobs: total=%d", opto_blobs_count);
+    log_info(scc, exit)("  All Blobs: total=%d", total_blobs_count);
     uint size = (current - start);
     assert(size <= total_size, "%d > %d", size , total_size);
 
@@ -2017,26 +2038,26 @@ bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code
 
 bool SCCache::load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = SharedRuntime::shared_to_blobId(id);
-  return load_blob(buffer, blobId, name, oop_maps, extra_args);
+  return load_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_none);
 }
 
 #ifdef COMPILER1
 bool SCCache::load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = Runtime1::c1_to_blobId(id);
-  return load_blob(buffer, blobId, name, oop_maps, extra_args);
+  return load_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_simple);
 }
 #endif
 
 #ifdef COMPILER2
 bool SCCache::load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = OptoRuntime::opto_to_blobId(id);
-  return load_blob(buffer, blobId, name, oop_maps, extra_args);
+  return load_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_full_optimization);
 }
 #endif
 
-bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+ bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level) {
 #ifdef ASSERT
-  LogStreamHandle(Debug, scc, nmethod) log;
+  LogStreamHandle(Debug, scc, stubs) log;
   if (log.is_enabled()) {
     FlagSetting fs(PrintRelocations, true);
     buffer->print_on(&log);
@@ -2051,6 +2072,13 @@ bool SCCache::load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMa
 
   SCCEntry* entry = cache->find_entry(SCCEntry::Blob, id);
   if (entry == nullptr) {
+    return false;
+  }
+
+  if (entry->comp_level() != (uint)comp_level) {
+    log_warning(scc)("Saved blob %s comp level %d differs from expected level %d",
+                     name, entry->comp_level(), comp_level);
+    ((SCCache*)_cache)->set_failed();
     return false;
   }
 
@@ -2112,21 +2140,23 @@ bool SCCReader::compile_blob(CodeBuffer* buffer, const char* name, OopMapSet* &o
   for (int i = 0; i < extras_count; i++) {
     int arg = *(int*)addr(offset);
     offset += sizeof(int);
-    log_info(scc, stubs)("%d (L%d): Reading blob '%s'  extra_args[%d] == 0x%x from Startup Code Cache '%s'",
+    log_debug(scc, stubs)("%d (L%d): Reading blob '%s'  extra_args[%d] == 0x%x from Startup Code Cache '%s'",
                          compile_id(), comp_level(), stored_name, i, arg, _cache->cache_path());
     extra_args->push(arg);
   }
 
-  log_info(scc, stubs)("%d (L%d): Read blob '%s' with '%d' args from Startup Code Cache '%s'",
+  log_debug(scc, stubs)("%d (L%d): Read blob '%s' with '%d' args from Startup Code Cache '%s'",
                        compile_id(), comp_level(), stored_name, extras_count, _cache->cache_path());
 #ifdef ASSERT
-  LogStreamHandle(Debug, scc, nmethod) log;
+  LogStreamHandle(Debug, scc, stubs) log;
   if (log.is_enabled()) {
     FlagSetting fs(PrintRelocations, true);
     buffer->print_on(&log);
     buffer->decode();
   }
 #endif
+  // mark entry as loaded
+  ((SCCEntry *)_entry)->set_loaded();
   return true;
 }
 
@@ -2353,24 +2383,24 @@ bool SCCache::write_code(CodeBuffer* buffer, uint& code_size) {
 
 bool SCCache::store_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = SharedRuntime::shared_to_blobId(id);
-  return store_blob(buffer, blobId, name, oop_maps, extra_args);
+  return store_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_none);
 }
 
 #ifdef COMPILER1
 bool SCCache::store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = Runtime1::c1_to_blobId(id);
-  return store_blob(buffer, blobId, name, oop_maps, extra_args);
+  return store_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_simple);
 }
 #endif
 
 #ifdef COMPILER2
 bool SCCache::store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
   uint32_t blobId = OptoRuntime::opto_to_blobId(id);
-  return store_blob(buffer, blobId, name, oop_maps, extra_args);
+  return store_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_full_optimization);
 }
 #endif
 
-bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level) {
   SCCache* cache = open_for_write();
   if (cache == nullptr) {
     return false;
@@ -2378,7 +2408,7 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopM
   log_info(scc, stubs)("Writing blob '%s' (0x%x) to Startup Code Cache '%s'", name, id, cache->_cache_path);
 
 #ifdef ASSERT
-  LogStreamHandle(Debug, scc, nmethod) log;
+  LogStreamHandle(Debug, scc, stubs) log;
   if (log.is_enabled()) {
     FlagSetting fs(PrintRelocations, true);
     buffer->print_on(&log);
@@ -2425,7 +2455,7 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopM
     return false;
   }
   if (has_map) {
-    log_info(scc, stubs)("Writing blob '%s' (0x%x) oop_map to Startup Code Cache '%s'", name, id, cache->_cache_path);
+    log_debug(scc, stubs)("Writing blob '%s' (0x%x) oop_map to Startup Code Cache '%s'", name, id, cache->_cache_path);
     if (!cache->write_oop_maps(oop_maps)) {
       return false;
     }
@@ -2447,7 +2477,7 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopM
     }
     for (int i = 0; i < extras_count; i++) {
       int arg = extra_args->at(i);
-      log_info(scc, stubs)("Writing blob '%s' (0x%x) extra_args[%d] == 0x%x to Startup Code Cache '%s'", name, id, i, arg, cache->_cache_path);
+      log_debug(scc, stubs)("Writing blob '%s' (0x%x) extra_args[%d] == 0x%x to Startup Code Cache '%s'", name, id, i, arg, cache->_cache_path);
      n = cache->write_bytes(&arg, sizeof(int));
       if (n != sizeof(int)) {
         return false;
@@ -2458,7 +2488,7 @@ bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopM
   uint entry_size = cache->_write_position - entry_position;
   SCCEntry* entry = new(cache) SCCEntry(entry_position, entry_size, name_offset, name_size,
                                           code_offset, code_size, reloc_offset, reloc_size,
-                                        SCCEntry::Blob, id);
+                                        SCCEntry::Blob, id, comp_level);
   log_info(scc, stubs)("Wrote blob '%s' (0x%x) to Startup Code Cache '%s'", name, id, cache->_cache_path);
   return true;
 }
@@ -3499,13 +3529,25 @@ void SCCache::print_statistics_on(outputStream* st) {
     uint* search_entries = (uint*)cache->addr(cache->_load_header->entries_offset()); // [id, index]
     SCCEntry* load_entries = (SCCEntry*)(search_entries + 2 * count);
 
-    int stats[6 + 3][6] = {0};
+    // Entries are None, Stub, Blob x 3 levels, Code x 6 levels
+    int stats[6 + 3 + 2][6] = {0};
     for (uint i = 0; i < count; i++) {
       int index = search_entries[2*i + 1];
       SCCEntry* entry = &(load_entries[index]);
 
       int lvl = entry->kind();
+      if (entry->kind() == SCCEntry::Blob) {
+        uint level = entry->comp_level();
+        assert (level == CompLevel_none || level == CompLevel_simple ||level == CompLevel_full_optimization, "sanity");
+        if (level == CompLevel_simple) {
+          lvl += 1;
+        } else if (level == CompLevel_full_optimization) {
+          lvl += 2;
+        }
+      }
       if (entry->kind() == SCCEntry::Code) {
+        // allow for two extra preceding Blob levels
+        lvl += 2;
         lvl += entry->comp_level() + (entry->for_preload() ? 1 : 0);
       }
       ++stats[lvl][0]; // total
@@ -3527,13 +3569,15 @@ void SCCache::print_statistics_on(outputStream* st) {
     }
 
     print_helper(st, "None", stats, SCCEntry::None);
-    print_helper(st, "Stub", stats, SCCEntry::Stub);
-    print_helper(st, "Blob", stats, SCCEntry::Blob);
+    print_helper(st, "Stubs", stats, SCCEntry::Stub);
+    print_helper(st, "Shared Blobs", stats, SCCEntry::Blob);
+    print_helper(st, "C1 Blobs", stats, SCCEntry::Blob + 1);
+    print_helper(st, "Opto Blobs", stats, SCCEntry::Blob + 2);
     for (int lvl = 0; lvl <= CompLevel_full_optimization + 1; lvl++) {
       ResourceMark rm;
       stringStream ss;
       ss.print("SC T%d", lvl);
-      print_helper(st, ss.freeze(), stats, SCCEntry::Code + lvl);
+      print_helper(st, ss.freeze(), stats, SCCEntry::Code + lvl + 2);
     }
 
   } else {
