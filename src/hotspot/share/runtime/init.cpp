@@ -135,12 +135,13 @@ jint init_globals() {
   MetaspaceShared::open_static_archive();
   codeCache_init();
   VM_Version_init();              // depends on codeCache_init for emitting code
+  SCCache::initialize();
+  SCCache::init_for_initial_stubs();
   initial_stubs_init();
   jint status = universe_init();  // dependent on codeCache_init and
                                   // initial_stubs_init and metaspace_init.
   if (status != JNI_OK)
     return status;
-  SCCache::initialize();
 #ifdef LEAK_SANITIZER
   {
     // Register the Java heap with LSan.

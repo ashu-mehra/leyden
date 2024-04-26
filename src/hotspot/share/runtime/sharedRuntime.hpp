@@ -621,11 +621,12 @@ private:
   // 3 enum ranges with an enum type-specific tag in the high 2 bits
 
 private:
-  static const uint32_t BLOB_TAG_SHIFT = 30;
+  static const uint32_t BLOB_TAG_SHIFT = 29;
   static const uint32_t SHARED_BLOB_TAG = 0U << BLOB_TAG_SHIFT;
   static const uint32_t C1_BLOB_TAG     = 1U << BLOB_TAG_SHIFT;
   static const uint32_t OPTO_BLOB_TAG   = 2U << BLOB_TAG_SHIFT;
-  static const uint32_t BLOB_TAG_MASK   = 3U << BLOB_TAG_SHIFT;
+  static const uint32_t STUB_BLOB_TAG   = 4U << BLOB_TAG_SHIFT;
+  static const uint32_t BLOB_TAG_MASK   = 7U << BLOB_TAG_SHIFT;
 
   static int decode_id(uint32_t blobId) {
     return (blobId & ~BLOB_TAG_MASK);
@@ -643,7 +644,7 @@ private:
   static bool is_shared(uint32_t blobId) { return decode_tag(blobId) == SHARED_BLOB_TAG;}
   static bool is_c1(uint32_t blobId) { return decode_tag(blobId) == C1_BLOB_TAG;}
   static bool is_opto(uint32_t blobId) { return decode_tag(blobId) == OPTO_BLOB_TAG;}
-
+  static bool is_stub(uint32_t blobId) { return decode_tag(blobId) == STUB_BLOB_TAG; }
   static bool in_range(int id) { return (id & BLOB_TAG_MASK) == 0; }
 
   // stub id encode and decode routinesthis includes variants that are
@@ -678,6 +679,15 @@ private:
     return decode_id(blobId);
   }
 #endif
+
+  friend class StubRoutines;
+  static uint32_t encode_stub_id(int id) {
+    return encode_id(id, STUB_BLOB_TAG);
+  }
+  static int decode_stub_id(uint32_t sccId) {
+    assert(is_stub(sccId), "not a stub id");
+    return decode_id(sccId);
+  }
 
   // translate shared runtime blob ids to/from unique codes
 

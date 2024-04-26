@@ -23,6 +23,7 @@
  */
 
 #include "runtime/sharedRuntime.hpp"
+#include "runtime/stubRoutines.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Runtime1.hpp"
 #endif
@@ -185,7 +186,7 @@ private:
   bool   _load_fail;   // Failed to load due to some klass state
 
 public:
-  SCCEntry(uint offset, uint size, uint name_offset, uint name_size,
+  SCCEntry(SCCache* cache, uint offset, uint size, uint name_offset, uint name_size,
            uint code_offset, uint code_size,
            uint reloc_offset, uint reloc_size,
            Kind kind, uint id, uint comp_level = 0,
@@ -215,10 +216,14 @@ public:
     _loaded       = false;
     _not_entrant  = false;
     _load_fail    = false;
+    init(cache);
   }
   void* operator new(size_t x, SCCache* cache);
   // Delete is a NOP
   void operator delete( void *ptr ) {}
+
+  static uint _total_size;
+  void init(SCCache* cache);
 
   SCCEntry* next()    const { return _next; }
   void set_next(SCCEntry* next) { _next = next; }
@@ -297,6 +302,7 @@ public:
     _c1_complete = false;
   }
   ~SCAddressTable();
+  void init_extrs_for_initial_stubs();
   void init_extrs();
   void init_early_stubs();
   void init();
@@ -363,6 +369,7 @@ public:
 
   bool compile(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler);
   bool compile_blob(CodeBuffer* buffer, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
+  bool compile_stub(StubCodeGenerator* cgen, const char* name, address start, GrowableArray<int>* extra_args = nullptr, OopMapSet** oop_maps = nullptr);
 
   Klass* read_klass(const methodHandle& comp_method, bool shared);
   Method* read_method(const methodHandle& comp_method, bool shared);
@@ -504,8 +511,8 @@ public:
 
   bool finish_write();
 
-  static bool load_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const char* name, address start);
-  static bool store_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const char* name, address start);
+  static bool load_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args = nullptr, OopMapSet** oop_maps = nullptr);
+  static bool store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args = nullptr, OopMapSet* oop_maps = nullptr);
 
   bool write_klass(Klass* klass);
   bool write_method(Method* method);
@@ -587,6 +594,7 @@ private:
 public:
   static SCCache* cache() { return _cache; }
   static void initialize();
+  static void init_for_initial_stubs();
   static void init2();
   static void close();
   static bool is_on() { return _cache != nullptr && !_cache->closing(); }

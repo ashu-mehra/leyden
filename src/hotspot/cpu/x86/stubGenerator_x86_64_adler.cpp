@@ -34,23 +34,6 @@
 
 #define __ _masm->
 
-ATTRIBUTE_ALIGNED(64) static const juint ADLER32_ASCALE_TABLE[] = {
-    0x00000000UL, 0x00000001UL, 0x00000002UL, 0x00000003UL,
-    0x00000004UL, 0x00000005UL, 0x00000006UL, 0x00000007UL,
-    0x00000008UL, 0x00000009UL, 0x0000000AUL, 0x0000000BUL,
-    0x0000000CUL, 0x0000000DUL, 0x0000000EUL, 0x0000000FUL
-};
-
-ATTRIBUTE_ALIGNED(32) static const juint ADLER32_SHUF0_TABLE[] = {
-    0xFFFFFF00UL, 0xFFFFFF01UL, 0xFFFFFF02UL, 0xFFFFFF03UL,
-    0xFFFFFF04UL, 0xFFFFFF05UL, 0xFFFFFF06UL, 0xFFFFFF07UL
-};
-
-ATTRIBUTE_ALIGNED(32) static const juint ADLER32_SHUF1_TABLE[] = {
-    0xFFFFFF08UL, 0xFFFFFF09UL, 0xFFFFFF0AUL, 0xFFFFFF0BUL,
-    0xFFFFFF0CUL, 0xFFFFFF0DUL, 0xFFFFFF0EUL, 0xFFFFFF0FUL
-};
-
 
 /***
  *  Arguments:
@@ -69,6 +52,8 @@ address StubGenerator::generate_updateBytesAdler32() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "updateBytesAdler32");
   address start = __ pc();
+
+  SCCACHE_LOAD(updateBytesAdler32)
 
   // Choose an appropriate LIMIT for inner loop based on the granularity
   // of intermediate results. For int, LIMIT of 5552 will ensure intermediate
@@ -119,8 +104,8 @@ address StubGenerator::generate_updateBytesAdler32() {
   __ movq(xtmp4, r13);
   __ movq(xtmp5, r14);
 
-  __ vmovdqu(yshuf0, ExternalAddress((address)ADLER32_SHUF0_TABLE), r14 /*rscratch*/);
-  __ vmovdqu(yshuf1, ExternalAddress((address)ADLER32_SHUF1_TABLE), r14 /*rscratch*/);
+  __ vmovdqu(yshuf0, ExternalAddress(StubRoutines::x86::adler32_shuf0_table_addr()), r14 /*rscratch*/);
+  __ vmovdqu(yshuf1, ExternalAddress(StubRoutines::x86::adler32_shuf1_table_addr()), r14 /*rscratch*/);
 
   __ movptr(data, c_rarg1); //data
   __ movl(size, c_rarg2); //length
@@ -188,7 +173,7 @@ address StubGenerator::generate_updateBytesAdler32() {
 
     __ bind(AVX3_REDUCE);
     __ vpslld(yb, yb, 4, Assembler::AVX_512bit); //b is scaled by 16(avx512))
-    __ vpmulld(ysa, ya, ExternalAddress((address)ADLER32_ASCALE_TABLE), Assembler::AVX_512bit, r14 /*rscratch*/);
+    __ vpmulld(ysa, ya, ExternalAddress(StubRoutines::x86::adler32_ascale_table_addr()), Assembler::AVX_512bit, r14 /*rscratch*/);
 
     // compute horizontal sums of ya, yb, ysa
     __ vextracti64x4(xtmp0, ya, 1);
@@ -235,7 +220,7 @@ address StubGenerator::generate_updateBytesAdler32() {
 
   // reduce
   __ vpslld(yb, yb, 3, Assembler::AVX_256bit); //b is scaled by 8(avx)
-  __ vpmulld(ysa, ya, ExternalAddress((address)ADLER32_ASCALE_TABLE), Assembler::AVX_256bit, r14 /*rscratch*/);
+  __ vpmulld(ysa, ya, ExternalAddress(StubRoutines::x86::adler32_ascale_table_addr()), Assembler::AVX_256bit, r14 /*rscratch*/);
 
   // compute horizontal sums of ya, yb, ysa
   __ vextracti128(xtmp0, ya, 1);
@@ -333,6 +318,8 @@ address StubGenerator::generate_updateBytesAdler32() {
   __ vzeroupper();
   __ leave();
   __ ret(0);
+
+  SCCACHE_STORE(updateBytesAdler32)
 
   return start;
 }

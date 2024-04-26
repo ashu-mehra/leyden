@@ -28,6 +28,7 @@
 #include "code/codeBlob.hpp"
 #include "runtime/continuation.hpp"
 #include "runtime/stubCodeGenerator.hpp"
+#include "runtime/stubRoutines.hpp"
 
 // Stub Code definitions
 
@@ -232,7 +233,7 @@ class StubGenerator: public StubCodeGenerator {
 
   address generate_disjoint_short_copy(bool aligned, address *entry, const char *name);
 
-  address generate_fill(BasicType t, bool aligned, const char *name);
+  address generate_fill(StubRoutines::StubID id, BasicType t, bool aligned, const char *name);
 
   address generate_conjoint_short_copy(bool aligned, address nooverlap_target,
                                        address *entry, const char *name);
@@ -622,5 +623,18 @@ class StubGenerator: public StubCodeGenerator {
  public:
   StubGenerator(CodeBuffer* code, StubsKind kind);
 };
+
+#define SCCACHE_LOAD(stub)
+#define SCCACHE_STORE(stub)
+
+#if 0
+#define SCCACHE_LOAD(stub) \
+  if (SCCache::load_stub(this, StubRoutines::StubID:: ## stub ## _id, #stub, start)) { \
+    return start; \
+  }
+
+#define SCCACHE_STORE(stub) \
+  SCCache::store_stub(this, StubRoutines::StubID: ## stub ## _id, #stub, start);
+#endif // 0
 
 #endif // CPU_X86_STUBGENERATOR_X86_64_HPP

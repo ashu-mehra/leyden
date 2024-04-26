@@ -48,6 +48,7 @@
 #include "compiler/compileBroker.hpp"
 #include "compiler/compileTask.hpp"
 #include "gc/g1/g1BarrierSetRuntime.hpp"
+#include "gc/shared/barrierSetNMethod.hpp"
 #include "gc/shared/gcConfig.hpp"
 #include "logging/log.hpp"
 #include "memory/universe.hpp"
@@ -55,6 +56,7 @@
 #include "oops/method.inline.hpp"
 #include "oops/trainingData.hpp"
 #include "prims/jvmtiThreadState.hpp"
+#include "prims/upcallLinker.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/flags/flagSetting.hpp"
 #include "runtime/globals_extension.hpp"
@@ -125,6 +127,16 @@ void SCCache::initialize() {
       FLAG_SET_DEFAULT(ForceUnreachable, true);
     }
     FLAG_SET_DEFAULT(DelayCompilerStubsGeneration, false);
+  }
+}
+
+void SCCache::init_for_initial_stubs() {
+  if (!is_on()) {
+    return;
+  }
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->init_extrs_for_initial_stubs();
   }
 }
 
@@ -1069,10 +1081,17 @@ extern "C" {
   }
 }
 
+uint SCCEntry::_total_size = 0;
+void SCCEntry::init(SCCache* cache) {
+  _total_size += _size;
+  log_info(scc, stubs)("SCCEntry size:%d total=%d write_positon=%d", _size, _total_size, cache->write_position());
+}
+
 bool SCCache::finish_write() {
   if (!align_write()) {
     return false;
   }
+  log_info(scc, stubs)("SCCache::finish_write: %d", _write_position);
   uint strings_offset = _write_position;
   int strings_count = store_strings();
   if (strings_count < 0) {
@@ -1145,6 +1164,7 @@ bool SCCache::finish_write() {
           if (size > max_size) {
             max_size = size;
           }
+          assert((current + size) <= (start + total_size), "exceeding storage limit");
           copy_bytes((_load_buffer + _load_entries[i].offset()), (address)current, size);
           _load_entries[i].set_offset(current - start); // New offset
           current += size;
@@ -1197,6 +1217,7 @@ bool SCCache::finish_write() {
         if (size > max_size) {
           max_size = size;
         }
+        assert((current + size) <= (start + total_size), "exceeding storage limit");
         copy_bytes((_store_buffer + entries_address[i].offset()), (address)current, size);
         entries_address[i].set_offset(current - start); // New offset
         entries_address[i].update_method_for_writing();
@@ -1221,6 +1242,7 @@ bool SCCache::finish_write() {
     assert(entries_count <= (store_count + load_count), "%d > (%d + %d)", entries_count, store_count, load_count);
     // Write strings
     if (strings_count > 0) {
+      assert((current + strings_size) <= (start + total_size), "exceeding storage limit");
       copy_bytes((_store_buffer + strings_offset), (address)current, strings_size);
       strings_offset = (current - start); // New offset
       current += strings_size;
@@ -1228,6 +1250,7 @@ bool SCCache::finish_write() {
     uint preload_entries_offset = (current - start);
     preload_entries_size = preload_entries_cnt * sizeof(uint);
     if (preload_entries_size > 0) {
+      assert((current + preload_entries_size) <= (start + total_size), "exceeding storage limit");
       copy_bytes((const char*)preload_entries, (address)current, preload_entries_size);
       current += preload_entries_size;
       log_info(scc, exit)("Wrote %d preload entries to Startup Code Cache '%s'", preload_entries_cnt, _cache_path);
@@ -1240,12 +1263,14 @@ bool SCCache::finish_write() {
     // Sort and store search table
     qsort(search, entries_count, 2*sizeof(uint), uint_cmp);
     search_size = 2 * entries_count * sizeof(uint);
+    assert((current + search_size) <= (start + total_size), "exceeding storage limit");
     copy_bytes((const char*)search, (address)current, search_size);
     FREE_C_HEAP_ARRAY(uint, search);
     current += search_size;
 
     // Write entries
     entries_size = entries_count * sizeof(SCCEntry); // New size
+    assert((current + entries_size) <= (start + total_size), "exceeding storage limit");
     copy_bytes((_store_buffer + entries_offset), (address)current, entries_size);
     current += entries_size;
     log_info(scc, exit)("Wrote %d SCCEntry entries (%d were not entrant, %d max size) to Startup Code Cache '%s'", entries_count, not_entrant_nb, max_size, _cache_path);
@@ -1298,37 +1323,70 @@ bool SCCache::finish_write() {
   return true;
 }
 
-bool SCCache::load_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const char* name, address start) {
+bool SCCache::load_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args, OopMapSet** oop_maps) {
+  uint32_t sccId = StubRoutines::stub_to_sccId(id);
   assert(start == cgen->assembler()->pc(), "wrong buffer");
   SCCache* cache = open_for_read();
   if (cache == nullptr) {
     return false;
   }
-  SCCEntry* entry = cache->find_entry(SCCEntry::Stub, (uint)id);
+  SCCEntry* entry = cache->find_entry(SCCEntry::Stub, (uint)sccId);
   if (entry == nullptr) {
     return false;
   }
-  uint entry_position = entry->offset();
+  SCCReader reader(cache, entry, nullptr);
+  return reader.compile_stub(cgen, name, start, extra_args, oop_maps);
+}
+
+bool SCCReader::compile_stub(StubCodeGenerator* cgen, const char* name, address start, GrowableArray<int>* extra_args, OopMapSet** oop_maps) {
+  uint entry_position = _entry->offset();
+  // Read code
+  uint code_offset = _entry->code_offset() + entry_position;
+  uint code_size   = _entry->code_size();
+  copy_bytes(addr(code_offset), start, code_size);
+
   // Read name
-  uint name_offset = entry->name_offset() + entry_position;
-  uint name_size   = entry->name_size(); // Includes '/0'
-  const char* saved_name = cache->addr(name_offset);
+  uint name_offset = _entry->name_offset() + entry_position;
+  uint name_size   = _entry->name_size(); // Includes '/0'
+  const char* saved_name = addr(name_offset);
+  log_info(scc,stubs)("Reading stub '%s' from Startup Code Cache '%s'", name, _cache->cache_path());
   if (strncmp(name, saved_name, (name_size - 1)) != 0) {
-    log_warning(scc)("Saved stub's name '%s' is different from '%s' for id:%d", saved_name, name, (int)id);
-    cache->set_failed();
+    log_warning(scc)("Saved stub's name '%s' is different from '%s'", saved_name, name);
+    ((SCCache*)_cache)->set_failed();
     return false;
   }
-  log_info(scc,stubs)("Reading stub '%s' id:%d from Startup Code Cache '%s'", name, (int)id, cache->_cache_path);
-  // Read code
-  uint code_offset = entry->code_offset() + entry_position;
-  uint code_size   = entry->code_size();
-  copy_bytes(cache->addr(code_offset), start, code_size);
+  set_read_position(name_offset + name_size);
+
+  uint offset = read_position();
+  int has_map = *(int*)addr(offset);
+  set_read_position(offset + sizeof(int));
+  assert((oop_maps == nullptr) == !has_map, "wrong caller expectations");
+  if (has_map) {
+    log_info(scc, stubs)("%d (L%d): Reading stub '%s' oop_maps from Startup Code Cache '%s'",
+                       compile_id(), comp_level(), name, _cache->cache_path());
+    *oop_maps = read_oop_maps();
+  }
+
+  offset = read_position();
+  int extras_count = *(int*)addr(offset);
+  offset += sizeof(int);
+  assert((extras_count == 0) == (extra_args == nullptr), "wrong caller expectations");
+  set_read_position(offset);
+  for (int i = 0; i < extras_count; i++) {
+    int arg = *(int*)addr(offset);
+    offset += sizeof(int);
+    log_info(scc, stubs)("%d (L%d): Reading stub '%s'  extra_args[%d] == 0x%x from Startup Code Cache '%s'",
+                         compile_id(), comp_level(), name, i, arg, _cache->cache_path());
+    extra_args->push(arg);
+  }
+
   cgen->assembler()->code_section()->set_end(start + code_size);
-  log_info(scc,stubs)("Read stub '%s' id:%d from Startup Code Cache '%s'", name, (int)id, cache->_cache_path);
+  log_info(scc,stubs)("Read stub '%s' from Startup Code Cache '%s'", name, _cache->cache_path());
   return true;
 }
 
-bool SCCache::store_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const char* name, address start) {
+bool SCCache::store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args, OopMapSet* oop_maps) {
+  uint32_t sccId = StubRoutines::stub_to_sccId(id);
   SCCache* cache = open_for_write();
   if (cache == nullptr) {
     return false;
@@ -1373,10 +1431,47 @@ bool SCCache::store_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const char* 
   if (n != name_size) {
     return false;
   }
+
+  int has_map = (oop_maps != nullptr);
+  n = cache->write_bytes(&has_map, sizeof(int));
+  if (n != sizeof(int)) {
+    return false;
+  }
+  if (has_map) {
+    log_info(scc, stubs)("Writing stub '%s' oop_map to Startup Code Cache '%s'", name, cache->_cache_path);
+    if (!cache->write_oop_maps(oop_maps)) {
+      return false;
+    }
+  }
+
+  int extras_count;
+  if (extra_args == nullptr) {
+    extras_count = 0;
+    n = cache->write_bytes(&extras_count, sizeof(int));
+    if (n != sizeof(int)) {
+      return false;
+    }
+  } else {
+    extras_count = extra_args->length();
+    assert(extras_count > 0, "wrong caller expectations");
+    n = cache->write_bytes(&extras_count, sizeof(int));
+    if (n != sizeof(int)) {
+      return false;
+    }
+    for (int i = 0; i < extras_count; i++) {
+      int arg = extra_args->at(i);
+      log_info(scc, stubs)("Writing stub '%s' extra_args[%d] == 0x%x to Startup Code Cache '%s'", name, i, arg, cache->_cache_path);
+      n = cache->write_bytes(&arg, sizeof(int));
+      if (n != sizeof(int)) {
+        return false;
+      }
+    }
+  }
+
   uint entry_size = cache->_write_position - entry_position;
-  SCCEntry* entry = new(cache) SCCEntry(entry_position, entry_size, name_offset, name_size,
+  SCCEntry* entry = new(cache) SCCEntry(cache, entry_position, entry_size, name_offset, name_size,
                                           code_offset, code_size, 0, 0,
-                                          SCCEntry::Stub, (uint32_t)id);
+                                          SCCEntry::Stub, (uint32_t)sccId);
   log_info(scc, stubs)("Wrote stub '%s' id:%d to Startup Code Cache '%s'", name, (int)id, cache->_cache_path);
   return true;
 }
@@ -2044,7 +2139,6 @@ bool SCCache::load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const c
   }
   log_info(scc, stubs)("Looking up blob %s (0x%x) in Startup Code Cache '%s'",
                        name, id, _cache->cache_path());
-
   SCCEntry* entry = cache->find_entry(SCCEntry::Blob, id);
   if (entry == nullptr) {
     return false;
@@ -2459,7 +2553,7 @@ bool SCCache::store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const 
   }
 
   uint entry_size = cache->_write_position - entry_position;
-  SCCEntry* entry = new(cache) SCCEntry(entry_position, entry_size, name_offset, name_size,
+  SCCEntry* entry = new(cache) SCCEntry(cache, entry_position, entry_size, name_offset, name_size,
                                           code_offset, code_size, reloc_offset, reloc_size,
                                         SCCEntry::Blob, id, comp_level);
   log_info(scc, stubs)("Wrote blob '%s' (0x%x) to Startup Code Cache '%s'", name, id, cache->_cache_path);
@@ -3449,7 +3543,7 @@ SCCEntry* SCCache::write_nmethod(const methodHandle& method,
   }
   uint entry_size = _write_position - entry_position;
 
-  SCCEntry* entry = new (this) SCCEntry(entry_position, entry_size, name_offset, name_size,
+  SCCEntry* entry = new (this) SCCEntry(this, entry_position, entry_size, name_offset, name_size,
                                         code_offset, code_size, reloc_offset, reloc_size,
                                         SCCEntry::Code, hash, (uint)comp_level, (uint)comp_id, decomp,
                                         has_clinit_barriers, _for_preload);
@@ -3640,7 +3734,7 @@ void SCCReader::print_on(outputStream* st) {
   st->print_cr("  name: %s", name);
 }
 
-#define _extrs_max 120
+#define _extrs_max 200 
 #define _stubs_max 120
 #define _blobs_max 120
 #define _shared_blobs_max 40
@@ -3655,12 +3749,31 @@ void SCCReader::print_on(outputStream* st) {
   }
 
 static bool initializing_extrs = false;
-void SCAddressTable::init_extrs() {
-  if (_extrs_complete || initializing_extrs) return; // Done already
-  initializing_extrs = true;
+
+void SCAddressTable::init_extrs_for_initial_stubs() {
   _extrs_addr = NEW_C_HEAP_ARRAY(address, _extrs_max, mtCode);
 
   _extrs_length = 0;
+  SET_ADDRESS(_extrs, SharedRuntime::exception_handler_for_return_address); // used by forward_exception
+  SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_std); // used by call_stub
+  SET_ADDRESS(_extrs, SharedRuntime::throw_StackOverflowError); // used by throw_StackOverflowError_entry
+  SET_ADDRESS(_extrs, SharedRuntime::throw_delayed_StackOverflowError) // used by throw_delayed_StackOverflowError_entry
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc_table_avx512_addr) // used by updateBytesCRC32
+  SET_ADDRESS(_extrs, StubRoutines::x86::shuf_table_crc32_avx512_addr()); // used by updateBytesCRC32->kernel_crc32_avx512
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_avx512_off16_addr()); // used by updateBytesCRC32->kernel_crc32_avx512
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_avx512_off32_addr()); // used by updateBytesCRC32->kernel_crc32_avx512
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_avx512_addr()); // used by updateBytesCRC32->kernel_crc32_avx512
+  SET_ADDRESS(_extrs, StubRoutines::crc_table_addr()); // used by updateBytesCRC32->kernel_crc32
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_off16_addr()); // used by updateBytesCRC32->kernel_crc32
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_off32_addr()); // used by updateBytesCRC32->kernel_crc32
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_addr()); // used by updateBytesCRC32->kernel_crc32
+  SET_ADDRESS(_extrs, StubRoutines::x86::crc32c_table_avx512_addr()); // used by updateBytesCRC32C
+}
+
+void SCAddressTable::init_extrs() {
+  if (_extrs_complete || initializing_extrs) return; // Done already
+  initializing_extrs = true;
+
   _stubs_length = 0;
   _blobs_length = 0;       // for shared blobs
   _C1_blobs_length = 0;
@@ -3683,7 +3796,7 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, SharedRuntime::notify_jvmti_vthread_end);
   SET_ADDRESS(_extrs, SharedRuntime::notify_jvmti_vthread_mount);
   SET_ADDRESS(_extrs, SharedRuntime::notify_jvmti_vthread_unmount);
-#endif
+#endif // INCLUDE_JVMTI
   SET_ADDRESS(_extrs, SharedRuntime::complete_monitor_locking_C);
   SET_ADDRESS(_extrs, OptoRuntime::monitor_notify_C);
   SET_ADDRESS(_extrs, OptoRuntime::monitor_notifyAll_C);
@@ -3694,13 +3807,12 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, Deoptimization::uncommon_trap);
   SET_ADDRESS(_extrs, Deoptimization::fetch_unroll_info);
   SET_ADDRESS(_extrs, Deoptimization::unpack_frames);
-#endif
+#endif // COMPILER2
 #ifdef COMPILER1
   SET_ADDRESS(_extrs, Runtime1::is_instance_of);
   SET_ADDRESS(_extrs, Runtime1::trace_block_entry);
   SET_ADDRESS(_extrs, Runtime1::exception_handler_for_pc);
   SET_ADDRESS(_extrs, Runtime1::check_abort_on_vm_exception);
-  SET_ADDRESS(_extrs, SharedRuntime::exception_handler_for_return_address);
   SET_ADDRESS(_extrs, Runtime1::new_instance);
   SET_ADDRESS(_extrs, Runtime1::counter_overflow);
   SET_ADDRESS(_extrs, Runtime1::new_type_array);
@@ -3724,7 +3836,7 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, Runtime1::throw_array_store_exception);
   SET_ADDRESS(_extrs, Runtime1::throw_class_cast_exception);
   SET_ADDRESS(_extrs, Runtime1::throw_incompatible_class_change_error);
-#endif
+#endif // COMPILER1
 
   SET_ADDRESS(_extrs, CompressedOops::ptrs_base_addr());
   SET_ADDRESS(_extrs, G1BarrierSetRuntime::write_ref_field_post_entry);
@@ -3777,31 +3889,97 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, os::javaTimeNanos);
 #ifndef PRODUCT
   SET_ADDRESS(_extrs, os::breakpoint);
-#endif
+#endif // PRODUCT
 
   SET_ADDRESS(_extrs, &JvmtiVTMSTransitionDisabler::_VTMS_notify_jvmti_events);
-  SET_ADDRESS(_extrs, StubRoutines::crc_table_addr());
 #if defined(AARCH64)
   SET_ADDRESS(_extrs, JavaThread::aarch64_get_thread_helper);
 #endif
 #ifndef PRODUCT
   SET_ADDRESS(_extrs, &SharedRuntime::_partial_subtype_ctr);
   SET_ADDRESS(_extrs, JavaThread::verify_cross_modify_fence_failure);
-#endif
+#endif // PRODUCT
 
 #if defined(AMD64) || defined(AARCH64) || defined(RISCV64)
   SET_ADDRESS(_extrs, MacroAssembler::debug64);
-#endif
+#endif // defined(AMD64) || defined(AARCH64) || defined(RISCV64)
 #if defined(AMD64)
   SET_ADDRESS(_extrs, StubRoutines::x86::arrays_hashcode_powers_of_31());
-#endif
+#endif // AMD64
 
 #ifdef X86
   SET_ADDRESS(_extrs, LIR_Assembler::float_signmask_pool);
   SET_ADDRESS(_extrs, LIR_Assembler::double_signmask_pool);
   SET_ADDRESS(_extrs, LIR_Assembler::float_signflip_pool);
   SET_ADDRESS(_extrs, LIR_Assembler::double_signflip_pool);
-#endif
+#endif // X86
+
+#ifdef AMD64
+  SET_ADDRESS(_extrs, StubRoutines::x86::key_shuffle_mask_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_shuffle_mask_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc0_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc1_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc1f_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc2_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc2f_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc4_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc8_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc16_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_linc32_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::counter_mask_ones_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::ghash_polynomial_reduction_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::ghash_polynomial_two_one_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::ghash_shuffle_mask_addr());
+
+  SET_ADDRESS(_extrs, StubRoutines::x86::ghash_long_swap_mask_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::ghash_byte_swap_mask_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::ghash_polynomial_addr());
+
+  SET_ADDRESS(_extrs, StubRoutines::x86::adler32_ascale_table_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::adler32_shuf0_table_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::adler32_shuf1_table_addr());
+
+  SET_ADDRESS(_extrs, StubRoutines::x86::chacha20_ctradd_avx_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::chacha20_ctradd_avx512_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::chacha20_lrot_consts_addr());
+
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_encoding_table_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_shuffle_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_avx2_shuffle_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_avx2_input_mask_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_avx2_lut_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_lookup_lo_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_lookup_hi_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_join_0_1_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_join_1_2_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_join_2_3_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_pack_vec_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_lookup_lo_url_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_vbmi_lookup_hi_url_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_AVX2_decode_tables_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_AVX2_decode_LUT_tables_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::base64_decoding_table_addr());
+
+  SET_ADDRESS(_extrs, StubRoutines::x86::poly1305_pad_msg_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::poly1305_mask42_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::poly1305_mask44_addr());
+
+  SET_ADDRESS(_extrs, StubRoutines::x86::upper_word_mask_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::shuffle_byte_flip_mask_addr());
+
+  SET_ADDRESS(_extrs, StubRoutines::x86::k256_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::k256_W_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::k512_W_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::pshuffle_byte_flip_mask_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::pshuffle_byte_flip_mask_off32_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::pshuffle_byte_flip_mask_off64_addr());
+  SET_ADDRESS(_extrs, StubRoutines::x86::pshuffle_byte_flip_mask_addr_sha512());
+  SET_ADDRESS(_extrs, StubRoutines::x86::pshuffle_byte_flip_mask_off32_addr_sha512());
+
+#endif // AMD64
+  SET_ADDRESS(_extrs, BarrierSetNMethod::nmethod_stub_entry_barrier);
+  SET_ADDRESS(_extrs, Continuation::prepare_thaw);
+  SET_ADDRESS(_extrs, UpcallLinker::handle_uncaught_exception);
 
   _extrs_complete = true;
   log_info(scc,init)("External addresses recorded");

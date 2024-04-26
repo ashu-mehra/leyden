@@ -44,135 +44,6 @@
 
 const int AESBlockSize = 16;
 
-// Shuffle mask for fixing up 128-bit words consisting of big-endian 32-bit integers.
-ATTRIBUTE_ALIGNED(16) static const uint64_t KEY_SHUFFLE_MASK[] = {
-    0x0405060700010203UL, 0x0C0D0E0F08090A0BUL
-};
-static address key_shuffle_mask_addr() {
-  return (address)KEY_SHUFFLE_MASK;
-}
-
-// Shuffle mask for big-endian 128-bit integers.
-ATTRIBUTE_ALIGNED(64) static const uint64_t COUNTER_SHUFFLE_MASK[] = {
-    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
-    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
-    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
-    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
-};
-static address counter_shuffle_mask_addr() {
-  return (address)COUNTER_SHUFFLE_MASK;
-}
-
-// This mask is used for incrementing counter value
-ATTRIBUTE_ALIGNED(64) static const uint64_t COUNTER_MASK_LINC0[] = {
-    0x0000000000000000UL, 0x0000000000000000UL,
-    0x0000000000000001UL, 0x0000000000000000UL,
-    0x0000000000000002UL, 0x0000000000000000UL,
-    0x0000000000000003UL, 0x0000000000000000UL,
-};
-static address counter_mask_linc0_addr() {
-  return (address)COUNTER_MASK_LINC0;
-}
-
-ATTRIBUTE_ALIGNED(16) static const uint64_t COUNTER_MASK_LINC1[] = {
-    0x0000000000000001UL, 0x0000000000000000UL,
-};
-static address counter_mask_linc1_addr() {
-  return (address)COUNTER_MASK_LINC1;
-}
-
-ATTRIBUTE_ALIGNED(16) uint64_t COUNTER_MASK_LINC1F[] = {
-    0x0000000000000000UL, 0x0100000000000000UL,
-};
-
-static address counter_mask_linc1f_addr() {
-  return (address)COUNTER_MASK_LINC1F;
-}
-
-ATTRIBUTE_ALIGNED(16) uint64_t COUNTER_MASK_LINC2[] = {
-    0x0000000000000002UL, 0x0000000000000000UL,
-};
-
-static address counter_mask_linc2_addr() {
-  return (address)COUNTER_MASK_LINC2;
-}
-
-ATTRIBUTE_ALIGNED(16) uint64_t COUNTER_MASK_LINC2F[] = {
-    0x0000000000000000UL, 0x0200000000000000UL,
-};
-
-static address counter_mask_linc2f_addr() {
-  return (address)COUNTER_MASK_LINC2F;
-}
-
-ATTRIBUTE_ALIGNED(64) static const uint64_t COUNTER_MASK_LINC4[] = {
-    0x0000000000000004UL, 0x0000000000000000UL,
-    0x0000000000000004UL, 0x0000000000000000UL,
-    0x0000000000000004UL, 0x0000000000000000UL,
-    0x0000000000000004UL, 0x0000000000000000UL,
-};
-static address counter_mask_linc4_addr() {
-  return (address)COUNTER_MASK_LINC4;
-}
-
-ATTRIBUTE_ALIGNED(64) static const uint64_t COUNTER_MASK_LINC8[] = {
-    0x0000000000000008UL, 0x0000000000000000UL,
-    0x0000000000000008UL, 0x0000000000000000UL,
-    0x0000000000000008UL, 0x0000000000000000UL,
-    0x0000000000000008UL, 0x0000000000000000UL,
-};
-static address counter_mask_linc8_addr() {
-  return (address)COUNTER_MASK_LINC8;
-}
-
-ATTRIBUTE_ALIGNED(64) static const uint64_t COUNTER_MASK_LINC16[] = {
-    0x0000000000000010UL, 0x0000000000000000UL,
-    0x0000000000000010UL, 0x0000000000000000UL,
-    0x0000000000000010UL, 0x0000000000000000UL,
-    0x0000000000000010UL, 0x0000000000000000UL,
-};
-static address counter_mask_linc16_addr() {
-  return (address)COUNTER_MASK_LINC16;
-}
-
-ATTRIBUTE_ALIGNED(64) static const uint64_t COUNTER_MASK_LINC32[] = {
-    0x0000000000000020UL, 0x0000000000000000UL,
-    0x0000000000000020UL, 0x0000000000000000UL,
-    0x0000000000000020UL, 0x0000000000000000UL,
-    0x0000000000000020UL, 0x0000000000000000UL,
-};
-static address counter_mask_linc32_addr() {
-  return (address)COUNTER_MASK_LINC32;
-}
-
-ATTRIBUTE_ALIGNED(64) uint64_t COUNTER_MASK_ONES[] = {
-    0x0000000000000000UL, 0x0000000000000001UL,
-    0x0000000000000000UL, 0x0000000000000001UL,
-    0x0000000000000000UL, 0x0000000000000001UL,
-    0x0000000000000000UL, 0x0000000000000001UL,
-};
-static address counter_mask_ones_addr() {
-  return (address)COUNTER_MASK_ONES;
-}
-
-ATTRIBUTE_ALIGNED(64) static const uint64_t GHASH_POLYNOMIAL_REDUCTION[] = {
-    0x00000001C2000000UL, 0xC200000000000000UL,
-    0x00000001C2000000UL, 0xC200000000000000UL,
-    0x00000001C2000000UL, 0xC200000000000000UL,
-    0x00000001C2000000UL, 0xC200000000000000UL,
-};
-static address ghash_polynomial_reduction_addr() {
-  return (address)GHASH_POLYNOMIAL_REDUCTION;
-}
-
-ATTRIBUTE_ALIGNED(16) static const uint64_t GHASH_POLYNOMIAL_TWO_ONE[] = {
-    0x0000000000000001UL, 0x0000000100000000UL,
-};
-static address ghash_polynomial_two_one_addr() {
-  return (address)GHASH_POLYNOMIAL_TWO_ONE;
-}
-
-
 // AES intrinsic stubs
 
 void StubGenerator::generate_aes_stubs() {
@@ -220,6 +91,8 @@ address StubGenerator::generate_galoisCounterMode_AESCrypt() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "galoisCounterMode_AESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(galoisCounterMode_AESCrypt)
 
   const Register in = c_rarg0;
   const Register len = c_rarg1;
@@ -285,6 +158,8 @@ address StubGenerator::generate_galoisCounterMode_AESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(galoisCounterMode_AESCrypt)
+
   return start;
 }
 
@@ -307,6 +182,8 @@ address StubGenerator::generate_avx2_galoisCounterMode_AESCrypt() {
   StubCodeMark mark(this, "StubRoutines", "galoisCounterMode_AESCrypt");
   address start = __ pc();
 
+  SCCACHE_LOAD(galoisCounterMode_AESCrypt)
+ 
   const Register in = c_rarg0;
   const Register len = c_rarg1;
   const Register ct = c_rarg2;
@@ -369,6 +246,8 @@ address StubGenerator::generate_avx2_galoisCounterMode_AESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(galoisCounterMode_AESCrypt)
+
   return start;
 }
 
@@ -377,6 +256,8 @@ address StubGenerator::generate_counterMode_VectorAESCrypt()  {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "counterMode_AESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(counterMode_AESCrypt)
 
   const Register from = c_rarg0; // source array address
   const Register to = c_rarg1; // destination array address
@@ -435,6 +316,8 @@ address StubGenerator::generate_counterMode_VectorAESCrypt()  {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(counterMode_AESCrypt)
+
   return start;
 }
 
@@ -465,6 +348,8 @@ address StubGenerator::generate_counterMode_AESCrypt_Parallel() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "counterMode_AESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(counterMode_AESCrypt)
 
   const Register from = c_rarg0; // source array address
   const Register to = c_rarg1; // destination array address
@@ -548,7 +433,7 @@ address StubGenerator::generate_counterMode_AESCrypt_Parallel() {
 
   __ push(rbx); // Save RBX
   __ movdqu(xmm_curr_counter, Address(counter, 0x00)); // initialize counter with initial counter
-  __ movdqu(xmm_counter_shuf_mask, ExternalAddress(counter_shuffle_mask_addr()), pos /*rscratch*/);
+  __ movdqu(xmm_counter_shuf_mask, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), pos /*rscratch*/);
   __ pshufb(xmm_curr_counter, xmm_counter_shuf_mask); //counter is shuffled
   __ movptr(pos, 0);
 
@@ -571,7 +456,7 @@ address StubGenerator::generate_counterMode_AESCrypt_Parallel() {
   __ movl(Address(used_addr, 0), used);
 
   // key length could be only {11, 13, 15} * 4 = {44, 52, 60}
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rbx /*rscratch*/);
   __ movl(rbx, Address(key, arrayOopDesc::length_offset_in_bytes() - arrayOopDesc::base_offset_in_bytes(T_INT)));
   __ cmpl(rbx, 52);
   __ jcc(Assembler::equal, L_multiBlock_loopTop[1]);
@@ -744,6 +629,8 @@ address StubGenerator::generate_counterMode_AESCrypt_Parallel() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(counterMode_AESCrypt)
+
   return start;
 }
 
@@ -752,6 +639,8 @@ address StubGenerator::generate_cipherBlockChaining_decryptVectorAESCrypt() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "cipherBlockChaining_decryptAESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(cipherBlockChaining_decryptVectorAESCrypt)
 
   const Register from = c_rarg0;  // source array address
   const Register to = c_rarg1;  // destination array address
@@ -781,7 +670,7 @@ address StubGenerator::generate_cipherBlockChaining_decryptVectorAESCrypt() {
 
   // Temporary variable declaration for swapping key bytes
   const XMMRegister xmm_key_shuf_mask = xmm1;
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rbx /*rscratch*/);
 
   // Calculate number of rounds from key size: 44 for 10-rounds, 52 for 12-rounds, 60 for 14-rounds
   const Register rounds = rbx;
@@ -1019,6 +908,8 @@ address StubGenerator::generate_cipherBlockChaining_decryptVectorAESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(cipherBlockChaining_decryptVectorAESCrypt)
+
   return start;
 }
 
@@ -1035,6 +926,8 @@ address StubGenerator::generate_aescrypt_encryptBlock() {
   StubCodeMark mark(this, "StubRoutines", "aescrypt_encryptBlock");
   Label L_doLast;
   address start = __ pc();
+
+  SCCACHE_LOAD(aescrypt_encryptBlock)
 
   const Register from        = c_rarg0;  // source array address
   const Register to          = c_rarg1;  // destination array address
@@ -1054,7 +947,7 @@ address StubGenerator::generate_aescrypt_encryptBlock() {
   // keylen could be only {11, 13, 15} * 4 = {44, 52, 60}
   __ movl(keylen, Address(key, arrayOopDesc::length_offset_in_bytes() - arrayOopDesc::base_offset_in_bytes(T_INT)));
 
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), r10 /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), r10 /*rscratch*/);
   __ movdqu(xmm_result, Address(from, 0));  // get 16 bytes of input
 
   // For encryption, the java expanded key ordering is just what we need
@@ -1113,6 +1006,8 @@ address StubGenerator::generate_aescrypt_encryptBlock() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(aescrypt_encryptBlock)
+
   return start;
 }
 
@@ -1129,6 +1024,8 @@ address StubGenerator::generate_aescrypt_decryptBlock() {
   StubCodeMark mark(this, "StubRoutines", "aescrypt_decryptBlock");
   Label L_doLast;
   address start = __ pc();
+
+  SCCACHE_LOAD(aescrypt_decryptBlock)
 
   const Register from        = c_rarg0;  // source array address
   const Register to          = c_rarg1;  // destination array address
@@ -1148,7 +1045,7 @@ address StubGenerator::generate_aescrypt_decryptBlock() {
   // keylen could be only {11, 13, 15} * 4 = {44, 52, 60}
   __ movl(keylen, Address(key, arrayOopDesc::length_offset_in_bytes() - arrayOopDesc::base_offset_in_bytes(T_INT)));
 
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), r10 /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), r10 /*rscratch*/);
   __ movdqu(xmm_result, Address(from, 0));
 
   // for decryption java expanded key ordering is rotated one position from what we want
@@ -1208,6 +1105,8 @@ address StubGenerator::generate_aescrypt_decryptBlock() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(aescrypt_decryptBlock)
+
   return start;
 }
 
@@ -1229,6 +1128,8 @@ address StubGenerator::generate_cipherBlockChaining_encryptAESCrypt() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "cipherBlockChaining_encryptAESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(cipherBlockChaining_encryptAESCrypt)
 
   Label L_exit, L_key_192_256, L_key_256, L_loopTop_128, L_loopTop_192, L_loopTop_256;
   const Register from        = c_rarg0;  // source array address
@@ -1266,7 +1167,7 @@ address StubGenerator::generate_cipherBlockChaining_encryptAESCrypt() {
 #endif
 
   const XMMRegister xmm_key_shuf_mask = xmm_temp;  // used temporarily to swap key bytes up front
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), r10 /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), r10 /*rscratch*/);
   // load up xmm regs xmm2 thru xmm12 with key 0x00 - 0xa0
   for (int rnum = XMM_REG_NUM_KEY_FIRST, offset = 0x00; rnum <= XMM_REG_NUM_KEY_FIRST+10; rnum++) {
     load_key(as_XMMRegister(rnum), key, offset, xmm_key_shuf_mask);
@@ -1357,6 +1258,8 @@ address StubGenerator::generate_cipherBlockChaining_encryptAESCrypt() {
   __ jcc(Assembler::notEqual, L_loopTop_256);
   __ jmp(L_exit);
 
+  SCCACHE_STORE(cipherBlockChaining_encryptAESCrypt)
+
   return start;
 }
 
@@ -1380,6 +1283,8 @@ address StubGenerator::generate_cipherBlockChaining_decryptAESCrypt_Parallel() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "cipherBlockChaining_decryptAESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(cipherBlockChaining_decryptAESCrypt)
 
   const Register from        = c_rarg0;  // source array address
   const Register to          = c_rarg1;  // destination array address
@@ -1422,7 +1327,7 @@ address StubGenerator::generate_cipherBlockChaining_decryptAESCrypt_Parallel() {
   // the java expanded key ordering is rotated one position from what we want
   // so we start from 0x10 here and hit 0x00 last
   const XMMRegister xmm_key_shuf_mask = xmm1;  // used temporarily to swap key bytes up front
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rbx /*rscratch*/);
   // load up xmm regs 5 thru 15 with key 0x10 - 0xa0 - 0x00
   for (int rnum = XMM_REG_NUM_KEY_FIRST, offset = 0x10; rnum < XMM_REG_NUM_KEY_LAST; rnum++) {
     load_key(as_XMMRegister(rnum), key, offset, xmm_key_shuf_mask);
@@ -1615,6 +1520,8 @@ __ opc(xmm_result3, src_reg);         \
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(cipherBlockChaining_decryptAESCrypt)
+
   return start;
 }
 
@@ -1622,6 +1529,8 @@ address StubGenerator::generate_electronicCodeBook_encryptAESCrypt() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "electronicCodeBook_encryptAESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(electronicCodeBook_encryptAESCrypt)
 
   const Register from = c_rarg0;  // source array address
   const Register to = c_rarg1;  // destination array address
@@ -1635,6 +1544,8 @@ address StubGenerator::generate_electronicCodeBook_encryptAESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(electronicCodeBook_encryptAESCrypt)
+
   return start;
  }
 
@@ -1642,6 +1553,8 @@ address StubGenerator::generate_electronicCodeBook_decryptAESCrypt() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "electronicCodeBook_decryptAESCrypt");
   address start = __ pc();
+
+  SCCACHE_LOAD(electronicCodeBook_decryptAESCrypt)
 
   const Register from = c_rarg0;  // source array address
   const Register to = c_rarg1;  // destination array address
@@ -1654,6 +1567,8 @@ address StubGenerator::generate_electronicCodeBook_decryptAESCrypt() {
   __ vzeroupper();
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
+
+  SCCACHE_STORE(electronicCodeBook_decryptAESCrypt)
 
   return start;
 }
@@ -1726,7 +1641,7 @@ void StubGenerator::load_key(XMMRegister xmmdst, Register key, int offset, XMMRe
 
 void StubGenerator::load_key(XMMRegister xmmdst, Register key, int offset, Register rscratch) {
   __ movdqu(xmmdst, Address(key, offset));
-  __ pshufb(xmmdst, ExternalAddress(key_shuffle_mask_addr()), rscratch);
+  __ pshufb(xmmdst, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rscratch);
 }
 
 void StubGenerator::ev_load_key(XMMRegister xmmdst, Register key, int offset, XMMRegister xmm_shuf_mask) {
@@ -1737,7 +1652,7 @@ void StubGenerator::ev_load_key(XMMRegister xmmdst, Register key, int offset, XM
 
 void StubGenerator::ev_load_key(XMMRegister xmmdst, Register key, int offset, Register rscratch) {
   __ movdqu(xmmdst, Address(key, offset));
-  __ pshufb(xmmdst, ExternalAddress(key_shuffle_mask_addr()), rscratch);
+  __ pshufb(xmmdst, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rscratch);
   __ evshufi64x2(xmmdst, xmmdst, xmmdst, 0x0, Assembler::AVX_512bit);
 }
 
@@ -1781,7 +1696,7 @@ void StubGenerator::aesecb_encrypt(Register src_addr, Register dest_addr, Regist
 
   // Load Key shuf mask
   const XMMRegister xmm_key_shuf_mask = xmm31;  // used temporarily to swap key bytes up front
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rbx /*rscratch*/);
 
   // Load and shuffle key based on number of rounds
   ev_load_key(xmm8, key, 0 * 16, xmm_key_shuf_mask);
@@ -1991,7 +1906,7 @@ void StubGenerator::aesecb_decrypt(Register src_addr, Register dest_addr, Regist
 
   // Load Key shuf mask
   const XMMRegister xmm_key_shuf_mask = xmm31;  // used temporarily to swap key bytes up front
-  __ movdqu(xmm_key_shuf_mask, ExternalAddress(key_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm_key_shuf_mask, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rbx /*rscratch*/);
 
   // Load and shuffle round keys. The java expanded key ordering is rotated one position in decryption.
   // So the first round key is loaded from 1*16 here and last round key is loaded from 0*16
@@ -2222,7 +2137,7 @@ void StubGenerator::aesctr_encrypt(Register src_addr, Register dest_addr, Regist
   __ evshufi64x2(xmm8, xmm0, xmm0, 0, Assembler::AVX_512bit);
 
   // load lbswap mask
-  __ evmovdquq(xmm16, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm16, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
 
   //shuffle counter using lbswap_mask
   __ vpshufb(xmm8, xmm8, xmm16, Assembler::AVX_512bit);
@@ -2235,11 +2150,11 @@ void StubGenerator::aesctr_encrypt(Register src_addr, Register dest_addr, Regist
 
   const XMMRegister ones = xmm17;
   // Vector value to propagate carries
-  __ evmovdquq(ones, ExternalAddress(counter_mask_ones_addr()), Assembler::AVX_512bit, r15);
+  __ evmovdquq(ones, ExternalAddress(StubRoutines::x86::counter_mask_ones_addr()), Assembler::AVX_512bit, r15);
 
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc0_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc0_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
   ev_add128(xmm8, xmm8, xmm19, Assembler::AVX_512bit, /*ktmp*/k1, ones);
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc4_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc4_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
   ev_add128(xmm9,  xmm8,  xmm19, Assembler::AVX_512bit, /*ktmp*/k1, ones);
   ev_add128(xmm10, xmm9,  xmm19, Assembler::AVX_512bit, /*ktmp*/k1, ones);
   ev_add128(xmm11, xmm10, xmm19, Assembler::AVX_512bit, /*ktmp*/k1, ones);
@@ -2249,10 +2164,10 @@ void StubGenerator::aesctr_encrypt(Register src_addr, Register dest_addr, Regist
   ev_add128(xmm15, xmm14, xmm19, Assembler::AVX_512bit, /*ktmp*/k1, ones);
 
   // load linc32 mask in zmm register.linc32 increments counter by 32
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc32_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc32_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
 
   // xmm31 contains the key shuffle mask.
-  __ movdqu(xmm31, ExternalAddress(key_shuffle_mask_addr()), r15 /*rscratch*/);
+  __ movdqu(xmm31, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), r15 /*rscratch*/);
   // Load key function loads 128 bit key and shuffles it. Then we broadcast the shuffled key to convert it into a 512 bit value.
   // For broadcasting the values to ZMM, vshufi64 is used instead of evbroadcasti64x2 as the source in this case is ZMM register
   // that holds shuffled key value.
@@ -2368,14 +2283,14 @@ void StubGenerator::aesctr_encrypt(Register src_addr, Register dest_addr, Regist
   __ jcc(Assembler::aboveEqual, REMAINDER_4);
   // At this point, we will process 16 bytes of data at a time.
   // So load xmm19 with counter increment value as 1
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
   __ jmp(REMAINDER_LOOP);
 
   // Each ZMM register can be used to encode 64 bytes of data, so we have 4 ZMM registers to encode 256 bytes of data
   __ bind(REMAINDER_16);
   __ subq(len_reg, 256);
   // As we process 16 blocks at a time, load mask for incrementing the counter value by 16
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc16_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc16_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
   // shuffle counter and XOR counter with roundkey1
   __ vpshufb(xmm0, xmm8, xmm16, Assembler::AVX_512bit);
   __ evpxorq(xmm0, xmm0, xmm20, Assembler::AVX_512bit);
@@ -2440,14 +2355,14 @@ void StubGenerator::aesctr_encrypt(Register src_addr, Register dest_addr, Regist
   __ cmpl(len_reg, 64);
   __ jcc(Assembler::aboveEqual, REMAINDER_4);
   //load mask for incrementing the counter value by 1
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
   __ jmp(REMAINDER_LOOP);
 
   // Each ZMM register can be used to encode 64 bytes of data, so we have 2 ZMM registers to encode 128 bytes of data
   __ bind(REMAINDER_8);
   __ subq(len_reg, 128);
   // As we process 8 blocks at a time, load mask for incrementing the counter value by 8
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc8_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc8_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
   // shuffle counters and xor with roundkey1
   __ vpshufb(xmm0, xmm8, xmm16, Assembler::AVX_512bit);
   __ evpxorq(xmm0, xmm0, xmm20, Assembler::AVX_512bit);
@@ -2500,14 +2415,14 @@ void StubGenerator::aesctr_encrypt(Register src_addr, Register dest_addr, Regist
   __ cmpl(len_reg, 64);
   __ jcc(Assembler::aboveEqual, REMAINDER_4);
   // load mask for incrementing the counter value by 1
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
   __ jmp(REMAINDER_LOOP);
 
   // Each ZMM register can be used to encode 64 bytes of data, so we have 1 ZMM register used in this block of code
   __ bind(REMAINDER_4);
   __ subq(len_reg, 64);
   // As we process 4 blocks at a time, load mask for incrementing the counter value by 4
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc4_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc4_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
   // XOR counter with first roundkey
   __ vpshufb(xmm0, xmm8, xmm16, Assembler::AVX_512bit);
   __ evpxorq(xmm0, xmm0, xmm20, Assembler::AVX_512bit);
@@ -2552,7 +2467,7 @@ void StubGenerator::aesctr_encrypt(Register src_addr, Register dest_addr, Regist
   __ evmovdquq(Address(dest_addr, pos, Address::times_1, 0), xmm0, Assembler::AVX_512bit);
   __ addq(pos, 64);
   // load mask for incrementing the counter value by 1
-  __ evmovdquq(xmm19, ExternalAddress(counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
+  __ evmovdquq(xmm19, ExternalAddress(StubRoutines::x86::counter_mask_linc1_addr()), Assembler::AVX_128bit, r15 /*rscratch*/);
 
   // For a single block, the AES rounds start here.
   __ bind(REMAINDER_LOOP);
@@ -2689,7 +2604,7 @@ void StubGenerator::gfmul_avx512(XMMRegister GH, XMMRegister HK) {
   __ evpxorq(TMP1, TMP1, TMP3, Assembler::AVX_512bit);
   __ evpxorq(GH, GH, TMP2, Assembler::AVX_512bit);
 
-  __ evmovdquq(TMP3, ExternalAddress(ghash_polynomial_reduction_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
+  __ evmovdquq(TMP3, ExternalAddress(StubRoutines::x86::ghash_polynomial_reduction_addr()), Assembler::AVX_512bit, r15 /*rscratch*/);
   __ evpclmulqdq(TMP2, TMP3, GH, 0x01, Assembler::AVX_512bit);
   __ vpslldq(TMP2, TMP2, 8, Assembler::AVX_512bit);
   __ evpxorq(GH, GH, TMP2, Assembler::AVX_512bit);
@@ -2709,11 +2624,11 @@ void StubGenerator::generateHtbl_48_block_zmm(Register htbl, Register avx512_htb
   Label GFMUL_AVX512;
 
   __ movdqu(HK, Address(htbl, 0));
-  __ movdqu(xmm10, ExternalAddress(ghash_long_swap_mask_addr()), rscratch);
+  __ movdqu(xmm10, ExternalAddress(StubRoutines::x86::ghash_long_swap_mask_addr()), rscratch);
   __ vpshufb(HK, HK, xmm10, Assembler::AVX_128bit);
 
-  __ movdqu(xmm11, ExternalAddress(ghash_polynomial_addr()), rscratch);
-  __ movdqu(xmm12, ExternalAddress(ghash_polynomial_two_one_addr()), rscratch);
+  __ movdqu(xmm11, ExternalAddress(StubRoutines::x86::ghash_polynomial_addr()), rscratch);
+  __ movdqu(xmm12, ExternalAddress(StubRoutines::x86::ghash_polynomial_two_one_addr()), rscratch);
   // Compute H ^ 2 from the input subkeyH
   __ movdqu(xmm2, xmm6);
   __ vpsllq(xmm6, xmm6, 1, Assembler::AVX_128bit);
@@ -2967,7 +2882,7 @@ void StubGenerator::ghash16_encrypt16_parallel(Register key, Register subkeyHtbl
     __ vpternlogq(ZTMP7, 0x96, xmm25, ZTMP11, Assembler::AVX_512bit);
     __ vpsrldq(ZTMP11, ZTMP7, 8, Assembler::AVX_512bit);
     __ vpslldq(ZTMP7, ZTMP7, 8, Assembler::AVX_512bit);
-    __ evmovdquq(ZTMP12, ExternalAddress(ghash_polynomial_reduction_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
+    __ evmovdquq(ZTMP12, ExternalAddress(StubRoutines::x86::ghash_polynomial_reduction_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
   }
   // AES round 7
   roundEncode(ZTMP18, ZTMP0, ZTMP1, ZTMP2, ZTMP3);
@@ -3074,7 +2989,7 @@ void StubGenerator::aesgcm_encrypt(Register in, Register len, Register ct, Regis
   __ movdqu(CTR_BLOCKx, Address(counter, 0));
   __ movdqu(AAD_HASHx, Address(state, 0));
   // Load lswap mask for ghash
-  __ movdqu(xmm24, ExternalAddress(ghash_long_swap_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm24, ExternalAddress(StubRoutines::x86::ghash_long_swap_mask_addr()), rbx /*rscratch*/);
   // Shuffle input state using lswap mask
   __ vpshufb(AAD_HASHx, AAD_HASHx, xmm24, Assembler::AVX_128bit);
 
@@ -3084,14 +2999,14 @@ void StubGenerator::aesgcm_encrypt(Register in, Register len, Register ct, Regis
   // Broadcast counter value to 512 bit register
   __ evshufi64x2(CTR_BLOCKx, CTR_BLOCKx, CTR_BLOCKx, 0, Assembler::AVX_512bit);
   // Load counter shuffle mask
-  __ evmovdquq(xmm24, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
+  __ evmovdquq(xmm24, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
   // Shuffle counter
   __ vpshufb(CTR_BLOCKx, CTR_BLOCKx, xmm24, Assembler::AVX_512bit);
 
   // Load mask for incrementing counter
-  __ evmovdquq(COUNTER_INC_MASK, ExternalAddress(counter_mask_linc4_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
+  __ evmovdquq(COUNTER_INC_MASK, ExternalAddress(StubRoutines::x86::counter_mask_linc4_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
   // Pre-increment counter
-  __ vpaddd(ZTMP5, CTR_BLOCKx, ExternalAddress(counter_mask_linc0_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
+  __ vpaddd(ZTMP5, CTR_BLOCKx, ExternalAddress(StubRoutines::x86::counter_mask_linc0_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
   __ vpaddd(ZTMP6, ZTMP5, COUNTER_INC_MASK, Assembler::AVX_512bit);
   __ vpaddd(ZTMP7, ZTMP6, COUNTER_INC_MASK, Assembler::AVX_512bit);
   __ vpaddd(ZTMP8, ZTMP7, COUNTER_INC_MASK, Assembler::AVX_512bit);
@@ -3104,7 +3019,7 @@ void StubGenerator::aesgcm_encrypt(Register in, Register len, Register ct, Regis
   // Move 256 bytes of data
   loadData(in, pos, ZTMP0, ZTMP1, ZTMP2, ZTMP3);
   // Load key shuffle mask
-  __ movdqu(xmm29, ExternalAddress(key_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm29, ExternalAddress(StubRoutines::x86::key_shuffle_mask_addr()), rbx /*rscratch*/);
   // Load 0th AES round key
   ev_load_key(ZTMP4, key, 0, xmm29);
   // AES-ROUND0, xmm24 has the shuffle mask
@@ -3267,7 +3182,7 @@ void StubGenerator::aesgcm_encrypt(Register in, Register len, Register ct, Regis
   vhpxori4x128(ZTMP1, ZTMP11);
   vhpxori4x128(ZTMP2, ZTMP12);
   // Load reduction polynomial and compute final reduction
-  __ evmovdquq(ZTMP15, ExternalAddress(ghash_polynomial_reduction_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
+  __ evmovdquq(ZTMP15, ExternalAddress(StubRoutines::x86::ghash_polynomial_reduction_addr()), Assembler::AVX_512bit, rbx /*rscratch*/);
   vclmul_reduce(AAD_HASHx, ZTMP15, ZTMP1, ZTMP2, ZTMP3, ZTMP4);
 
   // Pre-increment counter for next operation
@@ -3276,7 +3191,7 @@ void StubGenerator::aesgcm_encrypt(Register in, Register len, Register ct, Regis
   __ vpshufb(CTR_BLOCKx, CTR_BLOCKx, xmm24, Assembler::AVX_512bit);
   __ movdqu(Address(counter, 0), CTR_BLOCKx);
   // Load ghash lswap mask
-  __ movdqu(xmm24, ExternalAddress(ghash_long_swap_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm24, ExternalAddress(StubRoutines::x86::ghash_long_swap_mask_addr()), rbx /*rscratch*/);
   // Shuffle ghash using lbswap_mask and store it
   __ vpshufb(AAD_HASHx, AAD_HASHx, xmm24, Assembler::AVX_128bit);
   __ movdqu(Address(state, 0), AAD_HASHx);
@@ -3313,7 +3228,7 @@ void StubGenerator::gfmul_avx2(XMMRegister GH, XMMRegister HK) {
   __ vpxor(GH, GH, T2, Assembler::AVX_128bit);
 
   //first phase of the reduction
-  __ movdqu(T3, ExternalAddress(ghash_polynomial_reduction_addr()), r15 /*rscratch*/);
+  __ movdqu(T3, ExternalAddress(StubRoutines::x86::ghash_polynomial_reduction_addr()), r15 /*rscratch*/);
   __ vpclmulqdq(T2, T3, GH, 0x01);
   __ vpslldq(T2, T2, 8, Assembler::AVX_128bit); // shift-L %%T2 2 DWs
 
@@ -3339,11 +3254,11 @@ void StubGenerator::generateHtbl_8_block_avx2(Register htbl) {
   const XMMRegister HK = xmm6;
 
   __ movdqu(HK, Address(htbl, 0));
-  __ movdqu(xmm1, ExternalAddress(ghash_long_swap_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm1, ExternalAddress(StubRoutines::x86::ghash_long_swap_mask_addr()), rbx /*rscratch*/);
   __ vpshufb(HK, HK, xmm1, Assembler::AVX_128bit);
 
-  __ movdqu(xmm11, ExternalAddress(ghash_polynomial_addr()), rbx /*rscratch*/);
-  __ movdqu(xmm12, ExternalAddress(ghash_polynomial_two_one_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm11, ExternalAddress(StubRoutines::x86::ghash_polynomial_addr()), rbx /*rscratch*/);
+  __ movdqu(xmm12, ExternalAddress(StubRoutines::x86::ghash_polynomial_two_one_addr()), rbx /*rscratch*/);
   // Compute H ^ 2 from the input subkeyH
   __ vpsrlq(xmm1, xmm6, 63, Assembler::AVX_128bit);
   __ vpsllq(xmm6, xmm6, 1, Assembler::AVX_128bit);
@@ -3420,21 +3335,21 @@ void StubGenerator::ghash8_encrypt8_parallel_avx2(Register key, Register subkeyH
   }
 
   if (in_order) {
-    __ vpaddd(xmm1, ctr_blockx, ExternalAddress(counter_mask_linc1_addr()), Assembler::AVX_128bit, rbx /*rscratch*/); //Increment counter by 1
-    __ movdqu(t5, ExternalAddress(counter_mask_linc2_addr()), rbx /*rscratch*/);
+    __ vpaddd(xmm1, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_mask_linc1_addr()), Assembler::AVX_128bit, rbx /*rscratch*/); //Increment counter by 1
+    __ movdqu(t5, ExternalAddress(StubRoutines::x86::counter_mask_linc2_addr()), rbx /*rscratch*/);
     __ vpaddd(xmm2, ctr_blockx, t5, Assembler::AVX_128bit);
     for (int rnum = 1; rnum <= 6; rnum++) {
       __ vpaddd(as_XMMRegister(rnum + 2), as_XMMRegister(rnum), t5, Assembler::AVX_128bit);
     }
     __ movdqu(ctr_blockx, xmm8);
 
-    __ movdqu(t5, ExternalAddress(counter_shuffle_mask_addr()), rbx /*rscratch*/);
+    __ movdqu(t5, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), rbx /*rscratch*/);
     for (int rnum = 1; rnum <= 8; rnum++) {
       __ vpshufb(as_XMMRegister(rnum), as_XMMRegister(rnum), t5, Assembler::AVX_128bit); //perform a 16Byte swap
     }
   } else {
-    __ vpaddd(xmm1, ctr_blockx, ExternalAddress(counter_mask_linc1f_addr()), Assembler::AVX_128bit, rbx /*rscratch*/); //Increment counter by 1
-    __ vmovdqu(t5, ExternalAddress(counter_mask_linc2f_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+    __ vpaddd(xmm1, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_mask_linc1f_addr()), Assembler::AVX_128bit, rbx /*rscratch*/); //Increment counter by 1
+    __ vmovdqu(t5, ExternalAddress(StubRoutines::x86::counter_mask_linc2f_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
     __ vpaddd(xmm2, ctr_blockx, t5, Assembler::AVX_128bit);
     for (int rnum = 1; rnum <= 6; rnum++) {
       __ vpaddd(as_XMMRegister(rnum + 2), as_XMMRegister(rnum), t5, Assembler::AVX_128bit);
@@ -3519,7 +3434,7 @@ void StubGenerator::ghash8_encrypt8_parallel_avx2(Register key, Register subkeyH
   }
 
   //first phase of the reduction
-  __ vmovdqu(t3, ExternalAddress(ghash_polynomial_reduction_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vmovdqu(t3, ExternalAddress(StubRoutines::x86::ghash_polynomial_reduction_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
 
   __ vpclmulqdq(t2, t3, t7, 0x01);
   __ vpslldq(t2, t2, 8, Assembler::AVX_128bit); //shift-L xmm2 2 DWs
@@ -3548,7 +3463,7 @@ void StubGenerator::ghash8_encrypt8_parallel_avx2(Register key, Register subkeyH
   __ vpxor(t1, t1, t4, Assembler::AVX_128bit); //the result is in t1
 
   //perform a 16Byte swap
-  __ movdqu(t7, ExternalAddress(counter_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(t7, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), rbx /*rscratch*/);
   for (int rnum = 1; rnum <= 8; rnum++) {
     __ vpshufb(as_XMMRegister(rnum), as_XMMRegister(rnum), t7, Assembler::AVX_128bit);
   }
@@ -3607,7 +3522,7 @@ void StubGenerator::ghash_last_8_avx2(Register subkeyHtbl) {
   __ vpxor(t6, t6, t2, Assembler::AVX_128bit); //<t6:t7> holds the result of the accumulated carry-less multiplications
 
   //first phase of the reduction
-  __ movdqu(t3, ExternalAddress(ghash_polynomial_reduction_addr()), rbx /*rscratch*/);
+  __ movdqu(t3, ExternalAddress(StubRoutines::x86::ghash_polynomial_reduction_addr()), rbx /*rscratch*/);
 
   __ vpclmulqdq(t2, t3, t7, 0x01);
   __ vpslldq(t2, t2, 8, Assembler::AVX_128bit); // shift-L t2 2 DWs
@@ -3658,15 +3573,15 @@ void StubGenerator::initial_blocks_avx2(XMMRegister ctr, Register rounds, Regist
   //Prepare 8 counter blocks and perform rounds of AES cipher on
   //them, load plain/cipher text and store cipher/plain text.
   __ movdqu(xmm1, ctr);
-  __ movdqu(t5, ExternalAddress(counter_mask_linc1_addr()), rbx /*rscratch*/);
-  __ movdqu(t6, ExternalAddress(counter_mask_linc2_addr()), rbx /*rscratch*/ );
+  __ movdqu(t5, ExternalAddress(StubRoutines::x86::counter_mask_linc1_addr()), rbx /*rscratch*/);
+  __ movdqu(t6, ExternalAddress(StubRoutines::x86::counter_mask_linc2_addr()), rbx /*rscratch*/ );
   __ vpaddd(xmm2, xmm1, t5, Assembler::AVX_128bit);
   for (int rnum = 1; rnum <= 6; rnum++) {
     __ vpaddd(as_XMMRegister(rnum + 2), as_XMMRegister(rnum), t6, Assembler::AVX_128bit);
   }
   __ movdqu(ctr, xmm8);
 
-  __ movdqu(t5, ExternalAddress(counter_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(t5, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), rbx /*rscratch*/);
   for (int rnum = 1; rnum <= 8; rnum++) {
     __ vpshufb(as_XMMRegister(rnum), as_XMMRegister(rnum), t5, Assembler::AVX_128bit); //perform a 16Byte swap
   }
@@ -3722,7 +3637,7 @@ void StubGenerator::initial_blocks_avx2(XMMRegister ctr, Register rounds, Regist
   __ subl(len, 128);
   __ addl(pos, 128);
 
-  __ movdqu(t4, ExternalAddress(counter_shuffle_mask_addr()), rbx /*rscratch*/);
+  __ movdqu(t4, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), rbx /*rscratch*/);
   for (int rnum = 1; rnum <= 8; rnum++) {
     __ vpshufb(as_XMMRegister(rnum), as_XMMRegister(rnum), t4, Assembler::AVX_128bit);
   }
@@ -3770,8 +3685,8 @@ void StubGenerator::aesgcm_avx2(Register in, Register len, Register ct, Register
   //Load and shuffle state and counter values
   __ movdqu(ctr_blockx, Address(counter, 0));
   __ movdqu(aad_hashx, Address(state, 0));
-  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
-  __ vpshufb(aad_hashx, aad_hashx, ExternalAddress(ghash_long_swap_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(aad_hashx, aad_hashx, ExternalAddress(StubRoutines::x86::ghash_long_swap_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
 
   initial_blocks_avx2(ctr_blockx, rounds, key, len, in, out, ct, aad_hashx, pos);
 
@@ -3784,7 +3699,7 @@ void StubGenerator::aesgcm_avx2(Register in, Register len, Register ct, Register
   //that the carry is handled correctly.
   __ movdl(r15, ctr_blockx);
   __ andl(r15, 255);
-  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
 
   __ bind(encrypt_by_8_new);
   __ cmpl(r15, 255 - 8);
@@ -3798,30 +3713,30 @@ void StubGenerator::aesgcm_avx2(Register in, Register len, Register ct, Register
   __ cmpl(len, 128);
   __ jcc(Assembler::greaterEqual, encrypt_by_8_new);
 
-  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
   __ jmp(encrypt_done);
 
   __ bind(encrypt_by_8);
-  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
 
   __ addb(r15, 8);
   ghash8_encrypt8_parallel_avx2(key, subkeyHtbl, ctr_blockx, in, out, ct, pos, true, rounds,
                                 xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8);
 
-  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
   __ addl(pos, 128);
   __ subl(len, 128);
   __ cmpl(len, 128);
   __ jcc(Assembler::greaterEqual, encrypt_by_8_new);
-  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
 
   __ bind(encrypt_done);
   ghash_last_8_avx2(subkeyHtbl);
 
-  __ vpaddd(ctr_blockx, ctr_blockx, ExternalAddress(counter_mask_linc1_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
-  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpaddd(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_mask_linc1_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(ctr_blockx, ctr_blockx, ExternalAddress(StubRoutines::x86::counter_shuffle_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
   __ movdqu(Address(counter, 0), ctr_blockx); //current_counter = xmm9
-  __ vpshufb(xmm14, xmm14, ExternalAddress(ghash_long_swap_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
+  __ vpshufb(xmm14, xmm14, ExternalAddress(StubRoutines::x86::ghash_long_swap_mask_addr()), Assembler::AVX_128bit, rbx /*rscratch*/);
   __ movdqu(Address(state, 0), xmm14); //aad hash = xmm14
   //Xor out round keys
   __ vpxor(xmm0, xmm0, xmm0, Assembler::AVX_128bit);

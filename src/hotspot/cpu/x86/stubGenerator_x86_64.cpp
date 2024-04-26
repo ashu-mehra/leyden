@@ -193,6 +193,14 @@ address StubGenerator::generate_call_stub(address& return_address) {
   StubCodeMark mark(this, "StubRoutines", "call_stub");
   address start = __ pc();
 
+  GrowableArray<int> extra_args;
+
+  if (SCCache::load_stub(this, StubRoutines::StubID::call_stub_id, "call_stub", start, &extra_args)) {
+    assert(extra_args.length() == 1, "unexpected args count");
+    return_address = start + extra_args.at(0);
+    return start;
+  }
+
   // same as in generate_catch_exception()!
   const Address rsp_after_call(rbp, rsp_after_call_off * wordSize);
 
@@ -399,6 +407,9 @@ address StubGenerator::generate_call_stub(address& return_address) {
   __ movdbl(Address(c_rarg0, 0), xmm0);
   __ jmp(exit);
 
+  extra_args.append(return_address - start);
+  SCCache::store_stub(this, StubRoutines::StubID::call_stub_id, "call_stub", start, &extra_args);
+
   return start;
 }
 
@@ -417,6 +428,11 @@ address StubGenerator::generate_call_stub(address& return_address) {
 address StubGenerator::generate_catch_exception() {
   StubCodeMark mark(this, "StubRoutines", "catch_exception");
   address start = __ pc();
+
+  assert(StubRoutines::_call_stub_return_address != nullptr,
+         "call_stub_return_address must not be nullptr");
+
+  SCCACHE_LOAD(catch_exception)
 
   // same as in generate_call_stub():
   const Address rsp_after_call(rbp, rsp_after_call_off * wordSize);
@@ -447,13 +463,14 @@ address StubGenerator::generate_catch_exception() {
 
   __ movptr(Address(r15_thread, Thread::pending_exception_offset()), rax);
   __ lea(rscratch1, ExternalAddress((address)__FILE__));
+  SCCache::add_C_string(__FILE__);
   __ movptr(Address(r15_thread, Thread::exception_file_offset()), rscratch1);
   __ movl(Address(r15_thread, Thread::exception_line_offset()), (int)  __LINE__);
 
   // complete return to VM
-  assert(StubRoutines::_call_stub_return_address != nullptr,
-         "_call_stub_return_address must have been generated before");
   __ jump(RuntimeAddress(StubRoutines::_call_stub_return_address));
+
+  SCCACHE_STORE(catch_exception)
 
   return start;
 }
@@ -472,6 +489,8 @@ address StubGenerator::generate_catch_exception() {
 address StubGenerator::generate_forward_exception() {
   StubCodeMark mark(this, "StubRoutines", "forward exception");
   address start = __ pc();
+
+  SCCACHE_LOAD(forward_exception)
 
   // Upon entry, the sp points to the return address returning into
   // Java (interpreted or compiled) code; i.e., the return address
@@ -524,6 +543,8 @@ address StubGenerator::generate_forward_exception() {
   __ verify_oop(rax);
   __ jmp(rbx);
 
+  SCCACHE_STORE(forward_exception)
+
   return start;
 }
 
@@ -536,8 +557,12 @@ address StubGenerator::generate_orderaccess_fence() {
   StubCodeMark mark(this, "StubRoutines", "orderaccess_fence");
   address start = __ pc();
 
+  SCCACHE_LOAD(orderaccess_fence)
+
   __ membar(Assembler::StoreLoad);
   __ ret(0);
+
+  SCCACHE_STORE(orderaccess_fence)
 
   return start;
 }
@@ -602,6 +627,8 @@ address StubGenerator::generate_f2i_fixup() {
 
   address start = __ pc();
 
+  SCCACHE_LOAD(f2i_fixup)
+
   Label L;
 
   __ push(rax);
@@ -631,6 +658,8 @@ address StubGenerator::generate_f2i_fixup() {
 
   __ ret(0);
 
+  SCCACHE_STORE(f2i_fixup)
+
   return start;
 }
 
@@ -638,6 +667,8 @@ address StubGenerator::generate_f2l_fixup() {
   StubCodeMark mark(this, "StubRoutines", "f2l_fixup");
   Address inout(rsp, 5 * wordSize); // return address + 4 saves
   address start = __ pc();
+
+  SCCACHE_LOAD(f2l_fixup)
 
   Label L;
 
@@ -668,6 +699,8 @@ address StubGenerator::generate_f2l_fixup() {
 
   __ ret(0);
 
+  SCCACHE_STORE(f2l_fixup)
+
   return start;
 }
 
@@ -676,6 +709,8 @@ address StubGenerator::generate_d2i_fixup() {
   Address inout(rsp, 6 * wordSize); // return address + 5 saves
 
   address start = __ pc();
+
+  SCCACHE_LOAD(d2i_fixup)
 
   Label L;
 
@@ -715,6 +750,8 @@ address StubGenerator::generate_d2i_fixup() {
 
   __ ret(0);
 
+  SCCACHE_STORE(d2i_fixup)
+
   return start;
 }
 
@@ -723,6 +760,8 @@ address StubGenerator::generate_d2l_fixup() {
   Address inout(rsp, 6 * wordSize); // return address + 5 saves
 
   address start = __ pc();
+
+  SCCACHE_LOAD(d2l_fixup)
 
   Label L;
 
@@ -761,6 +800,8 @@ address StubGenerator::generate_d2l_fixup() {
   __ pop(rax);
 
   __ ret(0);
+
+  SCCACHE_STORE(d2l_fixup)
 
   return start;
 }
@@ -1340,10 +1381,14 @@ address StubGenerator::generate_data_cache_writeback() {
 
   address start = __ pc();
 
+  SCCACHE_LOAD(data_cache_writeback)
+
   __ enter();
   __ cache_wb(Address(src, 0));
   __ leave();
   __ ret(0);
+
+  SCCACHE_STORE(data_cache_writeback)
 
   return start;
 }
@@ -1361,6 +1406,8 @@ address StubGenerator::generate_data_cache_writeback_sync() {
   Label skip;
   address start = __ pc();
 
+  SCCACHE_LOAD(data_cache_writeback_sync)
+
   __ enter();
   __ cmpl(is_pre, 0);
   __ jcc(Assembler::notEqual, skip);
@@ -1368,6 +1415,8 @@ address StubGenerator::generate_data_cache_writeback_sync() {
   __ bind(skip);
   __ leave();
   __ ret(0);
+
+  SCCACHE_STORE(data_cache_writeback_sync)
 
   return start;
 }
@@ -1378,6 +1427,12 @@ address StubGenerator::generate_md5_implCompress(bool multi_block, const char *n
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
+
+  if (multi_block) {
+    SCCACHE_LOAD(md5_implCompressMB)
+  } else {
+    SCCACHE_LOAD(md5_implCompress)
+  }
 
   const Register buf_param = r15;
   const Address state_param(rsp, 0 * wordSize);
@@ -1406,6 +1461,12 @@ address StubGenerator::generate_md5_implCompress(bool multi_block, const char *n
   __ pop(rbx);
   __ leave();
   __ ret(0);
+
+  if (multi_block) {
+    SCCACHE_STORE(md5_implCompressMB)
+  } else {
+    SCCACHE_STORE(md5_implCompress)
+  }
 
   return start;
 }
@@ -1439,6 +1500,12 @@ address StubGenerator::generate_sha1_implCompress(bool multi_block, const char *
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
 
+  if (multi_block) {
+    SCCACHE_LOAD(sha1_implCompressMB)
+  } else {
+    SCCACHE_LOAD(sha1_implCompress)
+  }
+
   Register buf = c_rarg0;
   Register state = c_rarg1;
   Register ofs = c_rarg2;
@@ -1465,6 +1532,12 @@ address StubGenerator::generate_sha1_implCompress(bool multi_block, const char *
 
   __ leave();
   __ ret(0);
+
+  if (multi_block) {
+    SCCACHE_STORE(sha1_implCompressMB)
+  } else {
+    SCCACHE_STORE(sha1_implCompress)
+  }
 
   return start;
 }
@@ -1523,6 +1596,12 @@ address StubGenerator::generate_sha256_implCompress(bool multi_block, const char
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
 
+  if (multi_block) {
+    SCCACHE_LOAD(sha256_implCompressMB)
+  } else {
+    SCCACHE_LOAD(sha256_implCompress)
+  }
+
   Register buf = c_rarg0;
   Register state = c_rarg1;
   Register ofs = c_rarg2;
@@ -1556,6 +1635,12 @@ address StubGenerator::generate_sha256_implCompress(bool multi_block, const char
   __ leave();
   __ ret(0);
 
+  if (multi_block) {
+    SCCACHE_STORE(sha256_implCompressMB)
+  } else {
+    SCCACHE_STORE(sha256_implCompress)
+  }
+
   return start;
 }
 
@@ -1565,6 +1650,12 @@ address StubGenerator::generate_sha512_implCompress(bool multi_block, const char
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
+
+  if (multi_block) {
+    SCCACHE_LOAD(sha512_implCompressMB)
+  } else {
+    SCCACHE_LOAD(sha512_implCompress)
+  }
 
   Register buf = c_rarg0;
   Register state = c_rarg1;
@@ -1590,6 +1681,12 @@ address StubGenerator::generate_sha512_implCompress(bool multi_block, const char
   __ vzeroupper();
   __ leave();
   __ ret(0);
+
+  if (multi_block) {
+    SCCACHE_STORE(sha512_implCompressMB)
+  } else {
+    SCCACHE_STORE(sha512_implCompress)
+  }
 
   return start;
 }
@@ -1695,6 +1792,8 @@ address StubGenerator::generate_base64_encodeBlock()
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "implEncode");
   address start = __ pc();
+
+  SCCACHE_LOAD(base64_encodeBlock)
 
   __ enter();
 
@@ -2069,6 +2168,8 @@ address StubGenerator::generate_base64_encodeBlock()
   __ leave();
   __ ret(0);
 
+  SCCACHE_STORE(base64_encodeBlock)
+
   return start;
 }
 
@@ -2383,6 +2484,8 @@ address StubGenerator::generate_base64_decodeBlock() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "implDecode");
   address start = __ pc();
+
+  SCCACHE_LOAD(base64_decodeBlock)
 
   __ enter();
 
@@ -2895,6 +2998,8 @@ address StubGenerator::generate_base64_decodeBlock() {
   __ leave();
   __ ret(0);
 
+  SCCACHE_STORE(base64_decodeBlock)
+
   return start;
 }
 
@@ -2917,6 +3022,8 @@ address StubGenerator::generate_updateBytesCRC32() {
   StubCodeMark mark(this, "StubRoutines", "updateBytesCRC32");
 
   address start = __ pc();
+
+  SCCACHE_LOAD(updateBytesCRC32)
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
   // Unix:  rdi, rsi, rdx, rcx, r8, r9 (c_rarg0, c_rarg1, ...)
@@ -2951,6 +3058,7 @@ address StubGenerator::generate_updateBytesCRC32() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(updateBytesCRC32)
   return start;
 }
 
@@ -2972,6 +3080,8 @@ address StubGenerator::generate_updateBytesCRC32C(bool is_pclmulqdq_supported) {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "updateBytesCRC32C");
   address start = __ pc();
+
+  SCCACHE_LOAD(updateBytesCRC32C)
 
   //reg.arg        int#0        int#1        int#2        int#3        int#4        int#5        float regs
   //Windows        RCX          RDX          R8           R9           none         none         XMM0..XMM3
@@ -3031,9 +3141,9 @@ address StubGenerator::generate_updateBytesCRC32C(bool is_pclmulqdq_supported) {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(updateBytesCRC32C)
   return start;
 }
-
 
 /**
  *  Arguments:
@@ -3055,9 +3165,7 @@ address StubGenerator::generate_multiplyToLen() {
   StubCodeMark mark(this, "StubRoutines", "multiplyToLen");
   address start = __ pc();
 
-  if (SCCache::load_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start)) {
-    return start;
-  }
+  SCCACHE_LOAD(multiplyToLen)
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
   // Unix:  rdi, rsi, rdx, rcx, r8, r9 (c_rarg0, c_rarg1, ...)
@@ -3099,7 +3207,7 @@ address StubGenerator::generate_multiplyToLen() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SCCache::store_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start);
+  SCCACHE_STORE(multiplyToLen)
   return start;
 }
 
@@ -3119,6 +3227,8 @@ address StubGenerator::generate_vectorizedMismatch() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "vectorizedMismatch");
   address start = __ pc();
+
+  SCCACHE_LOAD(vectorizedMismatch)
 
   BLOCK_COMMENT("Entry:");
   __ enter();
@@ -3152,6 +3262,7 @@ address StubGenerator::generate_vectorizedMismatch() {
   __ leave();
   __ ret(0);
 
+  SCCACHE_STORE(vectorizedMismatch)
   return start;
 }
 
@@ -3171,9 +3282,7 @@ address StubGenerator::generate_squareToLen() {
   StubCodeMark mark(this, "StubRoutines", "squareToLen");
   address start = __ pc();
 
-  if (SCCache::load_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start)) {
-    return start;
-  }
+  SCCACHE_LOAD(squareToLen);
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
   // Unix:  rdi, rsi, rdx, rcx (c_rarg0, c_rarg1, ...)
@@ -3202,7 +3311,7 @@ address StubGenerator::generate_squareToLen() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SCCache::store_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start);
+  SCCACHE_STORE(squareToLen);
   return start;
 }
 
@@ -3210,6 +3319,8 @@ address StubGenerator::generate_method_entry_barrier() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "nmethod_entry_barrier");
   address start = __ pc();
+
+  SCCACHE_LOAD(nmethod_entry_barrier)
 
   Label deoptimize_label;
 
@@ -3279,6 +3390,8 @@ address StubGenerator::generate_method_entry_barrier() {
   __ movptr(rsp, Address(rsp, 0)); // new rsp was written in the barrier
   __ jmp(Address(rsp, -1 * wordSize)); // jmp target should be callers verified_entry_point
 
+  SCCACHE_STORE(nmethod_entry_barrier)
+
   return start;
 }
 
@@ -3300,9 +3413,7 @@ address StubGenerator::generate_mulAdd() {
   StubCodeMark mark(this, "StubRoutines", "mulAdd");
   address start = __ pc();
 
-  if (SCCache::load_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start)) {
-    return start;
-  }
+  SCCACHE_LOAD(mulAdd)
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
   // Unix:  rdi, rsi, rdx, rcx, r8, r9 (c_rarg0, c_rarg1, ...)
@@ -3337,7 +3448,7 @@ address StubGenerator::generate_mulAdd() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SCCache::store_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start);
+  SCCACHE_STORE(mulAdd)
   return start;
 }
 
@@ -3345,6 +3456,8 @@ address StubGenerator::generate_bigIntegerRightShift() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "bigIntegerRightShiftWorker");
   address start = __ pc();
+
+  SCCACHE_LOAD(bigIntegerRightShiftWorker)
 
   Label Shift512Loop, ShiftTwo, ShiftTwoLoop, ShiftOne, Exit;
   // For Unix, the arguments are as follows: rdi, rsi, rdx, rcx, r8.
@@ -3460,6 +3573,7 @@ address StubGenerator::generate_bigIntegerRightShift() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(bigIntegerRightShiftWorker)
   return start;
 }
 
@@ -3480,6 +3594,8 @@ address StubGenerator::generate_bigIntegerLeftShift() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this,  "StubRoutines", "bigIntegerLeftShiftWorker");
   address start = __ pc();
+
+  SCCACHE_LOAD(bigIntegerLeftShiftWorker)
 
   Label Shift512Loop, ShiftTwo, ShiftTwoLoop, ShiftOne, Exit;
   // For Unix, the arguments are as follows: rdi, rsi, rdx, rcx, r8.
@@ -3584,6 +3700,7 @@ address StubGenerator::generate_bigIntegerLeftShift() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(bigIntegerLeftShiftWorker)
   return start;
 }
 
@@ -3627,6 +3744,8 @@ address StubGenerator::generate_float16ToFloat() {
 
   address start = __ pc();
 
+  SCCACHE_LOAD(float16ToFloat)
+
   BLOCK_COMMENT("Entry:");
   // No need for RuntimeStub frame since it is called only during JIT compilation
 
@@ -3634,6 +3753,8 @@ address StubGenerator::generate_float16ToFloat() {
   __ flt16_to_flt(xmm0, c_rarg0);
 
   __ ret(0);
+
+  SCCACHE_STORE(float16ToFloat)
 
   return start;
 }
@@ -3652,6 +3773,8 @@ address StubGenerator::generate_floatToFloat16() {
 
   address start = __ pc();
 
+  SCCACHE_LOAD(floatToFloat16)
+
   BLOCK_COMMENT("Entry:");
   // No need for RuntimeStub frame since it is called only during JIT compilation
 
@@ -3659,6 +3782,8 @@ address StubGenerator::generate_floatToFloat16() {
   __ flt_to_flt16(rax, xmm0, xmm1);
 
   __ ret(0);
+
+  SCCACHE_STORE(floatToFloat16)
 
   return start;
 }
@@ -3671,6 +3796,14 @@ address StubGenerator::generate_cont_thaw(const char* label, Continuation::thaw_
 
   StubCodeMark mark(this, "StubRoutines", label);
   address start = __ pc();
+
+  if (kind == Continuation::thaw_top) {
+    SCCACHE_LOAD(cont_thaw)
+  } else if (kind == Continuation::thaw_return_barrier) {
+    SCCACHE_LOAD(cont_returnBarrier)
+  } else if (kind == Continuation::thaw_return_barrier_exception) {
+    SCCACHE_LOAD(cont_returnBarrierExc)
+  }
 
   // TODO: Handle Valhalla return types. May require generating different return barriers.
 
@@ -3781,6 +3914,14 @@ address StubGenerator::generate_cont_thaw(const char* label, Continuation::thaw_
     // We are "returning" into the topmost thawed frame; see Thaw::push_return_frame
     __ pop(rbp);
     __ ret(0);
+  }
+
+  if (kind == Continuation::thaw_top) {
+    SCCACHE_STORE(cont_thaw)
+  } else if (kind == Continuation::thaw_return_barrier) {
+    SCCACHE_STORE(cont_returnBarrier)
+  } else if (kind == Continuation::thaw_return_barrier_exception) {
+    SCCACHE_STORE(cont_returnBarrierExc)
   }
 
   return start;
@@ -3997,6 +4138,8 @@ address StubGenerator::generate_upcall_stub_exception_handler() {
   StubCodeMark mark(this, "StubRoutines", "upcall stub exception handler");
   address start = __ pc();
 
+  SCCACHE_LOAD(upcall_stub_exception_handler)
+
   // native caller has no idea how to handle exceptions
   // we just crash here. Up to callee to catch exceptions.
   __ verify_oop(rax);
@@ -4006,6 +4149,8 @@ address StubGenerator::generate_upcall_stub_exception_handler() {
   __ subptr(rsp, frame::arg_reg_save_area_bytes); // windows
   __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, UpcallLinker::handle_uncaught_exception)));
   __ should_not_reach_here();
+
+  SCCACHE_STORE(upcall_stub_exception_handler)
 
   return start;
 }
@@ -4293,6 +4438,8 @@ void StubGenerator::generate_compiler_stubs() {
     }
     StubRoutines::x86::_k256_W_adr = (address)StubRoutines::x86::_k256_W;
     StubRoutines::x86::_pshuffle_byte_flip_mask_addr = generate_pshuffle_byte_flip_mask();
+    StubRoutines::x86::_pshuffle_byte_flip_mask_off32_addr = StubRoutines::x86::_pshuffle_byte_flip_mask_addr + 32;
+    StubRoutines::x86::_pshuffle_byte_flip_mask_off64_addr = StubRoutines::x86::_pshuffle_byte_flip_mask_addr + 64;
     StubRoutines::_sha256_implCompress = generate_sha256_implCompress(false, "sha256_implCompress");
     StubRoutines::_sha256_implCompressMB = generate_sha256_implCompress(true, "sha256_implCompressMB");
   }
@@ -4300,6 +4447,7 @@ void StubGenerator::generate_compiler_stubs() {
   if (UseSHA512Intrinsics) {
     StubRoutines::x86::_k512_W_addr = (address)StubRoutines::x86::_k512_W;
     StubRoutines::x86::_pshuffle_byte_flip_mask_addr_sha512 = generate_pshuffle_byte_flip_mask_sha512();
+    StubRoutines::x86::_pshuffle_byte_flip_mask_off32_addr_sha512 = StubRoutines::x86::_pshuffle_byte_flip_mask_addr_sha512 + 32;
     StubRoutines::_sha512_implCompress = generate_sha512_implCompress(false, "sha512_implCompress");
     StubRoutines::_sha512_implCompressMB = generate_sha512_implCompress(true, "sha512_implCompressMB");
   }

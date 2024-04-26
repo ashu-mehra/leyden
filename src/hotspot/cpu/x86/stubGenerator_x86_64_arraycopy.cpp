@@ -145,12 +145,12 @@ void StubGenerator::generate_arraycopy_stubs() {
                                                              entry_jlong_arraycopy,
                                                              entry_checkcast_arraycopy);
 
-  StubRoutines::_jbyte_fill = generate_fill(T_BYTE, false, "jbyte_fill");
-  StubRoutines::_jshort_fill = generate_fill(T_SHORT, false, "jshort_fill");
-  StubRoutines::_jint_fill = generate_fill(T_INT, false, "jint_fill");
-  StubRoutines::_arrayof_jbyte_fill = generate_fill(T_BYTE, true, "arrayof_jbyte_fill");
-  StubRoutines::_arrayof_jshort_fill = generate_fill(T_SHORT, true, "arrayof_jshort_fill");
-  StubRoutines::_arrayof_jint_fill = generate_fill(T_INT, true, "arrayof_jint_fill");
+  StubRoutines::_jbyte_fill = generate_fill(StubRoutines::StubID::jbyte_fill_id, T_BYTE, false, "jbyte_fill");
+  StubRoutines::_jshort_fill = generate_fill(StubRoutines::StubID::jshort_fill_id, T_SHORT, false, "jshort_fill");
+  StubRoutines::_jint_fill = generate_fill(StubRoutines::StubID::jint_fill_id, T_INT, false, "jint_fill");
+  StubRoutines::_arrayof_jbyte_fill = generate_fill(StubRoutines::StubID::arrayof_jbyte_fill_id, T_BYTE, true, "arrayof_jbyte_fill");
+  StubRoutines::_arrayof_jshort_fill = generate_fill(StubRoutines::StubID::arrayof_jshort_fill_id, T_SHORT, true, "arrayof_jshort_fill");
+  StubRoutines::_arrayof_jint_fill = generate_fill(StubRoutines::StubID::arrayof_jint_fill_id, T_INT, true, "arrayof_jint_fill");
 
   // We don't generate specialized code for HeapWord-aligned source
   // arrays, so just use the code we've already generated
@@ -1291,6 +1291,8 @@ address StubGenerator::generate_disjoint_byte_copy(bool aligned, address* entry,
   address start = __ pc();
   DecoratorSet decorators = IN_HEAP | IS_ARRAY | ARRAYCOPY_DISJOINT;
 
+  SCCACHE_LOAD(jbyte_disjoint_arraycopy)
+
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes, L_copy_2_bytes;
   Label L_copy_byte, L_exit;
   const Register from        = rdi;  // source array address
@@ -1377,6 +1379,9 @@ __ BIND(L_exit);
     copy_bytes_forward(end_from, end_to, qword_count, rax, r10, L_copy_bytes, L_copy_8_bytes, decorators, T_BYTE);
     __ jmp(L_copy_4_bytes);
   }
+
+  SCCACHE_STORE(jbyte_disjoint_arraycopy)
+
   return start;
 }
 
@@ -1408,6 +1413,8 @@ address StubGenerator::generate_conjoint_byte_copy(bool aligned, address nooverl
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
   DecoratorSet decorators = IN_HEAP | IS_ARRAY;
+
+  SCCACHE_LOAD(jbyte_arraycopy)
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes, L_copy_2_bytes;
   const Register from        = rdi;  // source array address
@@ -1487,6 +1494,8 @@ address StubGenerator::generate_conjoint_byte_copy(bool aligned, address nooverl
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SCCACHE_STORE(jbyte_arraycopy)
+
   return start;
 }
 
@@ -1522,6 +1531,8 @@ address StubGenerator::generate_disjoint_short_copy(bool aligned, address *entry
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
   DecoratorSet decorators = IN_HEAP | IS_ARRAY | ARRAYCOPY_DISJOINT;
+
+  SCCACHE_LOAD(jshort_disjoint_arraycopy)
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes,L_copy_2_bytes,L_exit;
   const Register from        = rdi;  // source array address
@@ -1602,15 +1613,22 @@ __ BIND(L_exit);
     __ jmp(L_copy_4_bytes);
   }
 
+  SCCACHE_STORE(jshort_disjoint_arraycopy)
+
   return start;
 }
 
 
-address StubGenerator::generate_fill(BasicType t, bool aligned, const char *name) {
+address StubGenerator::generate_fill(StubRoutines::StubID id, BasicType t, bool aligned, const char *name) {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
 
+#if 0
+  if (SCCache::load_stub(this, id, name, start)) {
+    return start;
+  }
+#endif
   BLOCK_COMMENT("Entry:");
 
   const Register to       = c_rarg0;  // destination array address
@@ -1626,6 +1644,9 @@ address StubGenerator::generate_fill(BasicType t, bool aligned, const char *name
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+#if 0
+  SCCache::store_stub(this, id, name, start);
+#endif
   return start;
 }
 
@@ -1657,6 +1678,8 @@ address StubGenerator::generate_conjoint_short_copy(bool aligned, address noover
   StubCodeMark mark(this, "StubRoutines", name);
   address start = __ pc();
   DecoratorSet decorators = IN_HEAP | IS_ARRAY;
+
+  SCCACHE_LOAD(jshort_arraycopy)
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes;
   const Register from        = rdi;  // source array address
@@ -1727,6 +1750,8 @@ address StubGenerator::generate_conjoint_short_copy(bool aligned, address noover
   __ vzeroupper();
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
+
+  SCCACHE_STORE(jshort_arraycopy)
 
   return start;
 }

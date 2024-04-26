@@ -30,6 +30,7 @@
 #include "prims/vectorSupport.hpp"
 #include "runtime/frame.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "runtime/sharedRuntime.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/threadWXSetters.inline.hpp"
 #include "utilities/macros.hpp"
@@ -122,13 +123,106 @@ class UnsafeCopyMemoryMark : public StackObj {
   ~UnsafeCopyMemoryMark();
 };
 
-class StubRoutines: AllStatic {
+#define STUB_ROUTINES_INITIAL_STUBS_DO(template)        \
+  template(call_stub)                                   \
+  template(forward_exception)                           \
+  template(catch_exception)                             \
+  template(orderaccess_fence)                           \
+  template(throw_StackOverflowError_entry)              \
+  template(throw_delayed_StackOverflowError_entry)      \
+  template(updateBytesCRC32)                            \
+  template(updateBytesCRC32C)                           \
+  template(float16ToFloat)                              \
+  template(floatToFloat16)                              \
+  template(jbyte_fill)                                  \
+  template(jshort_fill)                                 \
+  template(jint_fill)                                   \
+  template(arrayof_jbyte_fill)                          \
+  template(arrayof_jshort_fill)                         \
+  template(arrayof_jint_fill)                           \
+
+
+#if 0
+#define STUB_ROUTINES_STUB_DO(template)                 \
+  STUB_ROUTINES_INITIAL_STUBS_DO(template)              \
+  template(data_cache_writeback)                        \
+  template(data_cache_writeback_sync)                   \
+  template(jbyte_fill)                                  \
+  template(jshort_fill)                                 \
+  template(jint_fill)                                   \
+  template(arrayof_jbyte_fill)                          \
+  template(arrayof_jshort_fill)                         \
+  template(arrayof_jint_fill)                           \
+  template(aescrypt_encryptBlock)                       \
+  template(aescrypt_decryptBlock)                       \
+  template(cipherBlockChaining_encryptAESCrypt)         \
+  template(cipherBlockChaining_decryptAESCrypt)         \
+  template(electronicCodeBook_encryptAESCrypt)          \
+  template(electronicCodeBook_decryptAESCrypt)          \
+  template(counterMode_AESCrypt)                        \
+  template(galoisCounterMode_AESCrypt)                  \
+  template(ghash_processBlocks)                         \
+  template(chacha20Block)                               \
+  template(base64_encodeBlock)                          \
+  template(base64_decodeBlock)                          \
+  template(poly1305_processBlocks)                      \
+  template(md5_implCompress)                            \
+  template(md5_implCompressMB)                          \
+  template(sha1_implCompress)                           \
+  template(sha1_implCompressMB)                         \
+  template(sha256_implCompress)                         \
+  template(sha256_implCompressMB)                       \
+  template(sha512_implCompress)                         \
+  template(sha512_implCompressMB)                       \
+  template(sha3_implCompress)                           \
+  template(sha3_implCompressMB)                         \
+  template(updateBytesAdler32)                          \
+  template(multiplyToLen)                               \
+  template(squareToLen)                                 \
+  template(mulAdd)                                      \
+  template(bigIntegerRightShiftWorker)                  \
+  template(bigIntegerLeftShiftWorker)                   \
+  template(vectorizedMismatch)                          \
+  template(method_entry_barrier)                        \
+  template(cont_thaw)                                   \
+  template(cont_returnBarrier)                          \
+  template(cont_returnBarrierExc)                       \
+  template(upcall_stub_exception_handler)               \
+
+  template(oop_arraycopy_uninit)                        \
+  template(jbyte_disjoint_arraycopy)                    \
+  template(jshort_disjoint_arraycopy)                   \
+  template(jint_disjoint_arraycopy)                     \
+  template(jlong_disjoint_arraycopy)                    \
+  template(oop_disjoint_arraycopy)                      \
+  template(oop_arraycopy_disjoint_uninit)               \
+
+#endif
+
+#if 0
+#define STUB_ROUTINES_PLATFORM_INITIAL_STUBS_DO(template)        \
+  template(f2i_fixup)                                            \
+  template(f2l_fixup)                                            \
+  template(d2i_fixup)                                            \
+  template(d2l_fixup)                                            \
+
+#endif
+
+class StubRoutines: public AllStatic {
 
  public:
   // Dependencies
   friend class StubGenerator;
 
 #include CPU_HEADER(stubRoutines)
+
+  enum StubID {
+#   define DECLARE_STUB_ID(name) name ## _id,
+    STUB_ROUTINES_INITIAL_STUBS_DO(DECLARE_STUB_ID)
+//   STUB_ROUTINES_PLATFORM_INITIAL_STUBS_DO(DECLARE_STUB_ID)
+#   undef DECLARE_STUB_ID
+    number_of_ids
+  };
 
   static jint    _verify_oop_count;
   static address _verify_oop_subroutine_entry;
@@ -154,15 +248,17 @@ class StubRoutines: AllStatic {
   static BufferBlob* _compiler_stubs_code;                 // code buffer for C2 intrinsics
   static BufferBlob* _final_stubs_code;                    // code buffer for all other routines
 
-  static address _array_sort;
-  static address _array_partition;
+  static address _array_sort; // dll_lookup
+  static address _array_partition; // dll_lookup
   // Leaf routines which implement arraycopy and their addresses
   // arraycopy operands aligned on element type boundary
+  /* Ashu: _xxx_arraycopy reference corresponding disjoint stub and have an entry address used by other stub */
   static address _jbyte_arraycopy;
   static address _jshort_arraycopy;
   static address _jint_arraycopy;
   static address _jlong_arraycopy;
   static address _oop_arraycopy, _oop_arraycopy_uninit;
+  /* Ashu: _xxx_disjoint_arraycopy has an entry address used by other stub */
   static address _jbyte_disjoint_arraycopy;
   static address _jshort_disjoint_arraycopy;
   static address _jint_disjoint_arraycopy;
@@ -173,6 +269,7 @@ class StubRoutines: AllStatic {
   // These are identical to the ones aligned aligned on an
   // element type boundary, except that they assume that both
   // source and destination are HeapWord aligned.
+  /* AshU: these are same as _xxx_arraycopy */
   static address _arrayof_jbyte_arraycopy;
   static address _arrayof_jshort_arraycopy;
   static address _arrayof_jint_arraycopy;
@@ -185,14 +282,15 @@ class StubRoutines: AllStatic {
   static address _arrayof_oop_disjoint_arraycopy, _arrayof_oop_disjoint_arraycopy_uninit;
 
   // cache line writeback
-  static address _data_cache_writeback;
-  static address _data_cache_writeback_sync;
+  static address _data_cache_writeback; // SL using stub id
+  static address _data_cache_writeback_sync; // SL using stub id
 
   // these are recommended but optional:
-  static address _checkcast_arraycopy, _checkcast_arraycopy_uninit;
-  static address _unsafe_arraycopy;
-  static address _generic_arraycopy;
+  static address _checkcast_arraycopy, _checkcast_arraycopy_uninit; // _checkcast_arraycopy has an entry address which is used by other stub
+  static address _unsafe_arraycopy; // references other stubs
+  static address _generic_arraycopy; // references other stubs
 
+  // Next 6 can be saved-loaded using stub id
   static address _jbyte_fill;
   static address _jshort_fill;
   static address _jint_fill;
@@ -200,6 +298,7 @@ class StubRoutines: AllStatic {
   static address _arrayof_jshort_fill;
   static address _arrayof_jint_fill;
 
+  // Next block can be saved-loaded
   static address _aescrypt_encryptBlock;
   static address _aescrypt_decryptBlock;
   static address _cipherBlockChaining_encryptAESCrypt;
@@ -214,6 +313,7 @@ class StubRoutines: AllStatic {
   static address _base64_decodeBlock;
   static address _poly1305_processBlocks;
 
+  // Next block can be saved-loaded
   static address _md5_implCompress;
   static address _md5_implCompressMB;
   static address _sha1_implCompress;
@@ -240,7 +340,7 @@ class StubRoutines: AllStatic {
   static address _bigIntegerRightShiftWorker;
   static address _bigIntegerLeftShiftWorker;
 
-  static address _vectorizedMismatch;
+  static address _vectorizedMismatch; // SL using vmintrinsics id
 
   static address _dexp;
   static address _dlog;
@@ -512,6 +612,15 @@ class StubRoutines: AllStatic {
   static void arrayof_jlong_copy     (HeapWord* src, HeapWord* dest, size_t count);
   static void arrayof_oop_copy       (HeapWord* src, HeapWord* dest, size_t count);
   static void arrayof_oop_copy_uninit(HeapWord* src, HeapWord* dest, size_t count);
+
+  static uint32_t stub_to_sccId(StubRoutines::StubID id) {
+    return SharedRuntime::encode_stub_id((int)id);
+  }
+  static StubRoutines::StubID scc_to_stubId(uint32_t sccId) {
+    int id = SharedRuntime::decode_stub_id(sccId);
+    assert(id >=0 && id < StubRoutines::StubID::number_of_ids, "invalid stub id");
+    return (StubRoutines::StubID) id;
+  }
 };
 
 #endif // SHARE_RUNTIME_STUBROUTINES_HPP

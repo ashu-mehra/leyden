@@ -39,65 +39,6 @@
 
 #define BIND(label) bind(label); BLOCK_COMMENT(#label ":")
 
-// Constants
-
-/**
- * This AVX/AVX2 add mask generation can be used for multiple duties:
- *      1.) Provide +0/+1 counter increments by loading 256 bits
- *          at offset 0
- *      2.) Provide +2/+2 counter increments for the second set
- *          of 4 AVX2 registers at offset 32 (256-bit load)
- *      3.) Provide a +1 increment for the second set of 4 AVX
- *          registers at offset 16 (128-bit load)
- */
-ATTRIBUTE_ALIGNED(64) static const uint64_t CC20_COUNTER_ADD_AVX[] = {
-    0x0000000000000000UL, 0x0000000000000000UL,
-    0x0000000000000001UL, 0x0000000000000000UL,
-    0x0000000000000002UL, 0x0000000000000000UL,
-    0x0000000000000002UL, 0x0000000000000000UL,
-};
-static address chacha20_ctradd_avx() {
-  return (address)CC20_COUNTER_ADD_AVX;
-}
-
-/**
- * Add masks for 4-block ChaCha20 Block calculations
- * The first 512 bits creates a +0/+1/+2/+3 add overlay.
- * The second 512 bits is a +4/+4/+4/+4 add overlay.  This
- * can be used to increment the counter fields for the next 4 blocks.
- */
-ATTRIBUTE_ALIGNED(64) static const uint64_t CC20_COUNTER_ADD_AVX512[] = {
-    0x0000000000000000UL, 0x0000000000000000UL,
-    0x0000000000000001UL, 0x0000000000000000UL,
-    0x0000000000000002UL, 0x0000000000000000UL,
-    0x0000000000000003UL, 0x0000000000000000UL,
-
-    0x0000000000000004UL, 0x0000000000000000UL,
-    0x0000000000000004UL, 0x0000000000000000UL,
-    0x0000000000000004UL, 0x0000000000000000UL,
-    0x0000000000000004UL, 0x0000000000000000UL
-};
-static address chacha20_ctradd_avx512() {
-  return (address)CC20_COUNTER_ADD_AVX512;
-}
-
-/**
- * The first 256 bits represents a byte-wise permutation
- * for an 8-bit left-rotation on 32-bit lanes.
- * The second 256 bits is a 16-bit rotation on 32-bit lanes.
- */
-ATTRIBUTE_ALIGNED(64) static const uint64_t CC20_LROT_CONSTS[] = {
-    0x0605040702010003UL, 0x0E0D0C0F0A09080BUL,
-    0x0605040702010003UL, 0x0E0D0C0F0A09080BUL,
-
-    0x0504070601000302UL, 0x0D0C0F0E09080B0AUL,
-    0x0504070601000302UL, 0x0D0C0F0E09080B0AUL
-};
-static address chacha20_lrot_consts() {
-  return (address)CC20_LROT_CONSTS;
-}
-
-
 
 void StubGenerator::generate_chacha_stubs() {
   // Generate ChaCha20 intrinsics code
@@ -116,6 +57,8 @@ address StubGenerator::generate_chacha20Block_avx() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "chacha20Block");
   address start = __ pc();
+
+  SCCACHE_LOAD(chacha20Block)
 
   Label L_twoRounds;
   const Register state        = c_rarg0;
@@ -159,8 +102,8 @@ address StubGenerator::generate_chacha20Block_avx() {
   // that starting state to the working register set.
   // Also load the address of the add mask for later use in handling
   // multi-block counter increments.
-  __ lea(rotAddr, ExternalAddress(chacha20_lrot_consts()));
-  __ lea(rax, ExternalAddress(chacha20_ctradd_avx()));
+  __ lea(rotAddr, ExternalAddress(StubRoutines::x86::chacha20_lrot_consts_addr()));
+  __ lea(rax, ExternalAddress(StubRoutines::x86::chacha20_ctradd_avx_addr()));
   if (vector_len == Assembler::AVX_128bit) {
     __ movdqu(aState, Address(state, 0));       // Bytes 0 - 15 -> a1Vec
     __ movdqu(bState, Address(state, 16));      // Bytes 16 - 31 -> b1Vec
@@ -296,6 +239,9 @@ address StubGenerator::generate_chacha20Block_avx() {
   }
   __ leave();
   __ ret(0);
+
+  SCCACHE_STORE(chacha20Block)
+
   return start;
 }
 
@@ -304,6 +250,8 @@ address StubGenerator::generate_chacha20Block_avx512() {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", "chacha20Block");
   address start = __ pc();
+
+  SCCACHE_LOAD(chacha20Block)
 
   Label L_twoRounds;
   const Register state        = c_rarg0;
@@ -344,7 +292,7 @@ address StubGenerator::generate_chacha20Block_avx512() {
   // at the very end of the block function.  The add mask should be
   // applied to the dState register so it does not need to be fetched
   // when adding the start state back into the final working state.
-  __ lea(rax, ExternalAddress(chacha20_ctradd_avx512()));
+  __ lea(rax, ExternalAddress(StubRoutines::x86::chacha20_ctradd_avx512_addr()));
   __ evbroadcasti32x4(aState, Address(state, 0), Assembler::AVX_512bit);
   __ evbroadcasti32x4(bState, Address(state, 16), Assembler::AVX_512bit);
   __ evbroadcasti32x4(cState, Address(state, 32), Assembler::AVX_512bit);
@@ -466,6 +414,9 @@ address StubGenerator::generate_chacha20Block_avx512() {
   __ vzeroupper();
   __ leave();
   __ ret(0);
+
+  SCCACHE_STORE(chacha20Block)
+
   return start;
 }
 

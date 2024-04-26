@@ -189,6 +189,7 @@ class x86 {
   static address _k512_W_addr;
   // byte flip mask for sha512
   static address _pshuffle_byte_flip_mask_addr_sha512;
+  static address _pshuffle_byte_flip_mask_off32_addr_sha512;
   // Masks for base64
   static address _encoding_table_base64;
   static address _shuffle_base64;
@@ -209,6 +210,48 @@ class x86 {
 #endif
   // byte flip mask for sha256
   static address _pshuffle_byte_flip_mask_addr;
+  static address _pshuffle_byte_flip_mask_off32_addr;
+  static address _pshuffle_byte_flip_mask_off64_addr;
+
+#ifdef _LP64
+  // constants moved from stubGenerator_x86_64_aes.cpp
+  static const uint64_t _key_shuffle_mask[];
+  static const uint64_t _counter_shuffle_mask[];
+  static const uint64_t _counter_mask_linc0[];
+  static const uint64_t _counter_mask_linc1[];
+  static const uint64_t _counter_mask_linc1f[];
+  static const uint64_t _counter_mask_linc2[];
+  static const uint64_t _counter_mask_linc2f[];
+  static const uint64_t _counter_mask_linc4[];
+  static const uint64_t _counter_mask_linc8[];
+  static const uint64_t _counter_mask_linc16[];
+  static const uint64_t _counter_mask_linc32[];
+  static const uint64_t _counter_mask_ones[];
+  static const uint64_t _ghash_polynomial_reduction[];
+  static const uint64_t _ghash_polynomial_two_one[];
+
+  // constants moved from stubGenerator_x86_64_ghash.cpp
+  static const uint64_t _ghash_shuffle_mask[];
+  static const uint64_t _ghash_long_swap_mask[];
+  static const uint64_t _ghash_byte_swap_mask[];
+  static const uint64_t _ghash_polynomial[];
+
+  // constants moved from stubGenerator_x86_64_adler.cpp
+  static const juint _adler32_ascale_table[];
+  static const juint _adler32_shuf0_table[];
+  static const juint _adler32_shuf1_table[];
+
+  // constants moved from stubGenerator_x86_64_chacha.cpp
+  static const uint64_t _cc20_counter_add_avx[];
+  static const uint64_t _cc20_counter_add_avx512[];
+  static const uint64_t _cc20_lrot_consts[];
+
+  // constants moved from stubGenerator_x86_64_poly.cpp
+  static const uint64_t _poly1305_pad_msg[];
+  static const uint64_t _poly1305_mask42[];
+  static const uint64_t _poly1305_mask44[];
+
+#endif // _LP64
 
  public:
   static address addr_mxcsr_std()        { return (address)&_mxcsr_std; }
@@ -217,8 +260,12 @@ class x86 {
 #endif // _LP64
   static address verify_mxcsr_entry()    { return _verify_mxcsr_entry; }
   static address crc_by128_masks_addr()  { return (address)_crc_by128_masks; }
+  static address crc_by128_masks_off16_addr()  { return ((address)_crc_by128_masks) + 16; }
+  static address crc_by128_masks_off32_addr()  { return ((address)_crc_by128_masks) + 32; }
 #ifdef _LP64
   static address crc_by128_masks_avx512_addr()  { return (address)_crc_by128_masks_avx512; }
+  static address crc_by128_masks_avx512_off16_addr()  { return ((address)_crc_by128_masks_avx512) + 16; }
+  static address crc_by128_masks_avx512_off32_addr()  { return ((address)_crc_by128_masks_avx512) + 32; }
   static address shuf_table_crc32_avx512_addr()  { return (address)_shuf_table_crc32_avx512; }
   static address crc_table_avx512_addr()  { return (address)_crc_table_avx512; }
   static address crc32c_table_avx512_addr()  { return (address)_crc32c_table_avx512; }
@@ -326,6 +373,7 @@ class x86 {
   static address k256_W_addr()    { return _k256_W_adr; }
   static address k512_W_addr()    { return _k512_W_addr; }
   static address pshuffle_byte_flip_mask_addr_sha512() { return _pshuffle_byte_flip_mask_addr_sha512; }
+  static address pshuffle_byte_flip_mask_off32_addr_sha512() { return _pshuffle_byte_flip_mask_off32_addr_sha512; }
   static address base64_encoding_table_addr() { return _encoding_table_base64; }
   static address base64_shuffle_addr() { return _shuffle_base64; }
   static address base64_avx2_shuffle_addr() { return _avx2_shuffle_base64; }
@@ -348,8 +396,49 @@ class x86 {
   static address expand_perm_table64() { return _expand_perm_table64; }
 #endif
   static address pshuffle_byte_flip_mask_addr() { return _pshuffle_byte_flip_mask_addr; }
+  static address pshuffle_byte_flip_mask_off32_addr() { return _pshuffle_byte_flip_mask_off32_addr; }
+  static address pshuffle_byte_flip_mask_off64_addr() { return _pshuffle_byte_flip_mask_off64_addr; }
   static address arrays_hashcode_powers_of_31() { return (address)_arrays_hashcode_powers_of_31; }
   static void generate_CRC32C_table(bool is_pclmulqdq_supported);
+
+#if _LP64
+  // accessors for constants moved from stubGenerator_x86_64_aes.cpp
+  static address key_shuffle_mask_addr() { return (address)_key_shuffle_mask; }
+  static address counter_shuffle_mask_addr() { return (address)_counter_shuffle_mask; }
+  static address counter_mask_linc0_addr() { return (address)_counter_mask_linc0; }
+  static address counter_mask_linc1_addr() { return (address)_counter_mask_linc1; }
+  static address counter_mask_linc1f_addr() { return (address)_counter_mask_linc1f; }
+  static address counter_mask_linc2_addr() { return (address)_counter_mask_linc2; }
+  static address counter_mask_linc2f_addr() { return (address)_counter_mask_linc2f; }
+  static address counter_mask_linc4_addr() { return (address)_counter_mask_linc4; }
+  static address counter_mask_linc8_addr() { return (address)_counter_mask_linc8; }
+  static address counter_mask_linc16_addr() { return (address)_counter_mask_linc16; }
+  static address counter_mask_linc32_addr() { return (address)_counter_mask_linc32; }
+  static address counter_mask_ones_addr() { return (address)_counter_mask_ones; }
+  static address ghash_polynomial_reduction_addr() { return (address)_ghash_polynomial_reduction; }
+  static address ghash_polynomial_two_one_addr() { return (address) _ghash_polynomial_two_one; }
+
+  // accessors for constants moved from stubGenerator_x86_64_ghash.cpp
+  static address ghash_shuffle_mask_addr() { return (address)_ghash_shuffle_mask; }
+  static address ghash_long_swap_mask_addr() { return (address)_ghash_long_swap_mask; }
+  static address ghash_byte_swap_mask_addr() { return (address)_ghash_byte_swap_mask; }
+  static address ghash_polynomial_addr() { return (address)_ghash_polynomial; }
+
+  // accessors for constants moved from stubGenerator_x86_64_adler.cpp
+  static address adler32_ascale_table_addr() { return (address)_adler32_ascale_table; }
+  static address adler32_shuf0_table_addr() { return (address)_adler32_shuf0_table; }
+  static address adler32_shuf1_table_addr() { return (address)_adler32_shuf1_table; }
+
+  // accessors for constants moved from stubGenerator_x86_64_chacha.cpp
+  static address chacha20_ctradd_avx_addr() { return (address) _cc20_counter_add_avx; }
+  static address chacha20_ctradd_avx512_addr() { return (address) _cc20_counter_add_avx512; }
+  static address chacha20_lrot_consts_addr() { return(address) _cc20_lrot_consts; }
+
+  // accessors for constants moved from stubGenerator_x86_64_poly.cpp
+  static address poly1305_pad_msg_addr() { return (address) _poly1305_pad_msg; }
+  static address poly1305_mask42_addr() { return (address) _poly1305_mask42; }
+  static address poly1305_mask44_addr() { return (address) _poly1305_mask44; }
+#endif // _LP64
 };
 
 #endif // CPU_X86_STUBROUTINES_X86_HPP

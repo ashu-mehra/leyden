@@ -65,6 +65,7 @@ address StubRoutines::x86::_vector_64_bit_mask = nullptr;
 address StubRoutines::x86::_k256_W_adr = nullptr;
 address StubRoutines::x86::_k512_W_addr = nullptr;
 address StubRoutines::x86::_pshuffle_byte_flip_mask_addr_sha512 = nullptr;
+address StubRoutines::x86::_pshuffle_byte_flip_mask_off32_addr_sha512 = nullptr;
 // Base64 masks
 address StubRoutines::x86::_encoding_table_base64 = nullptr;
 address StubRoutines::x86::_shuffle_base64 = nullptr;
@@ -88,6 +89,8 @@ address StubRoutines::x86::_expand_perm_table32 = nullptr;
 address StubRoutines::x86::_expand_perm_table64 = nullptr;
 #endif
 address StubRoutines::x86::_pshuffle_byte_flip_mask_addr = nullptr;
+address StubRoutines::x86::_pshuffle_byte_flip_mask_off32_addr = nullptr;
+address StubRoutines::x86::_pshuffle_byte_flip_mask_off64_addr = nullptr;
 
 const uint64_t StubRoutines::x86::_crc_by128_masks[] =
 {
@@ -443,4 +446,204 @@ ATTRIBUTE_ALIGNED(64) const julong StubRoutines::x86::_k512_W[] =
     0x4cc5d4becb3e42b6ULL, 0x597f299cfc657e2aULL,
     0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL,
 };
+
+// --- constants moved from stubGenerator_x86_64_aes.cpp ---
+
+// Shuffle mask for fixing up 128-bit words consisting of big-endian 32-bit integers.
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_key_shuffle_mask[] = {
+    0x0405060700010203UL, 0x0C0D0E0F08090A0BUL
+};
+
+// Shuffle mask for big-endian 128-bit integers.
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_counter_shuffle_mask[] = {
+    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
+    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
+    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
+    0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
+};
+
+// This mask is used for incrementing counter value
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_counter_mask_linc0[] = {
+    0x0000000000000000UL, 0x0000000000000000UL,
+    0x0000000000000001UL, 0x0000000000000000UL,
+    0x0000000000000002UL, 0x0000000000000000UL,
+    0x0000000000000003UL, 0x0000000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_counter_mask_linc1[] = {
+    0x0000000000000001UL, 0x0000000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_counter_mask_linc1f[] = {
+    0x0000000000000000UL, 0x0100000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_counter_mask_linc2[] = {
+    0x0000000000000002UL, 0x0000000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_counter_mask_linc2f[] = {
+    0x0000000000000000UL, 0x0200000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_counter_mask_linc4[] = {
+    0x0000000000000004UL, 0x0000000000000000UL,
+    0x0000000000000004UL, 0x0000000000000000UL,
+    0x0000000000000004UL, 0x0000000000000000UL,
+    0x0000000000000004UL, 0x0000000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_counter_mask_linc8[] = {
+    0x0000000000000008UL, 0x0000000000000000UL,
+    0x0000000000000008UL, 0x0000000000000000UL,
+    0x0000000000000008UL, 0x0000000000000000UL,
+    0x0000000000000008UL, 0x0000000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_counter_mask_linc16[] = {
+    0x0000000000000010UL, 0x0000000000000000UL,
+    0x0000000000000010UL, 0x0000000000000000UL,
+    0x0000000000000010UL, 0x0000000000000000UL,
+    0x0000000000000010UL, 0x0000000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_counter_mask_linc32[] = {
+    0x0000000000000020UL, 0x0000000000000000UL,
+    0x0000000000000020UL, 0x0000000000000000UL,
+    0x0000000000000020UL, 0x0000000000000000UL,
+    0x0000000000000020UL, 0x0000000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_counter_mask_ones[] = {
+    0x0000000000000000UL, 0x0000000000000001UL,
+    0x0000000000000000UL, 0x0000000000000001UL,
+    0x0000000000000000UL, 0x0000000000000001UL,
+    0x0000000000000000UL, 0x0000000000000001UL,
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_ghash_polynomial_reduction[] = {
+    0x00000001C2000000UL, 0xC200000000000000UL,
+    0x00000001C2000000UL, 0xC200000000000000UL,
+    0x00000001C2000000UL, 0xC200000000000000UL,
+    0x00000001C2000000UL, 0xC200000000000000UL,
+};
+
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_ghash_polynomial_two_one[] = {
+    0x0000000000000001UL, 0x0000000100000000UL,
+};
+
+// --- constants moved from stubGenerator_x86_64_ghash.cpp ---
+
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_ghash_shuffle_mask[] = {
+    0x0F0F0F0F0F0F0F0FUL, 0x0F0F0F0F0F0F0F0FUL,
+};
+
+// byte swap x86 long
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_ghash_long_swap_mask[] = {
+    0x0F0E0D0C0B0A0908UL, 0x0706050403020100UL,
+};
+
+// byte swap x86 byte array
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_ghash_byte_swap_mask[] = {
+  0x08090A0B0C0D0E0FUL, 0x0001020304050607UL,
+};
+
+// Polynomial x^128+x^127+x^126+x^121+1
+ATTRIBUTE_ALIGNED(16) const uint64_t StubRoutines::x86::_ghash_polynomial[] = {
+    0x0000000000000001UL, 0xC200000000000000UL,
+};
+
+// --- constants moved from stubGenerator_x86_64_adler.cpp ---
+
+ATTRIBUTE_ALIGNED(64) const juint StubRoutines::x86::_adler32_ascale_table[] = {
+    0x00000000UL, 0x00000001UL, 0x00000002UL, 0x00000003UL,
+    0x00000004UL, 0x00000005UL, 0x00000006UL, 0x00000007UL,
+    0x00000008UL, 0x00000009UL, 0x0000000AUL, 0x0000000BUL,
+    0x0000000CUL, 0x0000000DUL, 0x0000000EUL, 0x0000000FUL
+};
+
+ATTRIBUTE_ALIGNED(32) const juint StubRoutines::x86::_adler32_shuf0_table[] = {
+    0xFFFFFF00UL, 0xFFFFFF01UL, 0xFFFFFF02UL, 0xFFFFFF03UL,
+    0xFFFFFF04UL, 0xFFFFFF05UL, 0xFFFFFF06UL, 0xFFFFFF07UL
+};
+
+ATTRIBUTE_ALIGNED(32) const juint StubRoutines::x86::_adler32_shuf1_table[] = {
+    0xFFFFFF08UL, 0xFFFFFF09UL, 0xFFFFFF0AUL, 0xFFFFFF0BUL,
+    0xFFFFFF0CUL, 0xFFFFFF0DUL, 0xFFFFFF0EUL, 0xFFFFFF0FUL
+};
+
+// --- constants moved from stubGenerator_x86_64_chacha.cpp ---
+
+// Constants
+
+/**
+ * This AVX/AVX2 add mask generation can be used for multiple duties:
+ *      1.) Provide +0/+1 counter increments by loading 256 bits
+ *          at offset 0
+ *      2.) Provide +2/+2 counter increments for the second set
+ *          of 4 AVX2 registers at offset 32 (256-bit load)
+ *      3.) Provide a +1 increment for the second set of 4 AVX
+ *          registers at offset 16 (128-bit load)
+ */
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_cc20_counter_add_avx[] = {
+    0x0000000000000000UL, 0x0000000000000000UL,
+    0x0000000000000001UL, 0x0000000000000000UL,
+    0x0000000000000002UL, 0x0000000000000000UL,
+    0x0000000000000002UL, 0x0000000000000000UL,
+};
+
+/**
+ * Add masks for 4-block ChaCha20 Block calculations
+ * The first 512 bits creates a +0/+1/+2/+3 add overlay.
+ * The second 512 bits is a +4/+4/+4/+4 add overlay.  This
+ * can be used to increment the counter fields for the next 4 blocks.
+ */
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_cc20_counter_add_avx512[] = {
+    0x0000000000000000UL, 0x0000000000000000UL,
+    0x0000000000000001UL, 0x0000000000000000UL,
+    0x0000000000000002UL, 0x0000000000000000UL,
+    0x0000000000000003UL, 0x0000000000000000UL,
+
+    0x0000000000000004UL, 0x0000000000000000UL,
+    0x0000000000000004UL, 0x0000000000000000UL,
+    0x0000000000000004UL, 0x0000000000000000UL,
+    0x0000000000000004UL, 0x0000000000000000UL
+};
+
+/**
+ * The first 256 bits represents a byte-wise permutation
+ * for an 8-bit left-rotation on 32-bit lanes.
+ * The second 256 bits is a 16-bit rotation on 32-bit lanes.
+ */
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_cc20_lrot_consts[] = {
+    0x0605040702010003UL, 0x0E0D0C0F0A09080BUL,
+    0x0605040702010003UL, 0x0E0D0C0F0A09080BUL,
+
+    0x0504070601000302UL, 0x0D0C0F0E09080B0AUL,
+    0x0504070601000302UL, 0x0D0C0F0E09080B0AUL
+};
+
+// --- constants moved from stubGenerator_x86_64_poly.cpp ---
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_poly1305_pad_msg[] = {
+  0x0000010000000000, 0x0000010000000000,
+  0x0000010000000000, 0x0000010000000000,
+  0x0000010000000000, 0x0000010000000000,
+  0x0000010000000000, 0x0000010000000000,
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_poly1305_mask42[] = {
+  0x000003ffffffffff, 0x000003ffffffffff,
+  0x000003ffffffffff, 0x000003ffffffffff,
+  0x000003ffffffffff, 0x000003ffffffffff,
+  0x000003ffffffffff, 0x000003ffffffffff
+};
+
+ATTRIBUTE_ALIGNED(64) const uint64_t StubRoutines::x86::_poly1305_mask44[] = {
+  0x00000fffffffffff, 0x00000fffffffffff,
+  0x00000fffffffffff, 0x00000fffffffffff,
+  0x00000fffffffffff, 0x00000fffffffffff,
+  0x00000fffffffffff, 0x00000fffffffffff,
+};
+
 #endif
