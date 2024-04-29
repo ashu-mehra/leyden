@@ -206,30 +206,36 @@ class StubIDStubAssemblerCodeGenClosure: public StubAssemblerCodeGenClosure {
 
 CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const char* name, bool expect_oop_map, StubAssemblerCodeGenClosure* cl) {
   ResourceMark rm;
-  // create a scratch code buffer for code storage instead of writing
-  // to the compiler thread's buffer blob
-  CodeBuffer code(name, buffer_blob->content_size(), buffer_blob->relocation_size());
-
   OopMapSet* oop_maps = nullptr;
   GrowableArray<int> extra_args;
 
-  if (stub_id >= 0 && SCCache::load_c1_blob(&code, (Runtime1::StubID)stub_id, name, oop_maps, &extra_args)) {
-    assert(oop_maps != nullptr || !expect_oop_map, "expected oop maps");
-    assert(extra_args.length() == 2, "expected 2 extra arguments");
-    CodeBlob* blob = RuntimeStub::new_runtime_stub(name,
-                                                   &code,
-                                                   CodeOffsets::frame_never_safe,
-                                                   extra_args.at(0),
-                                                   oop_maps,
-                                                   extra_args.at(1) != 0);
-    assert(blob != nullptr, "blob must exist");
-    return blob;
+  {
+    // load into a local buffer using the pre-allocated code blob
+    // we don't want a half-complete load messing up the buffer
+    // used by the compiler
+    CodeBuffer code(buffer_blob);
+
+    if (stub_id >= 0 && SCCache::load_c1_blob(&code, (Runtime1::StubID)stub_id, name, oop_maps, &extra_args)) {
+      assert(oop_maps != nullptr || !expect_oop_map, "expected oop maps");
+      assert(extra_args.length() == 2, "expected 2 extra arguments");
+      CodeBlob* blob = RuntimeStub::new_runtime_stub(name,
+                                                     &code,
+                                                     CodeOffsets::frame_never_safe,
+                                                     extra_args.at(0),
+                                                     oop_maps,
+                                                     extra_args.at(1) != 0);
+      assert(blob != nullptr, "blob must exist");
+      return blob;
+    }
   }
+
+  // allocate a new local buffer for the compile using the
+  // pre-allocated code blob
+  CodeBuffer code(buffer_blob);
+  Compilation::setup_code_buffer(&code, 0);
 
   int frame_size;
   bool must_gc_arguments;
-
-  Compilation::setup_code_buffer(&code, 0);
 
   // create assembler for code generation
   StubAssembler* sasm = new StubAssembler(&code, name, stub_id);
