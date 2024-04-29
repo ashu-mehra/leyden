@@ -1999,7 +1999,6 @@ bool SCCReader::read_relocations(CodeBuffer* buffer, CodeBuffer* orig_buffer,
 
 bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code_offset) {
   assert(code_offset == align_up(code_offset, DATA_ALIGNMENT), "%d not aligned to %d", code_offset, DATA_ALIGNMENT);
-  assert(buffer->blob() != nullptr, "sanity");
   SCCodeSection* scc_cs = (SCCodeSection*)addr(code_offset);
   for (int i = 0; i < (int)CodeBuffer::SECT_LIMIT; i++) {
     CodeSection* cs = buffer->code_section(i);
@@ -2334,7 +2333,6 @@ bool SCCache::write_relocations(CodeBuffer* buffer, uint& all_reloc_size) {
 
 bool SCCache::write_code(CodeBuffer* buffer, uint& code_size) {
   assert(_write_position == align_up(_write_position, DATA_ALIGNMENT), "%d not aligned to %d", _write_position, DATA_ALIGNMENT);
-  //assert(buffer->blob() != nullptr, "sanity");
   uint code_offset = _write_position;
   uint cb_total_size = (uint)buffer->total_content_size();
   // Write information about Code sections first.
