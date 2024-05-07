@@ -103,6 +103,22 @@ void MethodHandles::verify_klass(MacroAssembler* _masm,
 #undef PUSH
 }
 
+static const char* ref_kind_stop_msg(int ref_kind) {
+  switch (ref_kind) {
+  case JVM_REF_invokeStatic:
+    return "verify_ref_kind expected invokeStatic";
+  case JVM_REF_invokeVirtual:
+    return "verify_ref_kind expected invokeVirtual";
+  case JVM_REF_invokeSpecial:
+    return "verify_ref_kind expected invokeSpecial";
+  case JVM_REF_invokeInterface:
+    return "verify_ref_kind expected invokeInterface";
+  default:
+    assert(false, "should only see invoke kinds");
+    return "verify_ref_kind expected invoke kind";
+  }
+}
+
 void MethodHandles::verify_ref_kind(MacroAssembler* _masm, int ref_kind, Register member_reg, Register temp) {
   Label L;
   BLOCK_COMMENT("verify_ref_kind {");
@@ -111,13 +127,12 @@ void MethodHandles::verify_ref_kind(MacroAssembler* _masm, int ref_kind, Registe
   __ andl(temp, java_lang_invoke_MemberName::MN_REFERENCE_KIND_MASK);
   __ cmpl(temp, ref_kind);
   __ jcc(Assembler::equal, L);
-  { char* buf = NEW_C_HEAP_ARRAY(char, 100, mtInternal);
-    jio_snprintf(buf, 100, "verify_ref_kind expected %x", ref_kind);
+  { const char *msg = ref_kind_stop_msg(ref_kind);
     if (ref_kind == JVM_REF_invokeVirtual ||
         ref_kind == JVM_REF_invokeSpecial)
       // could do this for all ref_kinds, but would explode assembly code size
-      trace_method_handle(_masm, buf);
-    __ STOP(buf);
+      trace_method_handle(_masm, msg);
+    __ STOP(msg);
   }
   BLOCK_COMMENT("} verify_ref_kind");
   __ bind(L);
