@@ -90,11 +90,14 @@ typedef CodeBuffer::csize_t csize_t;  // file-local definition
 
 // External buffer, in a predefined CodeBlob.
 // Important: The code_start must be taken exactly, and not realigned.
-CodeBuffer::CodeBuffer(CodeBlob* blob) DEBUG_ONLY(: Scrubber(this, sizeof(*this))) {
+CodeBuffer::CodeBuffer(CodeBlob* blob, csize_t locs_size) DEBUG_ONLY(: Scrubber(this, sizeof(*this))) {
   // Provide code buffer with meaningful name
   initialize_misc(blob->name());
   initialize(blob->content_begin(), blob->content_size());
   debug_only(verify_section_allocation();)
+  if (locs_size != 0) {
+    _insts.initialize_locs(locs_size / sizeof(relocInfo));
+  }
 }
 
 void CodeBuffer::initialize(csize_t code_size, csize_t locs_size) {

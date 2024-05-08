@@ -243,7 +243,7 @@ static BufferBlob* initialize_stubs(StubCodeGenerator::StubsKind kind,
   if (stubs_code == nullptr) {
     vm_exit_out_of_memory(code_size, OOM_MALLOC_ERROR, "CodeCache: no room for %s", buffer_name);
   }
-  CodeBuffer buffer(stubs_code);
+  CodeBuffer buffer(stubs_code, code_size);
   StubGenerator_generate(&buffer, kind);
   // When new stubs added we need to make sure there is some space left
   // to catch situation when we should increase size again.

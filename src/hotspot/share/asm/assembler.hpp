@@ -382,6 +382,8 @@ class AbstractAssembler : public ResourceObj  {
   void    clear_inst_mark()               {        code_section()->clear_mark();    }
   void set_inst_end(address addr)         {        code_section()->set_end(addr);   }
 
+  relocInfo* locs_end() { return code_section()->locs_end(); }
+
   // Constants in code
   void relocate(RelocationHolder const& rspec, int format = 0) {
     assert(!pd_check_instruction_mark()
