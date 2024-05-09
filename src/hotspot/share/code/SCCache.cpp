@@ -1323,9 +1323,8 @@ bool SCCache::finish_write() {
   return true;
 }
 
-bool SCCache::load_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args, OopMapSet** oop_maps) {
+bool SCCache::load_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, GrowableArray<int>* extra_args, OopMapSet** oop_maps) {
   uint32_t sccId = StubRoutines::stub_to_sccId(id);
-  assert(start == cgen->assembler()->pc(), "wrong buffer");
   SCCache* cache = open_for_read();
   if (cache == nullptr) {
     return false;
@@ -1335,15 +1334,16 @@ bool SCCache::load_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const 
     return false;
   }
   SCCReader reader(cache, entry, nullptr);
-  return reader.compile_stub(cgen, name, start, extra_args, oop_maps);
+  return reader.compile_stub(cgen, name, extra_args, oop_maps);
 }
 
-bool SCCReader::compile_stub(StubCodeGenerator* cgen, const char* name, address start, GrowableArray<int>* extra_args, OopMapSet** oop_maps) {
+bool SCCReader::compile_stub(StubCodeGenerator* cgen, const char* name, GrowableArray<int>* extra_args, OopMapSet** oop_maps) {
   uint entry_position = _entry->offset();
   // Read code
+  address code_start = cgen->assembler()->pc();
   uint code_offset = _entry->code_offset() + entry_position;
   uint code_size   = _entry->code_size();
-  copy_bytes(addr(code_offset), start, code_size);
+  copy_bytes(addr(code_offset), code_start, code_size);
 
   // Read name
   uint name_offset = _entry->name_offset() + entry_position;
@@ -1355,7 +1355,13 @@ bool SCCReader::compile_stub(StubCodeGenerator* cgen, const char* name, address 
     ((SCCache*)_cache)->set_failed();
     return false;
   }
-  set_read_position(name_offset + name_size);
+
+  // Read relocations
+  uint reloc_offset = entry_position + _entry->reloc_offset();
+  set_read_position(reloc_offset);
+  if (!read_relocations(cgen)) {
+    return false;
+  }
 
   uint offset = read_position();
   int has_map = *(int*)addr(offset);
@@ -1380,12 +1386,12 @@ bool SCCReader::compile_stub(StubCodeGenerator* cgen, const char* name, address 
     extra_args->push(arg);
   }
 
-  cgen->assembler()->code_section()->set_end(start + code_size);
+  cgen->assembler()->code_section()->set_end(code_start + code_size);
   log_info(scc,stubs)("Read stub '%s' from Startup Code Cache '%s'", name, _cache->cache_path());
   return true;
 }
 
-bool SCCache::store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args, OopMapSet* oop_maps) {
+bool SCCache::store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address code_start, relocInfo* reloc_start, GrowableArray<int>* extra_args, OopMapSet* oop_maps) {
   uint32_t sccId = StubRoutines::stub_to_sccId(id);
   SCCache* cache = open_for_write();
   if (cache == nullptr) {
@@ -1395,32 +1401,12 @@ bool SCCache::store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const
   if (!cache->align_write()) {
     return false;
   }
-#ifdef ASSERT
-  CodeSection* cs = cgen->assembler()->code_section();
-  if (cs->has_locs()) {
-    uint reloc_count = cs->locs_count();
-    tty->print_cr("======== write stubs code section relocations [%d]:", reloc_count);
-    // Collect additional data
-    RelocIterator iter(cs);
-    while (iter.next()) {
-      switch (iter.type()) {
-        case relocInfo::none:
-          break;
-        default: {
-          iter.print_current_on(tty);
-          fatal("stub's relocation %d unimplemented", (int)iter.type());
-          break;
-        }
-      }
-    }
-  }
-#endif
   uint entry_position = cache->_write_position;
 
   // Write code
   uint code_offset = 0;
-  uint code_size = cgen->assembler()->pc() - start;
-  uint n = cache->write_bytes(start, code_size);
+  uint code_size = cgen->assembler()->pc() - code_start;
+  uint n = cache->write_bytes(code_start, code_size);
   if (n != code_size) {
     return false;
   }
@@ -1429,6 +1415,12 @@ bool SCCache::store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const
   uint name_size = (uint)strlen(name) + 1; // Includes '/0'
   n = cache->write_bytes(name, name_size);
   if (n != name_size) {
+    return false;
+  }
+
+  uint reloc_offset = cache->_write_position - entry_position;
+  uint reloc_size = 0;
+  if (!cache->write_relocations(cgen, reloc_start, reloc_size)) {
     return false;
   }
 
@@ -1470,7 +1462,7 @@ bool SCCache::store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const
 
   uint entry_size = cache->_write_position - entry_position;
   SCCEntry* entry = new(cache) SCCEntry(cache, entry_position, entry_size, name_offset, name_size,
-                                          code_offset, code_size, 0, 0,
+                                          code_offset, code_size, reloc_offset, reloc_size,
                                           SCCEntry::Stub, (uint32_t)sccId);
   log_info(scc, stubs)("Wrote stub '%s' id:%d to Startup Code Cache '%s'", name, (int)id, cache->_cache_path);
   return true;
@@ -1906,6 +1898,132 @@ bool SCCache::write_method(Method* method) {
 }
 
 // Repair the pc relative information in the code after load
+bool SCCReader::read_relocations(StubCodeGenerator* cgen) {
+  bool success = true;
+  uint code_offset = read_position();
+  int reloc_count = *(int*)addr(code_offset);
+  code_offset += sizeof(int);
+  if (reloc_count == 0) {
+    set_read_position(code_offset);
+    return true;
+  }
+  // Read _locs_point (as offset from start)
+  int locs_point_off = *(int*)addr(code_offset);
+  code_offset += sizeof(int);
+  uint reloc_size = reloc_count * sizeof(relocInfo);
+  CodeSection* cs = cgen->assembler()->code_section();
+  int reloc_space_left = cs->locs_limit() - cs->locs_end();
+  int current_reloc_count = cs->locs_end() -  cs->locs_start();
+  if (reloc_space_left < reloc_count) {
+    cs->expand_locs(current_reloc_count + reloc_count);
+  }
+  relocInfo* reloc_start = cs->locs_end();
+  copy_bytes(addr(code_offset), (address)reloc_start, reloc_size);
+  code_offset += reloc_size;
+  cs->set_locs_end(reloc_start + reloc_count);
+  cs->set_locs_point(cs->start() + locs_point_off);
+
+  // Read additional relocation data: uint per relocation
+  uint  data_size  = reloc_count * sizeof(uint);
+  uint* reloc_data = (uint*)addr(code_offset);
+  code_offset += data_size;
+  set_read_position(code_offset);
+  LogStreamHandle(Info, scc, reloc) log;
+  if (log.is_enabled()) {
+    log.print_cr("======== read code section relocations [%d]:", reloc_count);
+  }
+  RelocIterator iter(cs);
+  int j = 0;
+  while (iter.next()) {
+    switch (iter.type()) {
+      case relocInfo::none:
+        break;
+      // assumption: stubs don't have oop_type or metadata_type reloc info
+      case relocInfo::oop_type:
+        // fall through
+      case relocInfo::metadata_type: {
+        ShouldNotReachHere();
+	break;
+      }
+      case relocInfo::virtual_call_type:   // Fall through. They all call resolve_*_call blobs.
+      case relocInfo::opt_virtual_call_type:
+      case relocInfo::static_call_type: {
+	address dest = _cache->address_for_id(reloc_data[j]);
+	if (dest != (address)-1) {
+	  ((CallRelocation*)iter.reloc())->set_destination(dest);
+	}
+	break;
+      }
+      case relocInfo::trampoline_stub_type: {
+	address dest = _cache->address_for_id(reloc_data[j]);
+	if (dest != (address)-1) {
+	  ((trampoline_stub_Relocation*)iter.reloc())->set_destination(dest);
+	}
+	break;
+      }
+      case relocInfo::static_stub_type:
+	break;
+      case relocInfo::runtime_call_type: {
+	address dest = _cache->address_for_id(reloc_data[j]);
+	if (dest != (address)-1) {
+	  ((CallRelocation*)iter.reloc())->set_destination(dest);
+	}
+	break;
+      }
+      case relocInfo::runtime_call_w_cp_type:
+	fatal("runtime_call_w_cp_type unimplemented");
+	//address destination = iter.reloc()->value();
+	break;
+      case relocInfo::external_word_type: {
+	address target = _cache->address_for_id(reloc_data[j]);
+	int data_len = iter.datalen();
+	if (data_len > 0) {
+	  // Overwrite RelocInfo embedded address
+	  RelocationHolder rh = external_word_Relocation::spec(target);
+	  external_word_Relocation* new_reloc = (external_word_Relocation*)rh.reloc();
+	  short buf[4] = {0}; // 8 bytes
+	  short* p = new_reloc->pack_data_to(buf);
+	  if ((p - buf) != data_len) {
+	    return false; // New address does not fit into old relocInfo
+	  }
+	  short* data = iter.data();
+	  for (int i = 0; i < data_len; i++) {
+	    data[i] = buf[i];
+	  }
+	}
+	external_word_Relocation* reloc = (external_word_Relocation*)iter.reloc();
+	reloc->set_value(target); // Patch address in the code
+	iter.reloc()->fix_relocation_after_stub_load();
+	break;
+      }
+      case relocInfo::internal_word_type:
+	iter.reloc()->fix_relocation_after_stub_load();
+	break;
+      case relocInfo::section_word_type:
+	fatal("relocation %d unimplemented", (int)iter.type());
+	break;
+      case relocInfo::poll_type:
+	break;
+      case relocInfo::poll_return_type:
+	break;
+      case relocInfo::post_call_nop_type:
+	break;
+      case relocInfo::entry_guard_type:
+	break;
+      default:
+	fatal("relocation %d unimplemented", (int)iter.type());
+	break;
+    }
+    if (success && log.is_enabled()) {
+      iter.print_current_on(&log);
+    }
+    j++;
+  }
+  assert(j == (int)reloc_count, "sanity");
+  return success;
+}
+
+// Repair the pc relative information in the code after load
 bool SCCReader::read_relocations(CodeBuffer* buffer, CodeBuffer* orig_buffer,
                                  OopRecorder* oop_recorder, ciMethod* target) {
   bool success = true;
@@ -2228,6 +2346,118 @@ bool SCCReader::compile_blob(CodeBuffer* buffer, const char* name, OopMapSet* &o
   return true;
 }
 
+bool SCCache::write_relocations(StubCodeGenerator* cgen, relocInfo* reloc_start, uint& reloc_size) { 
+  CodeSection* cs = cgen->assembler()->code_section();
+  relocInfo* reloc_end = cs->locs_end();
+
+  // write number of relocs
+  int reloc_count = reloc_end - reloc_start;
+  uint n = write_bytes(&reloc_count, sizeof(int));
+  if (n != sizeof(int)) {
+    return false;
+  }
+  if (reloc_count == 0) {
+    return true;
+  }
+
+  // write locs_point_off
+  int locs_point_off = cs->locs_point_off();
+  n = write_bytes(&locs_point_off, sizeof(int));
+  if (n != sizeof(int)) {
+    return false;
+  }
+
+  // write relocs
+  reloc_size = reloc_count * sizeof(relocInfo);
+  n = write_bytes(reloc_start, reloc_size);
+  if (n != reloc_size) {
+    return false;
+  }
+
+  uint* reloc_data = NEW_C_HEAP_ARRAY(uint, reloc_count, mtCode);
+  LogStreamHandle(Info, scc, reloc) log;
+  RelocIterator iter(cs, reloc_start);
+  int j = 0;
+  while (iter.next()) {
+    reloc_data[j] = 0; // initialize
+    switch (iter.type()) {
+      case relocInfo::none:
+	break;
+      case relocInfo::oop_type:
+       // fall through
+      case relocInfo::metadata_type:
+       fatal("relocation %d unimplemented", (int)iter.type());
+       break;
+      case relocInfo::virtual_call_type:  // Fall through. They all call resolve_*_call blobs.
+      case relocInfo::opt_virtual_call_type:
+      case relocInfo::static_call_type: {
+	CallRelocation* r = (CallRelocation*)iter.reloc();
+	address dest = r->destination();
+	if (dest == r->addr()) { // possible call via trampoline on Aarch64
+	  dest = (address)-1;    // do nothing in this case when loading this relocation
+	}
+	reloc_data[j] = _table->id_for_address(dest, iter, cs->outer());
+	break;
+      }
+      case relocInfo::trampoline_stub_type: {
+	address dest = ((trampoline_stub_Relocation*)iter.reloc())->destination();
+	reloc_data[j] = _table->id_for_address(dest, iter, cs->outer());
+	break;
+      }
+      case relocInfo::static_stub_type:
+	break;
+      case relocInfo::runtime_call_type: {
+	// Record offset of runtime destination
+	CallRelocation* r = (CallRelocation*)iter.reloc();
+	address dest = r->destination();
+	if (dest == r->addr()) { // possible call via trampoline on Aarch64
+	  dest = (address)-1;    // do nothing in this case when loading this relocation
+	}
+	reloc_data[j] = _table->id_for_address(dest, iter, cs->outer());
+	break;
+      }
+      case relocInfo::runtime_call_w_cp_type:
+	fatal("runtime_call_w_cp_type unimplemented");
+	break;
+      case relocInfo::external_word_type: {
+	// Record offset of runtime target
+	address target = ((external_word_Relocation*)iter.reloc())->target();
+	reloc_data[j] = _table->id_for_address(target, iter, cs->outer());
+	break;
+      }
+      case relocInfo::internal_word_type:
+	break;
+      case relocInfo::section_word_type:
+	break;
+      case relocInfo::poll_type:
+	break;
+      case relocInfo::poll_return_type:
+	break;
+      case relocInfo::post_call_nop_type:
+	break;
+      case relocInfo::entry_guard_type:
+	break;
+      default:
+	fatal("relocation %d unimplemented", (int)iter.type());
+	break;
+    }
+    if (log.is_enabled()) {
+      iter.print_current_on(&log);
+    }
+    j++;
+  }
+  assert(j == (int)reloc_count, "sanity");
+  // Write additional relocation data: uint per relocation
+  uint data_size = reloc_count * sizeof(uint);
+  n = write_bytes(reloc_data, data_size);
+  if (n != data_size) {
+    FREE_C_HEAP_ARRAY(uint, reloc_data);
+    return false;
+  }
+  FREE_C_HEAP_ARRAY(uint, reloc_data);
+  return true;
+}
+
 bool SCCache::write_relocations(CodeBuffer* buffer, uint& all_reloc_size) {
   uint all_reloc_count = 0;
   for (int i = 0; i < (int)CodeBuffer::SECT_LIMIT; i++) {
@@ -2267,6 +2497,7 @@ bool SCCache::write_relocations(CodeBuffer* buffer, uint& all_reloc_size) {
     if (log.is_enabled()) {
       log.print_cr("======== write code section %d relocations [%d]:", i, reloc_count);
     }
+
     // Collect additional data
     RelocIterator iter(cs);
     bool has_immediate = false;
@@ -3755,7 +3986,10 @@ void SCAddressTable::init_extrs_for_initial_stubs() {
 
   _extrs_length = 0;
   SET_ADDRESS(_extrs, SharedRuntime::exception_handler_for_return_address); // used by forward_exception
-  SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_std); // used by call_stub
+  SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_std()); // used by call_stub
+#if defined(AMD64) || defined(AARCH64) || defined(RISCV64)
+  SET_ADDRESS(_extrs, MacroAssembler::debug64);
+#endif // defined(AMD64) || defined(AARCH64) || defined(RISCV64)
   SET_ADDRESS(_extrs, SharedRuntime::throw_StackOverflowError); // used by throw_StackOverflowError_entry
   SET_ADDRESS(_extrs, SharedRuntime::throw_delayed_StackOverflowError) // used by throw_delayed_StackOverflowError_entry
   SET_ADDRESS(_extrs, StubRoutines::x86::crc_table_avx512_addr) // used by updateBytesCRC32
@@ -3768,6 +4002,7 @@ void SCAddressTable::init_extrs_for_initial_stubs() {
   SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_off32_addr()); // used by updateBytesCRC32->kernel_crc32
   SET_ADDRESS(_extrs, StubRoutines::x86::crc_by128_masks_addr()); // used by updateBytesCRC32->kernel_crc32
   SET_ADDRESS(_extrs, StubRoutines::x86::crc32c_table_avx512_addr()); // used by updateBytesCRC32C
+  _extrs_for_initial_stubs_complete = true;
 }
 
 void SCAddressTable::init_extrs() {
@@ -3900,9 +4135,6 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, JavaThread::verify_cross_modify_fence_failure);
 #endif // PRODUCT
 
-#if defined(AMD64) || defined(AARCH64) || defined(RISCV64)
-  SET_ADDRESS(_extrs, MacroAssembler::debug64);
-#endif // defined(AMD64) || defined(AARCH64) || defined(RISCV64)
 #if defined(AMD64)
   SET_ADDRESS(_extrs, StubRoutines::x86::arrays_hashcode_powers_of_31());
 #endif // AMD64
@@ -4411,7 +4643,7 @@ void SCCache::add_new_C_string(const char* str) {
 }
 
 void SCAddressTable::add_C_string(const char* str) {
-  if (str != nullptr && _extrs_complete) {
+  if (str != nullptr && (_extrs_complete || _extrs_for_initial_stubs_complete)) {
     // Check previous strings address
     for (int i = 0; i < _C_strings_count; i++) {
       if (_C_strings[i] == str) {
@@ -4473,7 +4705,7 @@ int search_address(address addr, address* table, uint length) {
 }
 
 address SCAddressTable::address_for_id(int idx) {
-  if (!_extrs_complete) {
+  if (!_extrs_for_initial_stubs_complete && !_extrs_complete) {
     fatal("SCA table is not complete");
   }
   if (idx == -1) {
@@ -4508,7 +4740,7 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
   if (addr == (address)-1) { // Static call stub has jump to itself
     return id;
   }
-  if (!_extrs_complete) {
+  if (!_extrs_for_initial_stubs_complete && !_extrs_complete) {
     fatal("SCA table is not complete (missing externals)");
   }
   // Seach for C string

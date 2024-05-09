@@ -174,6 +174,37 @@ RelocIterator::RelocIterator(CodeSection* cs, address begin, address limit) {
   set_limits(begin, limit);
 }
 
+RelocIterator::RelocIterator(CodeSection* cs, relocInfo* start) {
+  initialize_misc();
+  assert(((cs->locs_start() != nullptr) && (cs->locs_end() != nullptr)) ||
+         ((cs->locs_start() == nullptr) && (cs->locs_end() == nullptr)), "valid start and end pointer");
+  assert(start == nullptr || (start >= cs->locs_start() && start <= cs->locs_end()), "bounds check");
+
+  _current = cs->locs_start()-1;
+  _end     = cs->locs_end();
+  _addr    = cs->start();
+  _code    = nullptr; // Not cb->blob();
+
+  CodeBuffer* cb = cs->outer();
+  assert((int) SECT_LIMIT == CodeBuffer::SECT_LIMIT, "my copy must be equal");
+  for (int n = (int) CodeBuffer::SECT_FIRST; n < (int) CodeBuffer::SECT_LIMIT; n++) {
+    CodeSection* cs = cb->code_section(n);
+    _section_start[n] = cs->start();
+    _section_end  [n] = cs->end();
+  }
+
+  assert(!has_current(), "just checking");
+
+  if (start != nullptr) {
+    while (_current < start) {
+      next();
+    }
+    // _current can be > start if relocInfo has prefix
+    assert(_current >= start, "sanity check");
+    _current -= 1;
+  }
+}
+
 bool RelocIterator::addr_in_const() const {
   const int n = CodeBuffer::SECT_CONSTS;
   if (_section_start[n] == nullptr) {
@@ -181,7 +212,6 @@ bool RelocIterator::addr_in_const() const {
   }
   return section_start(n) <= addr() && addr() < section_end(n);
 }
-
 
 void RelocIterator::set_limits(address begin, address limit) {
   _limit = limit;
@@ -762,6 +792,16 @@ void static_stub_Relocation::clear_inline_cache() {
   CompiledDirectCall::set_stub_to_clean(this);
 }
 
+void external_word_Relocation::fix_relocation_after_stub_load() {
+  if (_target != nullptr) {
+    // Probably this reference is absolute,  not relative, so the following is
+    // probably a no-op.
+    set_value(_target);
+  }
+  // If target is nullptr, this is  an absolute embedded reference to an external
+  // location, which means  there is nothing to fix here.  In either case, the
+  // resulting target should be an "external" address.
+}
 
 void external_word_Relocation::fix_relocation_after_move(const CodeBuffer* src, CodeBuffer* dest) {
   if (_target != nullptr) {
@@ -793,6 +833,11 @@ address external_word_Relocation::target() {
   return target;
 }
 
+void internal_word_Relocation::fix_relocation_after_stub_load() {
+  address target = _target;
+  assert(target != nullptr, "did not expect target to be null for stub");
+  set_value(target);
+}
 
 void internal_word_Relocation::fix_relocation_after_move(const CodeBuffer* src, CodeBuffer* dest) {
   address target = _target;

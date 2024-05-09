@@ -192,10 +192,10 @@ address StubGenerator::generate_call_stub(address& return_address) {
          "adjust this code");
   StubCodeMark mark(this, "StubRoutines", "call_stub");
   address start = __ pc();
-
+  relocInfo* reloc_start = __ locs_end();
   GrowableArray<int> extra_args;
 
-  if (SCCache::load_stub(this, StubRoutines::StubID::call_stub_id, "call_stub", start, &extra_args)) {
+  if (SCCache::load_stub(this, StubRoutines::StubID::call_stub_id, "call_stub", &extra_args)) {
     assert(extra_args.length() == 1, "unexpected args count");
     return_address = start + extra_args.at(0);
     return start;
@@ -408,7 +408,7 @@ address StubGenerator::generate_call_stub(address& return_address) {
   __ jmp(exit);
 
   extra_args.append(return_address - start);
-  SCCache::store_stub(this, StubRoutines::StubID::call_stub_id, "call_stub", start, &extra_args);
+  SCCache::store_stub(this, StubRoutines::StubID::call_stub_id, "call_stub", start, reloc_start, &extra_args);
 
   return start;
 }

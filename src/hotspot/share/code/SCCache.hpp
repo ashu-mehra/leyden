@@ -282,6 +282,7 @@ private:
   uint     _C2_blobs_length;
   uint     _final_blobs_length;
 
+  bool _extrs_for_initial_stubs_complete;
   bool _extrs_complete;
   bool _early_stubs_complete;
   bool _complete;
@@ -294,6 +295,7 @@ public:
     _extrs_addr = nullptr;
     _stubs_addr = nullptr;
     _blobs_addr = nullptr;
+    _extrs_for_initial_stubs_complete = false;
     _extrs_complete = false;
     _early_stubs_complete = false;
     _complete = false;
@@ -369,12 +371,13 @@ public:
 
   bool compile(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler);
   bool compile_blob(CodeBuffer* buffer, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
-  bool compile_stub(StubCodeGenerator* cgen, const char* name, address start, GrowableArray<int>* extra_args = nullptr, OopMapSet** oop_maps = nullptr);
+  bool compile_stub(StubCodeGenerator* cgen, const char* name, GrowableArray<int>* extra_args = nullptr, OopMapSet** oop_maps = nullptr);
 
   Klass* read_klass(const methodHandle& comp_method, bool shared);
   Method* read_method(const methodHandle& comp_method, bool shared);
 
   bool read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code_offset);
+  bool read_relocations(StubCodeGenerator* cgen);
   bool read_relocations(CodeBuffer* buffer, CodeBuffer* orig_buffer, OopRecorder* oop_recorder, ciMethod* target);
   DebugInformationRecorder* read_debug_info(OopRecorder* oop_recorder);
   OopMapSet* read_oop_maps();
@@ -511,14 +514,15 @@ public:
 
   bool finish_write();
 
-  static bool load_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args = nullptr, OopMapSet** oop_maps = nullptr);
-  static bool store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address start, GrowableArray<int>* extra_args = nullptr, OopMapSet* oop_maps = nullptr);
+  static bool load_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, GrowableArray<int>* extra_args = nullptr, OopMapSet** oop_maps = nullptr);
+  static bool store_stub(StubCodeGenerator* cgen, StubRoutines::StubID id, const char* name, address code_start, relocInfo* reloc_start, GrowableArray<int>* extra_args = nullptr, OopMapSet* oop_maps = nullptr);
 
   bool write_klass(Klass* klass);
   bool write_method(Method* method);
 
   bool write_code(CodeBuffer* buffer, uint& code_size);
   bool write_relocations(CodeBuffer* buffer, uint& reloc_size);
+  bool write_relocations(StubCodeGenerator* cgen, relocInfo* reloc_start, uint& reloc_size);
   bool write_debug_info(DebugInformationRecorder* recorder);
   bool write_oop_maps(OopMapSet* oop_maps);
 

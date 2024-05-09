@@ -610,6 +610,7 @@ class RelocIterator : public StackObj {
   // constructor
   RelocIterator(nmethod* nm, address begin = nullptr, address limit = nullptr);
   RelocIterator(CodeSection* cb, address begin = nullptr, address limit = nullptr);
+  RelocIterator(CodeSection* cs, relocInfo* start);
 
   // get next reloc info, return !eos
   bool next() {
@@ -867,6 +868,8 @@ class Relocation {
   // ic_call_type is not always position dependent (depending on the state of the cache)). However, this is
   // probably a reasonable assumption, since empty caches simplifies code reloacation.
   virtual void fix_relocation_after_move(const CodeBuffer* src, CodeBuffer* dest) { }
+
+  virtual void fix_relocation_after_stub_load() {}
 };
 
 
@@ -1376,6 +1379,7 @@ class external_word_Relocation : public DataRelocation {
   void unpack_data() override;
   short* pack_data_to(short* p); // Pack address into buffer
 
+  void fix_relocation_after_stub_load() override;
   void fix_relocation_after_move(const CodeBuffer* src, CodeBuffer* dest) override;
   address  target();        // if _target==nullptr, fetch addr from code stream
   address  value() override { return target(); }
@@ -1420,6 +1424,7 @@ class internal_word_Relocation : public DataRelocation {
   void pack_data_to(CodeSection* dest) override;
   void unpack_data() override;
 
+  void fix_relocation_after_stub_load() override;
   void fix_relocation_after_move(const CodeBuffer* src, CodeBuffer* dest) override;
   address  target();        // if _target==nullptr, fetch addr from code stream
   int      section()        { return _section;   }
