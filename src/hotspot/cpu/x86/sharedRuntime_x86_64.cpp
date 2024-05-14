@@ -28,6 +28,7 @@
 #endif
 #include "asm/macroAssembler.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#include "code/SCCache.hpp"
 #include "code/compiledIC.hpp"
 #include "code/debugInfoRec.hpp"
 #include "code/nativeInst.hpp"
@@ -827,6 +828,7 @@ static void gen_c2i_adapter(MacroAssembler *masm,
   __ jmp(rcx);
 }
 
+#if 0
 static void range_check(MacroAssembler* masm, Register pc_reg, Register temp_reg,
                         address code_start, address code_end,
                         Label& L_ok) {
@@ -839,6 +841,7 @@ static void range_check(MacroAssembler* masm, Register pc_reg, Register temp_reg
   __ jcc(Assembler::below, L_ok);
   __ bind(L_fail);
 }
+#endif
 
 void SharedRuntime::gen_i2c_adapter(MacroAssembler *masm,
                                     int total_args_passed,
@@ -874,6 +877,7 @@ void SharedRuntime::gen_i2c_adapter(MacroAssembler *masm,
 
   if (VerifyAdapterCalls &&
       (Interpreter::code() != nullptr || StubRoutines::final_stubs_code() != nullptr)) {
+#if 0
     // So, let's test for cascading c2i/i2c adapters right now.
     //  assert(Interpreter::contains($return_addr) ||
     //         StubRoutines::contains($return_addr),
@@ -905,6 +909,7 @@ void SharedRuntime::gen_i2c_adapter(MacroAssembler *masm,
     __ stop(msg);
     __ bind(L_ok);
     __ block_comment("} verify_i2ce ");
+#endif
   }
 
   // Must preserve original SP for loading incoming arguments because
@@ -1058,7 +1063,21 @@ AdapterHandlerEntry* SharedRuntime::generate_i2c2i_adapters(MacroAssembler *masm
                                                             const VMRegPair *regs,
                                                             AdapterFingerPrint* fingerprint) {
   address i2c_entry = __ pc();
-
+  const char* name = AdapterHandlerLibrary::name(fingerprint);
+  const uint32_t id = AdapterHandlerLibrary::id(fingerprint);
+  // we need to avoid restoring code that might refer to stub routines
+  // until we know they are available likewise we don't want to save
+  // early generated adapters that try to refernce them
+  bool attempt_save_restore = (StubRoutines::final_stubs_code() != nullptr);
+  if (attempt_save_restore) {
+    // see if we can load the code rather than generate it
+    CodeBuffer* buffer = masm->code();
+    uint32_t offsets[4];
+    if (SCCache::load_adapter(buffer, id, name, offsets)) {
+      assert(offsets[0] == 0, "sanity check");
+      return AdapterHandlerLibrary::new_entry(fingerprint, i2c_entry, i2c_entry + offsets[1], i2c_entry + offsets[2], i2c_entry + offsets[3]);
+    }
+  }
   gen_i2c_adapter(masm, total_args_passed, comp_args_on_stack, sig_bt, regs);
 
   // -------------------------------------------------------------------------
@@ -1118,6 +1137,16 @@ AdapterHandlerEntry* SharedRuntime::generate_i2c2i_adapters(MacroAssembler *masm
 
   gen_c2i_adapter(masm, total_args_passed, comp_args_on_stack, sig_bt, regs, skip_fixup);
 
+  if (attempt_save_restore) {
+    // try to save generated code
+    CodeBuffer* buffer = masm->code();
+    uint32_t offsets[4];
+    offsets[0] = 0;
+    offsets[1] = c2i_entry - i2c_entry;
+    offsets[2] = c2i_unverified_entry - i2c_entry;
+    offsets[3] = c2i_no_clinit_check_entry - i2c_entry;
+    SCCache::store_adapter(buffer, id, name, offsets);
+  }
   return AdapterHandlerLibrary::new_entry(fingerprint, i2c_entry, c2i_entry, c2i_unverified_entry, c2i_no_clinit_check_entry);
 }
 

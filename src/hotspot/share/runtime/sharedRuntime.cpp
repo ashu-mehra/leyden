@@ -2361,7 +2361,7 @@ class AdapterFingerPrint : public CHeapObj<mtCode> {
     return st.as_string();
   }
 
-#ifndef PRODUCT
+// #ifndef PRODUCT
   // Reconstitutes the basic type arguments from the fingerprint,
   // producing strings like LIJDF
   const char* as_basic_args_string() {
@@ -2400,7 +2400,7 @@ class AdapterFingerPrint : public CHeapObj<mtCode> {
     }
     return st.as_string();
   }
-#endif // !product
+//#endif // !product
 
   bool equals(AdapterFingerPrint* other) {
     if (other->_length != _length) {
@@ -3118,6 +3118,15 @@ bool AdapterHandlerLibrary::contains(const CodeBlob* b) {
   assert_locked_or_safepoint(AdapterHandlerLibrary_lock);
   _adapter_handler_table->iterate(findblob);
   return found;
+}
+
+const char* AdapterHandlerLibrary::name(AdapterFingerPrint* fingerprint) {
+  return fingerprint->as_basic_args_string();
+}
+
+uint32_t AdapterHandlerLibrary::id(AdapterFingerPrint* fingerprint) {
+  unsigned int hash = fingerprint->compute_hash();
+  return hash;
 }
 
 void AdapterHandlerLibrary::print_handler_on(outputStream* st, const CodeBlob* b) {
