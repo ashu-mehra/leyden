@@ -25,7 +25,9 @@
  */
 
 #include "precompiled.hpp"
+#include "code/SCCache.hpp"
 #include "macroAssembler_x86.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "stubGenerator_x86_64.hpp"
 
 /******************************************************************************/
@@ -172,16 +174,20 @@
 //
 /******************************************************************************/
 
+#define __ _masm->
+
 // The 64 bit code is at most SSE2 compliant
 ATTRIBUTE_ALIGNED(8) static const juint _ALL_ONES[] =
 {
     0xffffffffUL, 0x3fefffffUL
 };
 
-#define __ _masm->
-
 address StubGenerator::generate_libmSin() {
-  StubCodeMark mark(this, "StubRoutines", "libmSin");
+  int stubId = StubRoutines::StubID::libmSin_id;
+  const char* stub_name = "libmSin";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label L_2TAG_PACKET_0_0_1, L_2TAG_PACKET_1_0_1, L_2TAG_PACKET_2_0_1, L_2TAG_PACKET_3_0_1;
@@ -645,7 +651,13 @@ address StubGenerator::generate_libmSin() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 #undef __
+
+void StubGenerator::sin_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(_ALL_ONES)
+}

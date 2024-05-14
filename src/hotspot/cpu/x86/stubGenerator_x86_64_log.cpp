@@ -26,7 +26,9 @@
 */
 
 #include "precompiled.hpp"
+#include "code/SCCache.hpp"
 #include "macroAssembler_x86.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "stubGenerator_x86_64.hpp"
 
 /******************************************************************************/
@@ -177,7 +179,11 @@ ATTRIBUTE_ALIGNED(16) static const juint _coeff[] =
 #define __ _masm->
 
 address StubGenerator::generate_libmLog() {
-  StubCodeMark mark(this, "StubRoutines", "libmLog");
+  int stubId = StubRoutines::StubID::libmLog_id;
+  const char* stub_name = "libmLog";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label L_2TAG_PACKET_0_0_2, L_2TAG_PACKET_1_0_2, L_2TAG_PACKET_2_0_2, L_2TAG_PACKET_3_0_2;
@@ -359,6 +365,8 @@ address StubGenerator::generate_libmLog() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -515,7 +523,11 @@ ATTRIBUTE_ALIGNED(16) static const juint _coeff_log10[] =
 };
 
 address StubGenerator::generate_libmLog10() {
-  StubCodeMark mark(this, "StubRoutines", "libmLog10");
+  int stubId = StubRoutines::StubID::libmLog10_id;
+  const char* stub_name = "libmLog10";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label L_2TAG_PACKET_0_0_2, L_2TAG_PACKET_1_0_2, L_2TAG_PACKET_2_0_2, L_2TAG_PACKET_3_0_2;
@@ -703,7 +715,27 @@ address StubGenerator::generate_libmLog10() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 #undef __
+
+void StubGenerator::log_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(_L_tbl)
+  ADD(_log2)
+  ADD(((address)_log2+8))
+  ADD(_coeff)
+  ADD(((address)_coeff+16))
+  ADD(((address)_coeff+32))
+  ADD(_HIGHSIGMASK_log10)
+  ADD(_LOG10_E)
+  ADD(((address)_LOG10_E+8))
+  ADD(_L_tbl_log10)
+  ADD(_log2_log10)
+  ADD(((address)_log2_log10+8))
+  ADD(_coeff_log10)
+  ADD(((address)_coeff_log10+16))
+  ADD(((address)_coeff_log10+32))
+}

@@ -24,7 +24,9 @@
  */
 
 #include "precompiled.hpp"
+#include "code/SCCache.hpp"
 #include "macroAssembler_x86.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "stubGenerator_x86_64.hpp"
 
 #define __ _masm->
@@ -910,9 +912,14 @@ void StubGenerator::poly1305_process_blocks_avx512(
 // After execution, input and length will point at remaining (unprocessed) data
 // and accumulator will point to the current accumulator value
 address StubGenerator::generate_poly1305_processBlocks() {
+  int stubId = StubRoutines::StubID::poly1305_processBlocks_id;
+  const char* stub_name = "poly1305_processBlocks";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "poly1305_processBlocks");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
+
   __ enter();
 
   // Save all 'SOE' registers
@@ -1028,6 +1035,9 @@ address StubGenerator::generate_poly1305_processBlocks() {
 
   __ leave();
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -1694,4 +1704,10 @@ void StubGenerator::poly1305_msg_mul_reduce_vec4_avx2(
   __ vpaddq(A0, A0, YTMP1, Assembler::AVX_256bit); //Add low 42-bit bits from new blocks to accumulator
   __ vpaddq(A1, A1, YTMP2, Assembler::AVX_256bit); //Add medium 42-bit bits from new blocks to accumulator
   __ vpaddq(A1, A1, YTMP5, Assembler::AVX_256bit);
+}
+
+void StubGenerator::poly_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(POLY1305_PAD_MSG)
+  ADD(POLY1305_MASK42)
+  ADD(POLY1305_MASK44)
 }

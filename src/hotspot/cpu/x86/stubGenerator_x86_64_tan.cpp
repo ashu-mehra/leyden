@@ -25,7 +25,9 @@
 */
 
 #include "precompiled.hpp"
+#include "code/SCCache.hpp"
 #include "macroAssembler_x86.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "stubGenerator_x86_64.hpp"
 
 /******************************************************************************/
@@ -456,7 +458,11 @@ ATTRIBUTE_ALIGNED(8) static const juint _QQ_2_tan[] =
 #define __ _masm->
 
 address StubGenerator::generate_libmTan() {
-  StubCodeMark mark(this, "StubRoutines", "libmTan");
+  int stubId = StubRoutines::StubID::libmTan_id;
+  const char* stub_name = "libmTan";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label L_2TAG_PACKET_0_0_1, L_2TAG_PACKET_1_0_1, L_2TAG_PACKET_2_0_1, L_2TAG_PACKET_3_0_1;
@@ -1025,7 +1031,28 @@ address StubGenerator::generate_libmTan() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 #undef __
+
+void StubGenerator::tan_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(_MUL16)
+  ADD(_sign_mask_tan)
+  ADD(_PI32INV_tan)
+  ADD(_P_1_tan)
+  ADD(_P_2_tan)
+  ADD(_P_3_tan)
+  ADD(_Ctable_tan)
+  ADD(_MASK_35_tan)
+  ADD(_Q_11_tan)
+  ADD(_Q_9_tan)
+  ADD(_Q_7_tan)
+  ADD(_Q_5_tan)
+  ADD(_Q_3_tan)
+  ADD(_PI_4_tan)
+  ADD(((address)_PI_4_tan+8))
+  ADD(_QQ_2_tan)
+}

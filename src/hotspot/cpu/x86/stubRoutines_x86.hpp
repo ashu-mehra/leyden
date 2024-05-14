@@ -350,6 +350,7 @@ class x86 {
   static address pshuffle_byte_flip_mask_addr() { return _pshuffle_byte_flip_mask_addr; }
   static address arrays_hashcode_powers_of_31() { return (address)_arrays_hashcode_powers_of_31; }
   static void generate_CRC32C_table(bool is_pclmulqdq_supported);
+  static void init_SCAddressTable(GrowableArray<address>& external_addresses);
 };
 
 #endif // CPU_X86_STUBROUTINES_X86_HPP

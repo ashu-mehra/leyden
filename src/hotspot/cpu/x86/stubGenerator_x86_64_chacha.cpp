@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "asm/assembler.hpp"
 #include "asm/assembler.inline.hpp"
+#include "code/SCCache.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "macroAssembler_x86.hpp"
 #include "stubGenerator_x86_64.hpp"
@@ -113,8 +114,12 @@ void StubGenerator::generate_chacha_stubs() {
 
 /* The 2-block AVX/AVX2-enabled ChaCha20 block function implementation */
 address StubGenerator::generate_chacha20Block_avx() {
+  int stubId = StubRoutines::StubID::chacha20Block_id;
+  const char* stub_name = "chacha20Block";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "chacha20Block");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label L_twoRounds;
@@ -296,13 +301,20 @@ address StubGenerator::generate_chacha20Block_avx() {
   }
   __ leave();
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 /* The 4-block AVX512-enabled ChaCha20 block function implementation */
 address StubGenerator::generate_chacha20Block_avx512() {
+  int stubId = StubRoutines::StubID::chacha20Block_id;
+  const char* stub_name = "chacha20Block";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "chacha20Block");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label L_twoRounds;
@@ -466,6 +478,9 @@ address StubGenerator::generate_chacha20Block_avx512() {
   __ vzeroupper();
   __ leave();
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -584,3 +599,9 @@ bVec,
 }
 
 #undef __
+
+void StubGenerator::chacha_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(CC20_COUNTER_ADD_AVX)
+  ADD(CC20_COUNTER_ADD_AVX512)
+  ADD(CC20_LROT_CONSTS)
+}

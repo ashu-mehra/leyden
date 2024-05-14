@@ -122,6 +122,150 @@ class UnsafeMemoryAccessMark : public StackObj {
   ~UnsafeMemoryAccessMark();
 };
 
+#define STUB_ROUTINES_STUBS_DO(stub, last_entry)     \
+  stub(forward_exception)                            \
+  stub(call_stub)                                    \
+  stub(catch_exception)                              \
+  stub(orderaccess_fence)                            \
+  stub(get_previous_sp)                              \
+  stub(verify_mxcsr)                                 \
+  stub(f2i_fixup)                                    \
+  stub(f2l_fixup)                                    \
+  stub(d2i_fixup)                                    \
+  stub(d2l_fixup)                                    \
+  stub(float_sign_mask)                              \
+  stub(float_sign_flip)                              \
+  stub(double_sign_mask)                             \
+  stub(double_sign_flip)                             \
+  stub(updateBytesCRC32)                             \
+  stub(updateBytesCRC32C)                            \
+  stub(float16ToFloat)                               \
+  stub(floatToFloat16)                               \
+  stub(libmSin)                                     \
+  stub(libmCos)                                     \
+  stub(libmTan)                                     \
+  stub(libmExp)                                     \
+  stub(libmPow)                                     \
+  stub(libmLog)                                     \
+  stub(libmLog10)                                    \
+  stub(libmFmod)                                     \
+  last_initial_stub = libmFmod_id,                   \
+                                                     \
+  stub(cont_thaw)                                    \
+  stub(cont_returnBarrier)                           \
+  stub(cont_returnBarrierExc)                        \
+  last_continuation_stub = cont_returnBarrierExc_id, \
+                                                     \
+  stub(vector_float_sign_mask)                       \
+  stub(vector_float_sign_flip)                       \
+  stub(vector_double_sign_mask)                      \
+  stub(vector_double_sign_flip)                      \
+  stub(vector_all_bits_set)                          \
+  stub(vector_int_mask_cmp_bits)                     \
+  stub(vector_short_to_byte_mask)                    \
+  stub(vector_byte_perm_mask)                        \
+  stub(vector_int_to_byte_mask)                      \
+  stub(vector_int_to_short_mask)                     \
+  stub(vector_32_bit_mask)                           \
+  stub(vector_64_bit_mask)                           \
+  stub(vector_int_shuffle_mask)                      \
+  stub(vector_byte_shuffle_mask)                     \
+  stub(vector_short_shuffle_mask)                    \
+  stub(vector_long_shuffle_mask)                     \
+  stub(vector_long_sign_mask)                        \
+  stub(vector_iota_indices)                          \
+  stub(vector_count_leading_zeros_lut)               \
+  stub(vector_reverse_bit_lut)                       \
+  stub(vector_reverse_byte_perm_mask_long)           \
+  stub(vector_reverse_byte_perm_mask_int)            \
+  stub(vector_reverse_byte_perm_mask_short)          \
+  stub(compress_perm_table32)                        \
+  stub(compress_perm_table64)                        \
+  stub(expand_perm_table32)                          \
+  stub(expand_perm_table64)                          \
+  stub(vector_popcount_lut)                          \
+  stub(aescrypt_encryptBlock)                        \
+  stub(aescrypt_decryptBlock)                        \
+  stub(cipherBlockChaining_encryptAESCrypt)          \
+  stub(cipherBlockChaining_decryptAESCrypt)          \
+  stub(electronicCodeBook_encryptAESCrypt)           \
+  stub(electronicCodeBook_decryptAESCrypt)           \
+  stub(galoisCounterMode_AESCrypt)                   \
+  stub(counterMode_AESCrypt)                         \
+  stub(ghash_processBlocks)                          \
+  stub(chacha20Block)                                \
+  stub(updateBytesAdler32)                           \
+  stub(poly1305_processBlocks)                       \
+  stub(md5_implCompress)                             \
+  stub(md5_implCompressMB)                           \
+  stub(upper_word_mask)                              \
+  stub(shuffle_byte_flip_mask)                       \
+  stub(sha1_implCompress)                            \
+  stub(sha1_implCompressMB)                          \
+  stub(pshuffle_byte_flip_mask)                      \
+  stub(sha256_implCompress)                          \
+  stub(sha256_implCompressMB)                        \
+  stub(pshuffle_byte_flip_mask_sha512)               \
+  stub(sha512_implCompress)                          \
+  stub(sha512_implCompressMB)                        \
+  stub(avx2_shuffle_base64)                          \
+  stub(avx2_input_mask_base64)                       \
+  stub(avx2_lut_base64)                              \
+  stub(avx2_decode_tables_base64)                    \
+  stub(avx2_decode_lut_tables_base64)                \
+  stub(encoding_table_base64)                        \
+  stub(shuffle_base64)                               \
+  stub(lookup_lo_base64)                             \
+  stub(lookup_hi_base64)                             \
+  stub(lookup_lo_base64url)                          \
+  stub(lookup_hi_base64url)                          \
+  stub(pack_vec_base64)                              \
+  stub(join_0_1_base64)                              \
+  stub(join_1_2_base64)                              \
+  stub(join_2_3_base64)                              \
+  stub(decoding_table_base64)                        \
+  stub(base64_encodeBlock)                           \
+  stub(base64_decodeBlock)                           \
+  stub(multiplyToLen)                                \
+  stub(squareToLen)                                  \
+  stub(mulAdd)                                       \
+  stub(bigIntegerRightShiftWorker)                   \
+  stub(bigIntegerLeftShiftWorker)                    \
+  stub(lookup_secondary_supers_table_slow_path)      \
+  stub(lookup_secondary_supers_table_index_0)        \
+  last_compiler_stub = lookup_secondary_supers_table_index_0_id + Klass::SECONDARY_SUPERS_TABLE_SIZE - 1, \
+                                                     \
+  stub(verify_oop)                                   \
+  stub(data_cache_writeback)                         \
+  stub(data_cache_writeback_sync)                    \
+  stub(jbyte_disjoint_arraycopy)                     \
+  stub(jbyte_arraycopy)                              \
+  stub(jshort_disjoint_arraycopy)                    \
+  stub(jshort_arraycopy)                             \
+  stub(jint_disjoint_arraycopy)                      \
+  stub(jint_arraycopy)                               \
+  stub(jlong_disjoint_arraycopy)                     \
+  stub(jlong_arraycopy)                              \
+  stub(oop_disjoint_arraycopy)                       \
+  stub(oop_arraycopy)                                \
+  stub(oop_disjoint_arraycopy_uninit)                \
+  stub(oop_arraycopy_uninit)                         \
+  stub(checkcast_arraycopy)                          \
+  stub(checkcast_arraycopy_uninit)                   \
+  stub(unsafe_arraycopy)                             \
+  stub(generic_arraycopy)                            \
+  stub(jbyte_fill)                                   \
+  stub(jshort_fill)                                  \
+  stub(jint_fill)                                    \
+  stub(arrayof_jbyte_fill)                           \
+  stub(arrayof_jshort_fill)                          \
+  stub(arrayof_jint_fill)                            \
+  stub(method_entry_barrier)                         \
+  stub(vectorizedMismatch)                           \
+  stub(upcall_stub_exception_handler)                \
+  last_final_stub = upcall_stub_exception_handler_id,\
+  last_entry(number_of_ids)
+
 class StubRoutines: AllStatic {
 
  public:
@@ -129,6 +273,20 @@ class StubRoutines: AllStatic {
   friend class StubGenerator;
 
 #include CPU_HEADER(stubRoutines)
+
+#define STUB_ENUM_ID name ## _id
+#define DECLARE_STUB_ID(name) name ## _id,
+#define DECLARE_LAST_STUB_ID(name) name
+
+  enum StubID {
+    STUB_ROUTINES_STUBS_DO(DECLARE_STUB_ID, DECLARE_LAST_STUB_ID)
+  };
+
+#undef STUB_ENUM_ID
+#undef DECLARE_STUB_ID
+#undef DECLARE_LAST_STUB_ID
+
+  static int stubId_to_index(int stubId);
 
   static jint    _verify_oop_count;
   static address _verify_oop_subroutine_entry;
@@ -285,6 +443,7 @@ class StubRoutines: AllStatic {
 
  public:
   // Initialization/Testing
+  static void    init_SCAddressTable();
   static void    initialize_initial_stubs();               // must happen before universe::genesis
   static void    initialize_continuation_stubs();          // must happen after  universe::genesis
   static void    initialize_compiler_stubs();              // must happen after  universe::genesis

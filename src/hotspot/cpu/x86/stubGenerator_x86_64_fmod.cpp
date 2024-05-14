@@ -25,6 +25,7 @@
  */
 
 #include "precompiled.hpp"
+#include "code/SCCache.hpp"
 #include "macroAssembler_x86.hpp"
 #include "stubGenerator_x86_64.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -73,9 +74,14 @@ ATTRIBUTE_ALIGNED(32) static const uint64_t CONST_e307[] = {
 };
 
 address StubGenerator::generate_libmFmod() {
+  int stubId = StubRoutines::StubID::libmFmod_id;
+  const char* stub_name = "libmFmod";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "libmFmod");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
+
   __ enter(); // required for proper stackwalking of RuntimeStub frame
 
   if (VM_Version::supports_avx512vlbwdq()) {     // AVX512 version
@@ -521,7 +527,17 @@ address StubGenerator::generate_libmFmod() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 #undef __
+
+void StubGenerator::fmod_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(CONST_NaN)
+  ADD(CONST_1p260)
+  ADD(CONST_MAX)
+  ADD(CONST_INF)
+  ADD(CONST_e307)
+}

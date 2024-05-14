@@ -26,7 +26,9 @@
 */
 
 #include "precompiled.hpp"
+#include "code/SCCache.hpp"
 #include "macroAssembler_x86.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "stubGenerator_x86_64.hpp"
 
 /******************************************************************************/
@@ -166,7 +168,11 @@ ATTRIBUTE_ALIGNED(4) static const juint _INF[] =
 #define __ _masm->
 
 address StubGenerator::generate_libmExp() {
-  StubCodeMark mark(this, "StubRoutines", "libmExp");
+  int stubId = StubRoutines::StubID::libmExp_id;
+  const char* stub_name = "libmExp";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label L_2TAG_PACKET_0_0_2, L_2TAG_PACKET_1_0_2, L_2TAG_PACKET_2_0_2, L_2TAG_PACKET_3_0_2;
@@ -381,7 +387,26 @@ address StubGenerator::generate_libmExp() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 #undef __
+
+void StubGenerator::exp_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(_cv)
+  ADD(((address)_cv+16))
+  ADD(((address)_cv+32))
+  ADD(((address)_cv+48))
+  ADD(((address)_cv+64))
+  ADD(((address)_cv+80))
+  ADD(_mmask)
+  ADD(_bias)
+  ADD(_Tbl_addr)
+  ADD(_ALLONES)
+  ADD(_ebias)
+  ADD(_XMAX)
+  ADD(_XMIN)
+  ADD(_INF)
+}

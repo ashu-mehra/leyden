@@ -31,6 +31,7 @@
 #include "prims/forte.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/stubCodeGenerator.hpp"
+#include "runtime/stubRoutines.hpp"
 
 
 // Implementation of StubCodeDesc
@@ -67,8 +68,9 @@ void StubCodeDesc::print() const { print_on(tty); }
 
 // Implementation of StubCodeGenerator
 
-StubCodeGenerator::StubCodeGenerator(CodeBuffer* code, bool print_code) {
+StubCodeGenerator::StubCodeGenerator(CodeBuffer* code, StubArchiveData* archive_data, bool print_code) {
   _masm = new MacroAssembler(code);
+  _archive_data = archive_data;
   _print_code = PrintStubCode || print_code;
 }
 
@@ -83,11 +85,26 @@ StubCodeGenerator::~StubCodeGenerator() {
 #endif
 }
 
+void StubCodeGenerator::setup_code_desc(const char* name, address start, address end) {
+  StubCodeDesc* cdesc = new StubCodeDesc("StubRoutines", name, start, end);
+  cdesc->set_disp(uint(start - _masm->code_section()->outer()->insts_begin()));
+  print_stub_code_desc(cdesc);
+  // copied from ~~StubCodeMark()
+  Forte::register_stub(cdesc->name(), cdesc->begin(), cdesc->end());
+  if (JvmtiExport::should_post_dynamic_code_generated()) {
+    JvmtiExport::post_dynamic_code_generated(cdesc->name(), cdesc->begin(), cdesc->end());
+  }
+}
+
 void StubCodeGenerator::stub_prolog(StubCodeDesc* cdesc) {
   // default implementation - do nothing
 }
 
 void StubCodeGenerator::stub_epilog(StubCodeDesc* cdesc) {
+  print_stub_code_desc(cdesc);
+}
+
+void StubCodeGenerator::print_stub_code_desc(StubCodeDesc* cdesc) {
   LogTarget(Debug, stubs) lt;
   if (lt.is_enabled()) {
     LogStream ls(lt);
@@ -111,6 +128,24 @@ void StubCodeGenerator::stub_epilog(StubCodeDesc* cdesc) {
   }
 }
 
+int StubCodeGenerator::num_stubs(StubsKind kind) {
+  switch (kind) {
+  case StubsKind::Initial_stubs:
+    return StubRoutines::StubID::last_initial_stub + 1;
+    break;
+  case StubsKind::Continuation_stubs:
+    return StubRoutines::StubID::last_continuation_stub - StubRoutines::StubID::last_initial_stub;
+    break;
+  case StubsKind::Compiler_stubs:
+    return StubRoutines::StubID::last_compiler_stub - StubRoutines::StubID::last_continuation_stub;
+    break;
+  case StubsKind::Final_stubs:
+    return StubRoutines::StubID::last_final_stub - StubRoutines::StubID::last_compiler_stub;
+    break;
+  default:
+    ShouldNotReachHere();
+  }
+}
 
 // Implementation of CodeMark
 
@@ -123,18 +158,63 @@ StubCodeMark::StubCodeMark(StubCodeGenerator* cgen, const char* group, const cha
 }
 
 StubCodeMark::~StubCodeMark() {
-  _cgen->assembler()->flush();
-  _cdesc->set_end(_cgen->assembler()->pc());
-  assert(StubCodeDesc::_list == _cdesc, "expected order on list");
-#ifndef PRODUCT
-  address base = _cgen->assembler()->code_section()->outer()->insts_begin();
-  address head = _cdesc->begin();
-  _cdesc->set_disp(uint(head - base));
-#endif
+  if (!_cdesc->loaded_from_cache()) {
+    _cgen->assembler()->flush();
+    _cdesc->set_end(_cgen->assembler()->pc());
+    assert(StubCodeDesc::_list == _cdesc, "expected order on list");
+  #ifndef PRODUCT
+    address base = _cgen->assembler()->code_section()->outer()->insts_begin();
+    address head = _cdesc->begin();
+    _cdesc->set_disp(uint(head - base));
+  #endif
+  }
   _cgen->stub_epilog(_cdesc);
   Forte::register_stub(_cdesc->name(), _cdesc->begin(), _cdesc->end());
 
   if (JvmtiExport::should_post_dynamic_code_generated()) {
     JvmtiExport::post_dynamic_code_generated(_cdesc->name(), _cdesc->begin(), _cdesc->end());
   }
+}
+
+bool StubArchiveData::load_archive_data_for(int stubId) {
+  assert(_index_table != nullptr, "sanity check");
+  int index = StubRoutines::stubId_to_index(stubId);
+  assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
+  StubAddrIndexInfo index_info = _index_table[index];
+  int start_addr_index = index_info.start_index();
+  if (start_addr_index == -1) {
+    return false;
+  }
+  _current = &_index_table[index];
+  return true;
+}
+
+void StubArchiveData::store_archive_data(int stubId, address start, address end) {
+  int index = StubRoutines::stubId_to_index(stubId);
+  assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
+  int start_addr_index = _address_array.length();
+  _address_array.append(start);
+  _address_array.append(end);
+  _index_table[index].init_entry(start_addr_index, 2);
+}
+
+void StubArchiveData::store_archive_data(int stubId, address start, address entry_address_1, address end) {
+  int index = StubRoutines::stubId_to_index(stubId);
+  assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
+  int start_addr_index = _address_array.length();
+  _address_array.append(start);
+  _address_array.append(entry_address_1);
+  _address_array.append(end);
+  _index_table[index].init_entry(start_addr_index, 3);
+}
+
+void StubArchiveData::store_archive_data(int stubId, address start, address entry_address_1, address entry_address_2, address end) {
+  int index = StubRoutines::stubId_to_index(stubId);
+  assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
+  int start_addr_index = _address_array.length();
+  _address_array.append(start);
+  _address_array.append(entry_address_1);
+  _address_array.append(entry_address_2);
+  _address_array.append(end);
+  _index_table[index].init_entry(start_addr_index, 4);
 }

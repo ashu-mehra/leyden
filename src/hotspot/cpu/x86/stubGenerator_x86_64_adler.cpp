@@ -26,6 +26,7 @@
 #include "precompiled.hpp"
 #include "asm/assembler.hpp"
 #include "asm/assembler.inline.hpp"
+#include "code/SCCache.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -66,8 +67,12 @@ ATTRIBUTE_ALIGNED(32) static const juint ADLER32_SHUF1_TABLE[] = {
 address StubGenerator::generate_updateBytesAdler32() {
   assert(UseAdler32Intrinsics, "");
 
+  int stubId = StubRoutines::StubID::updateBytesAdler32_id;
+  const char* stub_name = "updateBytesAdler32";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "updateBytesAdler32");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   // Choose an appropriate LIMIT for inner loop based on the granularity
@@ -334,7 +339,15 @@ address StubGenerator::generate_updateBytesAdler32() {
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 #undef __
+
+void StubGenerator::adler_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(ADLER32_ASCALE_TABLE)
+  ADD(ADLER32_SHUF0_TABLE)
+  ADD(ADLER32_SHUF1_TABLE)
+}

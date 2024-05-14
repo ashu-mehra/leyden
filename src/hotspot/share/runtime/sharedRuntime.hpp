@@ -618,16 +618,17 @@ private:
 
   static void print_statistics() PRODUCT_RETURN;
 
-  // Blob ids for shared, C1 and C2 runtime generated blobs can be packed
+  // Blob ids for shared, stubroutines, C1 and C2 runtime generated blobs can be packed
   // into a 32 bit integer word by anding an int enum tag from any of the
-  // 3 enum ranges with an enum type-specific tag in the high 2 bits
+  // 4 enum ranges with an enum type-specific tag in the high 3 bits
 
 private:
-  static const uint32_t BLOB_TAG_SHIFT = 30;
+  static const uint32_t BLOB_TAG_SHIFT = 29;
   static const uint32_t SHARED_BLOB_TAG = 0U << BLOB_TAG_SHIFT;
   static const uint32_t C1_BLOB_TAG     = 1U << BLOB_TAG_SHIFT;
   static const uint32_t OPTO_BLOB_TAG   = 2U << BLOB_TAG_SHIFT;
-  static const uint32_t BLOB_TAG_MASK   = 3U << BLOB_TAG_SHIFT;
+  static const uint32_t STUB_ROUTINES_BLOB_TAG = 4U << BLOB_TAG_SHIFT;
+  static const uint32_t BLOB_TAG_MASK   = 7U << BLOB_TAG_SHIFT;
 
   static int decode_id(uint32_t blobId) {
     return (blobId & ~BLOB_TAG_MASK);
@@ -645,6 +646,7 @@ private:
   static bool is_shared(uint32_t blobId) { return decode_tag(blobId) == SHARED_BLOB_TAG;}
   static bool is_c1(uint32_t blobId) { return decode_tag(blobId) == C1_BLOB_TAG;}
   static bool is_opto(uint32_t blobId) { return decode_tag(blobId) == OPTO_BLOB_TAG;}
+  static bool is_stubroutines(uint32_t blobId) { return decode_tag(blobId) == STUB_ROUTINES_BLOB_TAG; }
 
   static bool in_range(int id) { return (id & BLOB_TAG_MASK) == 0; }
 
@@ -691,6 +693,15 @@ public:
     int tag = decode_opto_id(blobId);
     assert (tag >= 0 && tag < (int)SharedRuntime::StubID::number_of_ids, "invalid shared blob id tag");
     return (SharedRuntime::StubID)tag;
+  }
+
+  friend class StubRoutines;
+  static uint32_t encode_stubroutines_id(int id) {
+    return encode_id(id, STUB_ROUTINES_BLOB_TAG);
+  }
+  static int decode_stubroutines_id(uint32_t blobId) {
+    assert(is_stubroutines(blobId), "not a stubroutines id");
+    return decode_id(blobId);
   }
 };
 
