@@ -25,7 +25,9 @@
  */
 
 #include "precompiled.hpp"
+#include "code/SCCache.hpp"
 #include "macroAssembler_x86.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "stubGenerator_x86_64.hpp"
 
 /******************************************************************************/
@@ -174,6 +176,10 @@
 #define __ _masm->
 
 address StubGenerator::generate_libmCos() {
+  int stubId = StubRoutines::StubID::libmCos_id;
+  const char* stub_name = "libmCos";
+  LOAD_STUB_ARCHIVE_DATA
+
   StubCodeMark mark(this, "StubRoutines", "libmCos");
   address start = __ pc();
 
@@ -618,6 +624,8 @@ address StubGenerator::generate_libmCos() {
 
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }

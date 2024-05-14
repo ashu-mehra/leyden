@@ -495,6 +495,12 @@
                                                                             \
   product(bool, PrecompileOnlyAndExit, false,                               \
           "Exit after precompilation step is over")                         \
+                                                                            \
+  product(bool, StoreStubs, false,                                          \
+          "Store stubs in Startup Code Cache")                              \
+                                                                            \
+  product(bool, LoadStubs, false,                                           \
+          "Load stubs from Startup Code Cache")                             \
 
 // end of COMPILER_FLAGS
 

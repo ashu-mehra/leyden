@@ -47,10 +47,12 @@ class StubCodeDesc: public CHeapObj<mtCode> {
   address              _begin;    // points to the first byte of the stub code    (included)
   address              _end;      // points to the first byte after the stub code (excluded)
   uint                 _disp;     // Displacement relative base address in buffer.
+  bool                 _loaded_from_cache;
 
   friend class StubCodeMark;
   friend class StubCodeGenerator;
 
+public:
   void set_begin(address begin) {
     assert(begin >= _begin, "begin may not decrease");
     assert(_end == nullptr || begin <= _end, "begin & end not properly ordered");
@@ -63,6 +65,8 @@ class StubCodeDesc: public CHeapObj<mtCode> {
   }
 
   void set_disp(uint disp) { _disp = disp; }
+
+  void set_loaded_from_cache() { _loaded_from_cache = true; }
 
  public:
   static StubCodeDesc* first() { return _list; }
@@ -80,6 +84,7 @@ class StubCodeDesc: public CHeapObj<mtCode> {
     _end            = end;
     _disp           = 0;
     _list           = this;
+    _loaded_from_cache = false;
   };
 
   static void freeze();
@@ -92,9 +97,13 @@ class StubCodeDesc: public CHeapObj<mtCode> {
   uint        disp() const                       { return _disp; }
   int         size_in_bytes() const              { return pointer_delta_as_int(_end, _begin); }
   bool        contains(address pc) const         { return _begin <= pc && pc < _end; }
+  bool        loaded_from_cache() const          { return _loaded_from_cache; }
   void        print_on(outputStream* st) const;
   void        print() const;
 };
+
+// forward declaration
+class StubArchiveData;
 
 // The base class for all stub-generating code generators.
 // Provides utility functions.
@@ -105,15 +114,21 @@ class StubCodeGenerator: public StackObj {
 
  protected:
   MacroAssembler*  _masm;
+  StubArchiveData* _archive_data;
+
+  void setup_code_desc(const char* name, address start, address end);
 
  public:
-  StubCodeGenerator(CodeBuffer* code, bool print_code = false);
+  StubCodeGenerator(CodeBuffer* code, bool print_code) : StubCodeGenerator(code, nullptr, print_code) {}
+  StubCodeGenerator(CodeBuffer* code, StubArchiveData* archive_data = nullptr, bool print_code = false);
   ~StubCodeGenerator();
 
   MacroAssembler* assembler() const              { return _masm; }
 
   virtual void stub_prolog(StubCodeDesc* cdesc); // called by StubCodeMark constructor
   virtual void stub_epilog(StubCodeDesc* cdesc); // called by StubCodeMark destructor
+
+  void print_stub_code_desc(StubCodeDesc* cdesc);
 
   enum StubsKind {
     Initial_stubs,       // Stubs used by Runtime, Interpreter and compiled code.
@@ -129,8 +144,134 @@ class StubCodeGenerator: public StackObj {
 
     Final_stubs          // The rest of stubs. Generated at the end of VM init.
   };
+
+  static int num_stubs(StubsKind kind);
 };
 
+// Used to locate addresses owned by a stub in the _address_array.
+class StubAddrIndexInfo {
+private:
+  // Index of the "start" address in the "address array"
+  // Start address is the first address owned by this stub in the address array
+  int _start_index;
+  // Total number of addresses owned by this stub in the address array
+  uint _naddr;
+
+ public:
+  StubAddrIndexInfo() : _start_index(-1), _naddr(0) {}
+  int start_index() { return _start_index; }
+  int count() { return _naddr; }
+  // end address is the last address owned by this stub in the address array
+  int end_index() { return _start_index + _naddr - 1; }
+
+  void default_init() {
+    _start_index = -1;
+    _naddr = 0;
+  }
+
+  void init_entry(int start_index, int naddr) {
+    _start_index = start_index;
+    _naddr = naddr;
+  }
+};
+
+class StubArchiveData : public StackObj {
+private:
+  // Array of addresses owned by stubs. Each stub adds address to this array.
+  // First address added by the stub is the "start" address of the stub.
+  // Last address is the "end" address of the stub.
+  // Any other entry points of the stub are in between.
+  GrowableArray<address> _address_array;
+  // Used to locate addresses owned by a stub in the _address_array.
+  StubAddrIndexInfo* _index_table;
+  // Number of entries in the index_table
+  int _index_table_cnt;
+  // Pointer to the StubAddrIndexInfo for the stub being loaded
+  StubAddrIndexInfo* _current;
+
+public:
+  StubArchiveData(StubCodeGenerator::StubsKind kind) : _current(nullptr) {
+    _index_table_cnt = StubCodeGenerator::num_stubs(kind);
+    _index_table = NEW_C_HEAP_ARRAY(StubAddrIndexInfo, _index_table_cnt, mtCode);
+    for (int i = 0; i < _index_table_cnt; i++) {
+      _index_table[i].default_init();
+    }
+  }
+
+  ~StubArchiveData() {
+    FREE_C_HEAP_ARRAY(StubAddrIndexInfo, _index_table);
+  }
+
+  GrowableArray<address>* stubs_address_array() { return &_address_array; }
+  int index_table_count() const { return _index_table_cnt; }
+  StubAddrIndexInfo* index_table() { return _index_table; }
+
+  address current_stub_entry_addr(int index) const {
+    return _address_array.at(_current->start_index() + index);
+  }
+
+  address current_stub_end_addr() const {
+    return _address_array.at(_current->end_index());
+  }
+
+  bool load_archive_data_for(int stubId);
+  void store_archive_data(int stubId, address start, address end);
+  void store_archive_data(int stubId, address start, address entry_address_1, address end);
+  void store_archive_data(int stubId, address start, address entry_address_1, address entry_address_2, address end);
+};
+
+#define LOAD_STUB_ARCHIVE_DATA \
+  { \
+    if (_archive_data != nullptr && _archive_data->load_archive_data_for(stubId)) { \
+      const StubArchiveData* ad = (const StubArchiveData*) _archive_data; \
+      address start = ad->current_stub_entry_addr(0); \
+      address end = ad->current_stub_end_addr(); \
+      setup_code_desc(stub_name, start, end); \
+      return start; \
+    } \
+  }
+
+#define LOAD_STUB_ARCHIVE_DATA_1(entry_address) \
+  { \
+    if (_archive_data != nullptr && _archive_data->load_archive_data_for(stubId)) { \
+      const StubArchiveData* ad = (const StubArchiveData*) _archive_data; \
+      address start = ad->current_stub_entry_addr(0); \
+      entry_address = ad->current_stub_entry_addr(1); \
+      address end = ad->current_stub_end_addr(); \
+      setup_code_desc(stub_name, start, end); \
+      return start; \
+    } \
+  }
+
+#define SETUP_STUB_ARCHIVE_DATA \
+  { \
+    if (_archive_data != nullptr) { \
+      address end = __ pc(); \
+      _archive_data->store_archive_data(stubId, start, end); \
+      SCCache::add_stub_address(start); \
+    } \
+  }
+
+#define SETUP_STUB_ARCHIVE_DATA_1 \
+  { \
+    if (_archive_data != nullptr) { \
+      address end = __ pc(); \
+      _archive_data->store_archive_data(stubId, start, entry_address_1, end); \
+      SCCache::add_stub_address(start); \
+      SCCache::add_stub_address(entry_address_1); \
+    } \
+  }
+
+#define SETUP_STUB_ARCHIVE_DATA_2 \
+  { \
+    if (_archive_data != nullptr) { \
+      address end = __ pc(); \
+      _archive_data->store_archive_data(stubId, start, entry_address_1, entry_address_2, end); \
+      SCCache::add_stub_address(start); \
+      SCCache::add_stub_address(entry_address_1); \
+      SCCache::add_stub_address(entry_address_2); \
+    } \
+  }
 
 // Stack-allocated helper class used to associate a stub code with a name.
 // All stub code generating functions that use a StubCodeMark will be registered
@@ -146,6 +287,7 @@ class StubCodeMark: public StackObj {
   StubCodeMark(StubCodeGenerator* cgen, const char* group, const char* name);
   ~StubCodeMark();
 
+  StubCodeDesc* stub_code_desc() { return _cdesc; }
 };
 
 #endif // SHARE_RUNTIME_STUBCODEGENERATOR_HPP

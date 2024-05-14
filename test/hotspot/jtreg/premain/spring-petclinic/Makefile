@@ -42,9 +42,10 @@ BLDJDK_HOME   = /jdk3/official/jdk21
 # Points to your build with https://github.com/openjdk/jdk
 # For comparison purposes, this build should be the latest version of the mainline that
 # has been merged into https://github.com/openjdk/leyden/tree/premain
-MAINLINE_HOME = /jdk3/bld/rum/images/jdk
+MAINLINE_HOME = /home/asmehra/data/ashu-mehra/jdk/build/base-release/images/jdk
 
 # Points to your build with https://github.com/openjdk/leyden/tree/premain
+#PREMAIN_HOME = /home/asmehra/data/ashu-mehra/leyden/build/load-save-stubs-single-blob-sd/images/jdk
 PREMAIN_HOME = /jdk3/bld/le4/images/jdk
 #===============================================================================
 
@@ -179,14 +180,14 @@ ${PC_DYNAMIC_JSA}: ${PC_STATIC_JSA}
 	ls -l ${PC_DYNAMIC_JSA}
 
 ${PC_CACHED_CODE}: ${PC_DYNAMIC_JSA}
-	${PREMAIN_JAVA} -XX:SharedArchiveFile=${PC_DYNAMIC_JSA} -XX:+ReplayTraining -XX:+StoreCachedCode \
+	${PREMAIN_JAVA} -XX:SharedArchiveFile=${PC_DYNAMIC_JSA} -XX:+ReplayTraining -XX:+StoreCachedCode -XX:+StoreStubs -Xlog:scc*=info,stubs=debug:file=${PC_CACHED_CODE}.log \
 	     -XX:CachedCodeFile=${PC_CACHED_CODE} -XX:CachedCodeMaxSize=512M ${UNPACKED_CMDLINE}
 	ls -l ${PC_CACHED_CODE}
 
 # run with premain optimizatipn
 run: ${PC_CACHED_CODE}
-	${PREMAIN_JAVA} -XX:SharedArchiveFile=${PC_DYNAMIC_JSA} -XX:+ReplayTraining -XX:+LoadCachedCode \
-		-XX:CachedCodeFile=${PC_CACHED_CODE} ${LOG_INIT} -Xlog:scc=error ${UNPACKED_CMDLINE}
+	${PREMAIN_JAVA} -XX:SharedArchiveFile=${PC_DYNAMIC_JSA} -XX:+ReplayTraining -XX:+LoadCachedCode -XX:+LoadStubs -Xlog:scc*=info,stubs=debug,init:file=run.log \
+		-XX:CachedCodeFile=${PC_CACHED_CODE} ${UNPACKED_CMDLINE}
 
 # run with just static CDS archive
 runs: ${PC_STATIC_JSA}

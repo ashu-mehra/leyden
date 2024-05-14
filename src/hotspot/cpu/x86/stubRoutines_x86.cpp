@@ -444,3 +444,32 @@ ATTRIBUTE_ALIGNED(64) const julong StubRoutines::x86::_k512_W[] =
     0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL,
 };
 #endif
+
+#define ADD(addr) external_addresses.append((address)addr);
+
+void StubRoutines::x86::init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  bool supports_clmul = VM_Version::supports_clmul();
+  generate_CRC32C_table(supports_clmul);
+
+  ADD(_crc_by128_masks)
+  ADD(_crc_by128_masks+16)
+  ADD(_crc_by128_masks+32)
+  ADD(_crc_table)
+  ADD(_crc32c_table)
+#ifdef _LP64
+  ADD(_crc_table_avx512)
+  ADD(_crc32c_table_avx512)
+  ADD(_crc_by128_masks_avx512)
+  ADD(_crc_by128_masks_avx512+16)
+  ADD(_crc_by128_masks_avx512+32)
+  ADD(_shuf_table_crc32_avx512)
+#endif // _LP64
+  ADD(_arrays_hashcode_powers_of_31)
+  ADD(_k256)
+#ifdef _LP64
+  ADD(_k256_W)
+  ADD(_k512_W)
+#endif // _LP64
+}
+
+#undef ADD
