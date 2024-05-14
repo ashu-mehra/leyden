@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "asm/macroAssembler.hpp"
+#include "code/SCCache.hpp"
 #include "gc/shared/barrierSet.hpp"
 #include "gc/shared/barrierSetAssembler.hpp"
 #include "oops/objArrayKlass.hpp"
@@ -95,35 +96,47 @@ void StubGenerator::generate_arraycopy_stubs() {
   StubRoutines::_jshort_arraycopy          = generate_conjoint_short_copy(false, entry, &entry_jshort_arraycopy,
                                                                           "jshort_arraycopy");
 
-  StubRoutines::_jint_disjoint_arraycopy   = generate_disjoint_int_oop_copy(false, false, &entry,
+  StubRoutines::_jint_disjoint_arraycopy   = generate_disjoint_int_oop_copy(StubRoutines::StubID::jint_disjoint_arraycopy_id,
+                                                                            false, false, &entry,
                                                                             "jint_disjoint_arraycopy");
-  StubRoutines::_jint_arraycopy            = generate_conjoint_int_oop_copy(false, false, entry,
+  StubRoutines::_jint_arraycopy            = generate_conjoint_int_oop_copy(StubRoutines::StubID::jint_arraycopy_id,
+                                                                            false, false, entry,
                                                                             &entry_jint_arraycopy, "jint_arraycopy");
 
-  StubRoutines::_jlong_disjoint_arraycopy  = generate_disjoint_long_oop_copy(false, false, &entry,
+  StubRoutines::_jlong_disjoint_arraycopy  = generate_disjoint_long_oop_copy(StubRoutines::StubID::jlong_disjoint_arraycopy_id,
+                                                                             false, false, &entry,
                                                                              "jlong_disjoint_arraycopy");
-  StubRoutines::_jlong_arraycopy           = generate_conjoint_long_oop_copy(false, false, entry,
+  StubRoutines::_jlong_arraycopy           = generate_conjoint_long_oop_copy(StubRoutines::StubID::jlong_arraycopy_id,
+                                                                             false, false, entry,
                                                                              &entry_jlong_arraycopy, "jlong_arraycopy");
   if (UseCompressedOops) {
-    StubRoutines::_oop_disjoint_arraycopy  = generate_disjoint_int_oop_copy(false, true, &entry,
+    StubRoutines::_oop_disjoint_arraycopy  = generate_disjoint_int_oop_copy(StubRoutines::StubID::oop_disjoint_arraycopy_id,
+                                                                            false, true, &entry,
                                                                             "oop_disjoint_arraycopy");
-    StubRoutines::_oop_arraycopy           = generate_conjoint_int_oop_copy(false, true, entry,
+    StubRoutines::_oop_arraycopy           = generate_conjoint_int_oop_copy(StubRoutines::StubID::oop_arraycopy_id,
+                                                                            false, true, entry,
                                                                             &entry_oop_arraycopy, "oop_arraycopy");
-    StubRoutines::_oop_disjoint_arraycopy_uninit  = generate_disjoint_int_oop_copy(false, true, &entry,
+    StubRoutines::_oop_disjoint_arraycopy_uninit  = generate_disjoint_int_oop_copy(StubRoutines::StubID::oop_disjoint_arraycopy_uninit_id,
+                                                                                   false, true, &entry,
                                                                                    "oop_disjoint_arraycopy_uninit",
                                                                                    /*dest_uninitialized*/true);
-    StubRoutines::_oop_arraycopy_uninit           = generate_conjoint_int_oop_copy(false, true, entry,
+    StubRoutines::_oop_arraycopy_uninit           = generate_conjoint_int_oop_copy(StubRoutines::StubID::oop_arraycopy_uninit_id,
+                                                                                   false, true, entry,
                                                                                    nullptr, "oop_arraycopy_uninit",
                                                                                    /*dest_uninitialized*/true);
   } else {
-    StubRoutines::_oop_disjoint_arraycopy  = generate_disjoint_long_oop_copy(false, true, &entry,
+    StubRoutines::_oop_disjoint_arraycopy  = generate_disjoint_long_oop_copy(StubRoutines::StubID::oop_disjoint_arraycopy_id,
+                                                                             false, true, &entry,
                                                                              "oop_disjoint_arraycopy");
-    StubRoutines::_oop_arraycopy           = generate_conjoint_long_oop_copy(false, true, entry,
+    StubRoutines::_oop_arraycopy           = generate_conjoint_long_oop_copy(StubRoutines::StubID::oop_arraycopy_id,
+                                                                             false, true, entry,
                                                                              &entry_oop_arraycopy, "oop_arraycopy");
-    StubRoutines::_oop_disjoint_arraycopy_uninit  = generate_disjoint_long_oop_copy(false, true, &entry,
+    StubRoutines::_oop_disjoint_arraycopy_uninit  = generate_disjoint_long_oop_copy(StubRoutines::StubID::oop_disjoint_arraycopy_uninit_id,
+                                                                                    false, true, &entry,
                                                                                     "oop_disjoint_arraycopy_uninit",
                                                                                     /*dest_uninitialized*/true);
-    StubRoutines::_oop_arraycopy_uninit           = generate_conjoint_long_oop_copy(false, true, entry,
+    StubRoutines::_oop_arraycopy_uninit           = generate_conjoint_long_oop_copy(StubRoutines::StubID::oop_arraycopy_uninit_id,
+                                                                                    false, true, entry,
                                                                                     nullptr, "oop_arraycopy_uninit",
                                                                                     /*dest_uninitialized*/true);
   }
@@ -145,12 +158,12 @@ void StubGenerator::generate_arraycopy_stubs() {
                                                              entry_jlong_arraycopy,
                                                              entry_checkcast_arraycopy);
 
-  StubRoutines::_jbyte_fill = generate_fill(T_BYTE, false, "jbyte_fill");
-  StubRoutines::_jshort_fill = generate_fill(T_SHORT, false, "jshort_fill");
-  StubRoutines::_jint_fill = generate_fill(T_INT, false, "jint_fill");
-  StubRoutines::_arrayof_jbyte_fill = generate_fill(T_BYTE, true, "arrayof_jbyte_fill");
-  StubRoutines::_arrayof_jshort_fill = generate_fill(T_SHORT, true, "arrayof_jshort_fill");
-  StubRoutines::_arrayof_jint_fill = generate_fill(T_INT, true, "arrayof_jint_fill");
+  StubRoutines::_jbyte_fill = generate_fill(StubRoutines::StubID::jbyte_fill_id, T_BYTE, false, "jbyte_fill");
+  StubRoutines::_jshort_fill = generate_fill(StubRoutines::StubID::jshort_fill_id, T_SHORT, false, "jshort_fill");
+  StubRoutines::_jint_fill = generate_fill(StubRoutines::StubID::jint_fill_id, T_INT, false, "jint_fill");
+  StubRoutines::_arrayof_jbyte_fill = generate_fill(StubRoutines::StubID::arrayof_jbyte_fill_id, T_BYTE, true, "arrayof_jbyte_fill");
+  StubRoutines::_arrayof_jshort_fill = generate_fill(StubRoutines::StubID::arrayof_jshort_fill_id, T_SHORT, true, "arrayof_jshort_fill");
+  StubRoutines::_arrayof_jint_fill = generate_fill(StubRoutines::StubID::arrayof_jint_fill_id, T_INT, true, "arrayof_jint_fill");
 
   // We don't generate specialized code for HeapWord-aligned source
   // arrays, so just use the code we've already generated
@@ -213,7 +226,7 @@ void StubGenerator::array_overlap_test(address no_overlap_target, Label* NOLp, A
   __ cmpptr(to, from);
   __ lea(end_from, Address(from, count, sf, 0));
   if (NOLp == nullptr) {
-    ExternalAddress no_overlap(no_overlap_target);
+    RuntimeAddress no_overlap(no_overlap_target);
     __ jump_cc(Assembler::belowEqual, no_overlap);
     __ cmpptr(to, end_from);
     __ jump_cc(Assembler::aboveEqual, no_overlap);
@@ -506,7 +519,7 @@ void StubGenerator::copy_bytes_backward(Register from, Register dest,
 //   disjoint_copy_avx3_masked is set to the no-overlap entry point
 //   used by generate_conjoint_[byte/int/short/long]_copy().
 //
-address StubGenerator::generate_disjoint_copy_avx3_masked(address* entry, const char *name,
+address StubGenerator::generate_disjoint_copy_avx3_masked(int stubId, address* entry, const char *name,
                                                           int shift, bool aligned, bool is_oop,
                                                           bool dest_uninitialized) {
   __ align(CodeEntryAlignment);
@@ -732,6 +745,15 @@ address StubGenerator::generate_disjoint_copy_avx3_masked(address* entry, const 
       arraycopy_avx3_large(to, from, temp1, temp2, temp3, temp4, count, xmm1, xmm2, xmm3, xmm4, shift);
     __ jmp(L_finish);
   }
+
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
+
   return start;
 }
 
@@ -805,11 +827,12 @@ void StubGenerator::arraycopy_avx3_large(Register to, Register from, Register te
 //   c_rarg2   - element count, treated as ssize_t, can be zero
 //
 //
-address StubGenerator::generate_conjoint_copy_avx3_masked(address* entry, const char *name, int shift,
+address StubGenerator::generate_conjoint_copy_avx3_masked(int stubId, address* entry, const char *name, int shift,
                                                           address nooverlap_target, bool aligned,
                                                           bool is_oop, bool dest_uninitialized) {
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", name);
+
   address start = __ pc();
 
   int avx3threshold = VM_Version::avx3_threshold();
@@ -971,6 +994,13 @@ address StubGenerator::generate_conjoint_copy_avx3_masked(address* entry, const 
   __ vzeroupper();
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
+
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
 
   return start;
 }
@@ -1279,16 +1309,21 @@ void StubGenerator::copy64_avx(Register dst, Register src, Register index, XMMRe
 //   disjoint_byte_copy_entry is set to the no-overlap entry point
 //   used by generate_conjoint_byte_copy().
 //
-address StubGenerator::generate_disjoint_byte_copy(bool aligned, address* entry, const char *name) {
+address StubGenerator::generate_disjoint_byte_copy(bool aligned, address* entry, const char *stub_name) {
+  int stubId = StubRoutines::StubID::jbyte_disjoint_arraycopy_id;
+  LOAD_STUB_ARCHIVE_DATA
+
 #if COMPILER2_OR_JVMCI
   if (VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize  >= 32) {
-     return generate_disjoint_copy_avx3_masked(entry, "jbyte_disjoint_arraycopy_avx3", 0,
+     return generate_disjoint_copy_avx3_masked(stubId, entry, "jbyte_disjoint_arraycopy_avx3", 0,
                                                aligned, false, false);
   }
 #endif
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
+
   DecoratorSet decorators = IN_HEAP | IS_ARRAY | ARRAYCOPY_DISJOINT;
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes, L_copy_2_bytes;
@@ -1377,6 +1412,14 @@ __ BIND(L_exit);
     copy_bytes_forward(end_from, end_to, qword_count, rax, r10, L_copy_bytes, L_copy_8_bytes, decorators, T_BYTE);
     __ jmp(L_copy_4_bytes);
   }
+
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -1397,16 +1440,21 @@ __ BIND(L_exit);
 // and stored atomically.
 //
 address StubGenerator::generate_conjoint_byte_copy(bool aligned, address nooverlap_target,
-                                                   address* entry, const char *name) {
+                                                   address* entry, const char *stub_name) {
+  int stubId = StubRoutines::StubID::jbyte_arraycopy_id;
+  LOAD_STUB_ARCHIVE_DATA
+
 #if COMPILER2_OR_JVMCI
   if (VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize  >= 32) {
-     return generate_conjoint_copy_avx3_masked(entry, "jbyte_conjoint_arraycopy_avx3", 0,
+     return generate_conjoint_copy_avx3_masked(stubId, entry, "jbyte_conjoint_arraycopy_avx3", 0,
                                                nooverlap_target, aligned, false, false);
   }
 #endif
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
+
   DecoratorSet decorators = IN_HEAP | IS_ARRAY;
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes, L_copy_2_bytes;
@@ -1487,6 +1535,13 @@ address StubGenerator::generate_conjoint_byte_copy(bool aligned, address nooverl
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -1510,17 +1565,22 @@ address StubGenerator::generate_conjoint_byte_copy(bool aligned, address nooverl
 //   disjoint_short_copy_entry is set to the no-overlap entry point
 //   used by generate_conjoint_short_copy().
 //
-address StubGenerator::generate_disjoint_short_copy(bool aligned, address *entry, const char *name) {
+address StubGenerator::generate_disjoint_short_copy(bool aligned, address *entry, const char *stub_name) {
+  int stubId = StubRoutines::StubID::jshort_disjoint_arraycopy_id;
+  LOAD_STUB_ARCHIVE_DATA
+
 #if COMPILER2_OR_JVMCI
   if (VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize  >= 32) {
-     return generate_disjoint_copy_avx3_masked(entry, "jshort_disjoint_arraycopy_avx3", 1,
+     return generate_disjoint_copy_avx3_masked(stubId, entry, "jshort_disjoint_arraycopy_avx3", 1,
                                                aligned, false, false);
   }
 #endif
 
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
+
   DecoratorSet decorators = IN_HEAP | IS_ARRAY | ARRAYCOPY_DISJOINT;
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes,L_copy_2_bytes,L_exit;
@@ -1602,13 +1662,22 @@ __ BIND(L_exit);
     __ jmp(L_copy_4_bytes);
   }
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
 
-address StubGenerator::generate_fill(BasicType t, bool aligned, const char *name) {
+address StubGenerator::generate_fill(int stubId, BasicType t, bool aligned, const char *stub_name) {
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   BLOCK_COMMENT("Entry:");
@@ -1625,6 +1694,8 @@ address StubGenerator::generate_fill(BasicType t, bool aligned, const char *name
   __ vzeroupper();
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -1646,16 +1717,21 @@ address StubGenerator::generate_fill(BasicType t, bool aligned, const char *name
 // and stored atomically.
 //
 address StubGenerator::generate_conjoint_short_copy(bool aligned, address nooverlap_target,
-                                                    address *entry, const char *name) {
+                                                    address *entry, const char *stub_name) {
+  int stubId = StubRoutines::StubID::jshort_arraycopy_id;
+  LOAD_STUB_ARCHIVE_DATA
+
 #if COMPILER2_OR_JVMCI
   if (VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize  >= 32) {
-     return generate_conjoint_copy_avx3_masked(entry, "jshort_conjoint_arraycopy_avx3", 1,
+     return generate_conjoint_copy_avx3_masked(stubId, entry, "jshort_conjoint_arraycopy_avx3", 1,
                                                nooverlap_target, aligned, false, false);
   }
 #endif
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
+
   DecoratorSet decorators = IN_HEAP | IS_ARRAY;
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes;
@@ -1728,6 +1804,13 @@ address StubGenerator::generate_conjoint_short_copy(bool aligned, address noover
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -1751,18 +1834,21 @@ address StubGenerator::generate_conjoint_short_copy(bool aligned, address noover
 //   disjoint_int_copy_entry is set to the no-overlap entry point
 //   used by generate_conjoint_int_oop_copy().
 //
-address StubGenerator::generate_disjoint_int_oop_copy(bool aligned, bool is_oop, address* entry,
-                                                      const char *name, bool dest_uninitialized) {
+address StubGenerator::generate_disjoint_int_oop_copy(int stubId, bool aligned, bool is_oop, address* entry,
+                                                      const char *stub_name, bool dest_uninitialized) {
+  LOAD_STUB_ARCHIVE_DATA
+
   BarrierSetAssembler *bs = BarrierSet::barrier_set()->barrier_set_assembler();
 #if COMPILER2_OR_JVMCI
   if ((!is_oop || bs->supports_avx3_masked_arraycopy()) && VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize  >= 32) {
-     return generate_disjoint_copy_avx3_masked(entry, "jint_disjoint_arraycopy_avx3", 2,
+     return generate_disjoint_copy_avx3_masked(stubId, entry, "jint_disjoint_arraycopy_avx3", 2,
                                                aligned, is_oop, dest_uninitialized);
   }
 #endif
 
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
 
   Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes, L_exit;
@@ -1843,6 +1929,13 @@ __ BIND(L_exit);
     __ jmp(L_copy_4_bytes);
   }
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -1862,18 +1955,21 @@ __ BIND(L_exit);
 // the hardware handle it.  The two dwords within qwords that span
 // cache line boundaries will still be loaded and stored atomically.
 //
-address StubGenerator::generate_conjoint_int_oop_copy(bool aligned, bool is_oop, address nooverlap_target,
-                                                      address *entry, const char *name,
+address StubGenerator::generate_conjoint_int_oop_copy(int stubId, bool aligned, bool is_oop, address nooverlap_target,
+                                                      address *entry, const char *stub_name,
                                                       bool dest_uninitialized) {
+  LOAD_STUB_ARCHIVE_DATA
+
   BarrierSetAssembler *bs = BarrierSet::barrier_set()->barrier_set_assembler();
 #if COMPILER2_OR_JVMCI
   if ((!is_oop || bs->supports_avx3_masked_arraycopy()) && VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize  >= 32) {
-     return generate_conjoint_copy_avx3_masked(entry, "jint_conjoint_arraycopy_avx3", 2,
+     return generate_conjoint_copy_avx3_masked(stubId, entry, "jint_conjoint_arraycopy_avx3", 2,
                                                nooverlap_target, aligned, is_oop, dest_uninitialized);
   }
 #endif
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
 
   Label L_copy_bytes, L_copy_8_bytes, L_exit;
@@ -1958,6 +2054,13 @@ __ BIND(L_exit);
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -1977,17 +2080,20 @@ __ BIND(L_exit);
 //   disjoint_oop_copy_entry or disjoint_long_copy_entry is set to the
 //   no-overlap entry point used by generate_conjoint_long_oop_copy().
 //
-address StubGenerator::generate_disjoint_long_oop_copy(bool aligned, bool is_oop, address *entry,
-                                                       const char *name, bool dest_uninitialized) {
+address StubGenerator::generate_disjoint_long_oop_copy(int stubId, bool aligned, bool is_oop, address *entry,
+                                                       const char *stub_name, bool dest_uninitialized) {
+  LOAD_STUB_ARCHIVE_DATA
+
   BarrierSetAssembler *bs = BarrierSet::barrier_set()->barrier_set_assembler();
 #if COMPILER2_OR_JVMCI
   if ((!is_oop || bs->supports_avx3_masked_arraycopy()) && VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize >= 32) {
-     return generate_disjoint_copy_avx3_masked(entry, "jlong_disjoint_arraycopy_avx3", 3,
+     return generate_disjoint_copy_avx3_masked(stubId, entry, "jlong_disjoint_arraycopy_avx3", 3,
                                                aligned, is_oop, dest_uninitialized);
   }
 #endif
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
 
   Label L_copy_bytes, L_copy_8_bytes, L_exit;
@@ -2074,6 +2180,13 @@ address StubGenerator::generate_disjoint_long_oop_copy(bool aligned, bool is_oop
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -2089,18 +2202,21 @@ address StubGenerator::generate_disjoint_long_oop_copy(bool aligned, bool is_oop
 //   c_rarg1   - destination array address
 //   c_rarg2   - element count, treated as ssize_t, can be zero
 //
-address StubGenerator::generate_conjoint_long_oop_copy(bool aligned, bool is_oop, address nooverlap_target,
-                                                       address *entry, const char *name,
+address StubGenerator::generate_conjoint_long_oop_copy(int stubId, bool aligned, bool is_oop, address nooverlap_target,
+                                                       address *entry, const char *stub_name,
                                                        bool dest_uninitialized) {
+  LOAD_STUB_ARCHIVE_DATA
+
   BarrierSetAssembler *bs = BarrierSet::barrier_set()->barrier_set_assembler();
 #if COMPILER2_OR_JVMCI
   if ((!is_oop || bs->supports_avx3_masked_arraycopy()) && VM_Version::supports_avx512vlbw() && VM_Version::supports_bmi2() && MaxVectorSize  >= 32) {
-     return generate_conjoint_copy_avx3_masked(entry, "jlong_conjoint_arraycopy_avx3", 3,
+     return generate_conjoint_copy_avx3_masked(stubId, entry, "jlong_conjoint_arraycopy_avx3", 3,
                                                nooverlap_target, aligned, is_oop, dest_uninitialized);
   }
 #endif
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
 
   Label L_copy_bytes, L_copy_8_bytes, L_exit;
@@ -2178,6 +2294,13 @@ address StubGenerator::generate_conjoint_long_oop_copy(bool aligned, bool is_oop
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -2219,7 +2342,9 @@ void StubGenerator::generate_type_check(Register sub_klass,
 //    rax ==  0  -  success
 //    rax == -1^K - failure, where K is partial transfer count
 //
-address StubGenerator::generate_checkcast_copy(const char *name, address *entry, bool dest_uninitialized) {
+address StubGenerator::generate_checkcast_copy(const char *stub_name, address *entry, bool dest_uninitialized) {
+  int stubId = dest_uninitialized ? StubRoutines::StubID::checkcast_arraycopy_uninit_id : StubRoutines::StubID::checkcast_arraycopy_id;
+  LOAD_STUB_ARCHIVE_DATA
 
   Label L_load_element, L_store_element, L_do_card_marks, L_done;
 
@@ -2249,7 +2374,7 @@ address StubGenerator::generate_checkcast_copy(const char *name, address *entry,
   // checked.
 
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ enter(); // required for proper stackwalking of RuntimeStub frame
@@ -2409,6 +2534,13 @@ address StubGenerator::generate_checkcast_copy(const char *name, address *entry,
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  if (entry != nullptr) {
+    address entry_address_1 = *entry;
+    SETUP_STUB_ARCHIVE_DATA_1
+  } else {
+    SETUP_STUB_ARCHIVE_DATA
+  }
+
   return start;
 }
 
@@ -2425,9 +2557,11 @@ address StubGenerator::generate_checkcast_copy(const char *name, address *entry,
 // Examines the alignment of the operands and dispatches
 // to a long, int, short, or byte copy loop.
 //
-address StubGenerator::generate_unsafe_copy(const char *name,
+address StubGenerator::generate_unsafe_copy(const char *stub_name,
                                             address byte_copy_entry, address short_copy_entry,
                                             address int_copy_entry, address long_copy_entry) {
+  int stubId = StubRoutines::StubID::unsafe_arraycopy_id;
+  LOAD_STUB_ARCHIVE_DATA
 
   Label L_long_aligned, L_int_aligned, L_short_aligned;
 
@@ -2440,7 +2574,7 @@ address StubGenerator::generate_unsafe_copy(const char *name,
   const Register bits        = rax;      // test copy of low bits
 
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ enter(); // required for proper stackwalking of RuntimeStub frame
@@ -2472,6 +2606,8 @@ address StubGenerator::generate_unsafe_copy(const char *name,
   __ BIND(L_long_aligned);
   __ shrptr(size, LogBytesPerLong); // size => qword_count
   __ jump(RuntimeAddress(long_copy_entry));
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -2526,10 +2662,12 @@ void StubGenerator::arraycopy_range_checks(Register src,     // source array oop
 //    rax ==  0  -  success
 //    rax == -1^K - failure, where K is partial transfer count
 //
-address StubGenerator::generate_generic_copy(const char *name,
+address StubGenerator::generate_generic_copy(const char *stub_name,
                                              address byte_copy_entry, address short_copy_entry,
                                              address int_copy_entry, address oop_copy_entry,
                                              address long_copy_entry, address checkcast_copy_entry) {
+  int stubId = StubRoutines::StubID::generic_arraycopy_id;
+  LOAD_STUB_ARCHIVE_DATA
 
   Label L_failed, L_failed_0, L_objArray;
   Label L_copy_shorts, L_copy_ints, L_copy_longs;
@@ -2553,7 +2691,7 @@ address StubGenerator::generate_generic_copy(const char *name,
     if (advance < 0)  advance += modulus;
     if (advance > 0)  __ nop(advance);
   }
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
 
   // Short-hop target to L_failed.  Makes for denser prologue code.
   __ BIND(L_failed_0);
@@ -2562,6 +2700,7 @@ address StubGenerator::generate_generic_copy(const char *name,
 
   __ align(CodeEntryAlignment);
   address start = __ pc();
+
 
   __ enter(); // required for proper stackwalking of RuntimeStub frame
 
@@ -2833,6 +2972,8 @@ __ BIND(L_failed);
   __ notptr(rax); // return -1
   __ leave();   // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }

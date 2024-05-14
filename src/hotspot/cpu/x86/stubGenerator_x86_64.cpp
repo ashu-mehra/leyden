@@ -186,11 +186,15 @@ enum call_stub_layout {
 #endif // _WIN64
 
 address StubGenerator::generate_call_stub(address& return_address) {
-
   assert((int)frame::entry_frame_after_call_words == -(int)rsp_after_call_off + 1 &&
          (int)frame::entry_frame_call_wrapper_offset == (int)call_wrapper_off,
          "adjust this code");
-  StubCodeMark mark(this, "StubRoutines", "call_stub");
+  int stubId = StubRoutines::StubID::call_stub_id;
+  const char* stub_name = "call_stub";
+  LOAD_STUB_ARCHIVE_DATA_1(return_address)
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
 
   // same as in generate_catch_exception()!
@@ -399,6 +403,11 @@ address StubGenerator::generate_call_stub(address& return_address) {
   __ movdbl(Address(c_rarg0, 0), xmm0);
   __ jmp(exit);
 
+  {
+    address entry_address_1 = return_address;
+    SETUP_STUB_ARCHIVE_DATA_1
+  }
+
   return start;
 }
 
@@ -415,7 +424,11 @@ address StubGenerator::generate_call_stub(address& return_address) {
 // rax: exception oop
 
 address StubGenerator::generate_catch_exception() {
-  StubCodeMark mark(this, "StubRoutines", "catch_exception");
+  int stubId = StubRoutines::StubID::catch_exception_id;
+  const char* stub_name = "catch_exception";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   // same as in generate_call_stub():
@@ -447,6 +460,7 @@ address StubGenerator::generate_catch_exception() {
 
   __ movptr(Address(r15_thread, Thread::pending_exception_offset()), rax);
   __ lea(rscratch1, ExternalAddress((address)__FILE__));
+  SCCache::add_C_string(__FILE__);
   __ movptr(Address(r15_thread, Thread::exception_file_offset()), rscratch1);
   __ movl(Address(r15_thread, Thread::exception_line_offset()), (int)  __LINE__);
 
@@ -454,6 +468,8 @@ address StubGenerator::generate_catch_exception() {
   assert(StubRoutines::_call_stub_return_address != nullptr,
          "_call_stub_return_address must have been generated before");
   __ jump(RuntimeAddress(StubRoutines::_call_stub_return_address));
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -470,7 +486,11 @@ address StubGenerator::generate_catch_exception() {
 // NOTE: At entry of this stub, exception-pc must be on stack !!
 
 address StubGenerator::generate_forward_exception() {
-  StubCodeMark mark(this, "StubRoutines", "forward exception");
+  int stubId = StubRoutines::StubID::forward_exception_id;
+  const char* stub_name = "forward exception";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   // Upon entry, the sp points to the return address returning into
@@ -524,6 +544,8 @@ address StubGenerator::generate_forward_exception() {
   __ verify_oop(rax);
   __ jmp(rbx);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -533,11 +555,17 @@ address StubGenerator::generate_forward_exception() {
 //
 // Result:
 address StubGenerator::generate_orderaccess_fence() {
-  StubCodeMark mark(this, "StubRoutines", "orderaccess_fence");
+  int stubId = StubRoutines::StubID::orderaccess_fence_id;
+  const char* stub_name = "orderaccess_fence";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ membar(Assembler::StoreLoad);
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -548,12 +576,18 @@ address StubGenerator::generate_orderaccess_fence() {
 // This routine is used to find the previous stack pointer for the
 // caller.
 address StubGenerator::generate_get_previous_sp() {
-  StubCodeMark mark(this, "StubRoutines", "get_previous_sp");
+  int stubId = StubRoutines::StubID::get_previous_sp_id;
+  const char* stub_name = "get_previous_sp";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ movptr(rax, rsp);
   __ addptr(rax, 8); // return address is at the top of the stack.
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -566,7 +600,11 @@ address StubGenerator::generate_get_previous_sp() {
 // MXCSR register to our expected state.
 
 address StubGenerator::generate_verify_mxcsr() {
-  StubCodeMark mark(this, "StubRoutines", "verify_mxcsr");
+  int stubId = StubRoutines::StubID::verify_mxcsr_id;
+  const char* stub_name = "verify_mxcsr";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   const Address mxcsr_save(rsp, 0);
@@ -593,11 +631,18 @@ address StubGenerator::generate_verify_mxcsr() {
 
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_f2i_fixup() {
-  StubCodeMark mark(this, "StubRoutines", "f2i_fixup");
+  int stubId = StubRoutines::StubID::f2i_fixup_id;
+  const char* stub_name = "f2i_fixup";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   Address inout(rsp, 5 * wordSize); // return address + 4 saves
 
   address start = __ pc();
@@ -631,11 +676,18 @@ address StubGenerator::generate_f2i_fixup() {
 
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_f2l_fixup() {
-  StubCodeMark mark(this, "StubRoutines", "f2l_fixup");
+  int stubId = StubRoutines::StubID::f2l_fixup_id;
+  const char* stub_name = "f2l_fixup";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   Address inout(rsp, 5 * wordSize); // return address + 4 saves
   address start = __ pc();
 
@@ -668,11 +720,18 @@ address StubGenerator::generate_f2l_fixup() {
 
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_d2i_fixup() {
-  StubCodeMark mark(this, "StubRoutines", "d2i_fixup");
+  int stubId = StubRoutines::StubID::d2i_fixup_id;
+  const char* stub_name = "d2i_fixup";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   Address inout(rsp, 6 * wordSize); // return address + 5 saves
 
   address start = __ pc();
@@ -715,11 +774,18 @@ address StubGenerator::generate_d2i_fixup() {
 
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_d2l_fixup() {
-  StubCodeMark mark(this, "StubRoutines", "d2l_fixup");
+  int stubId = StubRoutines::StubID::d2l_fixup_id;
+  const char* stub_name = "d2l_fixup";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+
   Address inout(rsp, 6 * wordSize); // return address + 5 saves
 
   address start = __ pc();
@@ -762,10 +828,15 @@ address StubGenerator::generate_d2l_fixup() {
 
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_count_leading_zeros_lut(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_count_leading_zeros_lut_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -778,11 +849,16 @@ address StubGenerator::generate_count_leading_zeros_lut(const char *stub_name) {
   __ emit_data64(0x0000000000000000, relocInfo::none);
   __ emit_data64(0x0101010102020304, relocInfo::none);
   __ emit_data64(0x0000000000000000, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
 
 address StubGenerator::generate_popcount_avx_lut(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_popcount_lut_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -796,13 +872,19 @@ address StubGenerator::generate_popcount_avx_lut(const char *stub_name) {
   __ emit_data64(0x0302020102010100, relocInfo::none);
   __ emit_data64(0x0403030203020201, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_iota_indices(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_iota_indices_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
+
   // B
   __ emit_data64(0x0706050403020100, relocInfo::none);
   __ emit_data64(0x0F0E0D0C0B0A0908, relocInfo::none);
@@ -857,10 +939,16 @@ address StubGenerator::generate_iota_indices(const char *stub_name) {
   __ emit_data64(0x4014000000000000, relocInfo::none); // 5.0d
   __ emit_data64(0x4018000000000000, relocInfo::none); // 6.0d
   __ emit_data64(0x401c000000000000, relocInfo::none); // 7.0d
+
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_vector_reverse_bit_lut(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_reverse_bit_lut_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -873,11 +961,16 @@ address StubGenerator::generate_vector_reverse_bit_lut(const char *stub_name) {
   __ emit_data64(0x0F070B030D050901, relocInfo::none);
   __ emit_data64(0x0E060A020C040800, relocInfo::none);
   __ emit_data64(0x0F070B030D050901, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
 
 address StubGenerator::generate_vector_reverse_byte_perm_mask_long(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_reverse_byte_perm_mask_long_id;;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -890,11 +983,16 @@ address StubGenerator::generate_vector_reverse_byte_perm_mask_long(const char *s
   __ emit_data64(0x08090A0B0C0D0E0F, relocInfo::none);
   __ emit_data64(0x0001020304050607, relocInfo::none);
   __ emit_data64(0x08090A0B0C0D0E0F, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
 
 address StubGenerator::generate_vector_reverse_byte_perm_mask_int(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_reverse_byte_perm_mask_int_id;;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -907,11 +1005,16 @@ address StubGenerator::generate_vector_reverse_byte_perm_mask_int(const char *st
   __ emit_data64(0x0C0D0E0F08090A0B, relocInfo::none);
   __ emit_data64(0x0405060700010203, relocInfo::none);
   __ emit_data64(0x0C0D0E0F08090A0B, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
 
 address StubGenerator::generate_vector_reverse_byte_perm_mask_short(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_reverse_byte_perm_mask_short_id;;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -924,11 +1027,16 @@ address StubGenerator::generate_vector_reverse_byte_perm_mask_short(const char *
   __ emit_data64(0x0E0F0C0D0A0B0809, relocInfo::none);
   __ emit_data64(0x0607040502030001, relocInfo::none);
   __ emit_data64(0x0E0F0C0D0A0B0809, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
 
 address StubGenerator::generate_vector_byte_shuffle_mask(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_byte_shuffle_mask_id;
+  LOAD_STUB_ARCHIVE_DATA;
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -937,25 +1045,36 @@ address StubGenerator::generate_vector_byte_shuffle_mask(const char *stub_name) 
   __ emit_data64(0x7070707070707070, relocInfo::none);
   __ emit_data64(0xF0F0F0F0F0F0F0F0, relocInfo::none);
   __ emit_data64(0xF0F0F0F0F0F0F0F0, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA;
 
   return start;
 }
 
-address StubGenerator::generate_fp_mask(const char *stub_name, int64_t mask) {
+address StubGenerator::generate_fp_mask(int stubId, const char *stub_name, int64_t mask) {
+  LOAD_STUB_ARCHIVE_DATA;
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
+
   address start = __ pc();
 
   __ emit_data64( mask, relocInfo::none );
   __ emit_data64( mask, relocInfo::none );
+
+  SETUP_STUB_ARCHIVE_DATA;
 
   return start;
 }
 
 address StubGenerator::generate_compress_perm_table(const char *stub_name, int32_t esize) {
+  int stubId = esize == 32 ? StubRoutines::StubID::compress_perm_table32_id : StubRoutines::StubID::compress_perm_table64_id;
+  LOAD_STUB_ARCHIVE_DATA;
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
+
   if (esize == 32) {
     // Loop to generate 256 x 8 int compression permute index table. A row is
     // accessed using 8 bit index computed using vector mask. An entry in
@@ -993,13 +1112,20 @@ address StubGenerator::generate_compress_perm_table(const char *stub_name, int32
       }
     }
   }
+
+  SETUP_STUB_ARCHIVE_DATA;
+
   return start;
 }
 
 address StubGenerator::generate_expand_perm_table(const char *stub_name, int32_t esize) {
+  int stubId = esize == 32 ? StubRoutines::StubID::expand_perm_table32_id : StubRoutines::StubID::expand_perm_table64_id;
+  LOAD_STUB_ARCHIVE_DATA;
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
+
   if (esize == 32) {
     // Loop to generate 256 x 8 int expand permute index table. A row is accessed
     // using 8 bit index computed using vector mask. An entry in a row holds either
@@ -1035,10 +1161,15 @@ address StubGenerator::generate_expand_perm_table(const char *stub_name, int32_t
       }
     }
   }
+
+  SETUP_STUB_ARCHIVE_DATA;
+
   return start;
 }
 
-address StubGenerator::generate_vector_mask(const char *stub_name, int64_t mask) {
+address StubGenerator::generate_vector_mask(int stubId, const char *stub_name, int64_t mask) {
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -1052,10 +1183,15 @@ address StubGenerator::generate_vector_mask(const char *stub_name, int64_t mask)
   __ emit_data64(mask, relocInfo::none);
   __ emit_data64(mask, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_vector_byte_perm_mask(const char *stub_name) {
+  int stubId = StubRoutines::StubID::vector_byte_perm_mask_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -1068,6 +1204,8 @@ address StubGenerator::generate_vector_byte_perm_mask(const char *stub_name) {
   __ emit_data64(0x0000000000000002, relocInfo::none);
   __ emit_data64(0x0000000000000004, relocInfo::none);
   __ emit_data64(0x0000000000000006, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -1089,11 +1227,13 @@ address StubGenerator::generate_vector_fp_mask(const char *stub_name, int64_t ma
   return start;
 }
 
-address StubGenerator::generate_vector_custom_i32(const char *stub_name, Assembler::AvxVectorLen len,
+address StubGenerator::generate_vector_custom_i32(int stubId, const char *stub_name, Assembler::AvxVectorLen len,
                                    int32_t val0, int32_t val1, int32_t val2, int32_t val3,
                                    int32_t val4, int32_t val5, int32_t val6, int32_t val7,
                                    int32_t val8, int32_t val9, int32_t val10, int32_t val11,
                                    int32_t val12, int32_t val13, int32_t val14, int32_t val15) {
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -1119,6 +1259,9 @@ address StubGenerator::generate_vector_custom_i32(const char *stub_name, Assembl
       __ emit_data(val15, relocInfo::none, 0);
     }
   }
+
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -1139,7 +1282,11 @@ address StubGenerator::generate_vector_custom_i32(const char *stub_name, Assembl
 //  * [tos + 8]: saved r10 (rscratch1) - saved by caller
 //  * = popped on exit
 address StubGenerator::generate_verify_oop() {
-  StubCodeMark mark(this, "StubRoutines", "verify_oop");
+  int stubId = StubRoutines::StubID::verify_oop_id;
+  const char* stub_name = "verify_oop";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label exit, error;
@@ -1217,6 +1364,8 @@ address StubGenerator::generate_verify_oop() {
   BLOCK_COMMENT("call MacroAssembler::debug");
   __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, MacroAssembler::debug64)));
   __ hlt();
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -1332,11 +1481,15 @@ void StubGenerator::restore_argument_regs(BasicType type) {
 }
 
 address StubGenerator::generate_data_cache_writeback() {
+  int stubId = StubRoutines::StubID::data_cache_writeback_id;
+  const char* stub_name = "_data_cache_writeback";
+  LOAD_STUB_ARCHIVE_DATA
+
   const Register src        = c_rarg0;  // source address
 
   __ align(CodeEntryAlignment);
 
-  StubCodeMark mark(this, "StubRoutines", "_data_cache_writeback");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
 
   address start = __ pc();
 
@@ -1345,15 +1498,21 @@ address StubGenerator::generate_data_cache_writeback() {
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_data_cache_writeback_sync() {
+  int stubId = StubRoutines::StubID::data_cache_writeback_sync_id;
+  const char* stub_name = "_data_cache_writeback_sync";
+  LOAD_STUB_ARCHIVE_DATA
+
   const Register is_pre    = c_rarg0;  // pre or post sync
 
   __ align(CodeEntryAlignment);
 
-  StubCodeMark mark(this, "StubRoutines", "_data_cache_writeback_sync");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
 
   // pre wbsync is a no-op
   // post wbsync translates to an sfence
@@ -1369,14 +1528,19 @@ address StubGenerator::generate_data_cache_writeback_sync() {
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 // ofs and limit are use for multi-block byte array.
 // int com.sun.security.provider.MD5.implCompress(byte[] b, int ofs)
-address StubGenerator::generate_md5_implCompress(bool multi_block, const char *name) {
+address StubGenerator::generate_md5_implCompress(bool multi_block, const char *stub_name) {
+  int stubId = multi_block ? StubRoutines::StubID::md5_implCompressMB_id : StubRoutines::StubID::md5_implCompress_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   const Register buf_param = r15;
@@ -1407,36 +1571,54 @@ address StubGenerator::generate_md5_implCompress(bool multi_block, const char *n
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
+
 address StubGenerator::generate_upper_word_mask() {
+  int stubId = StubRoutines::StubID::upper_word_mask_id;
+  const char* stub_name = "upper_word_mask";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "upper_word_mask");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ emit_data64(0x0000000000000000, relocInfo::none);
   __ emit_data64(0xFFFFFFFF00000000, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_shuffle_byte_flip_mask() {
+  int stubId = StubRoutines::StubID::shuffle_byte_flip_mask_id;
+  const char* stub_name = "shuffle_byte_flip_mask";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "shuffle_byte_flip_mask");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ emit_data64(0x08090a0b0c0d0e0f, relocInfo::none);
   __ emit_data64(0x0001020304050607, relocInfo::none);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
 
 // ofs and limit are use for multi-block byte array.
 // int com.sun.security.provider.DigestBase.implCompressMultiBlock(byte[] b, int ofs, int limit)
-address StubGenerator::generate_sha1_implCompress(bool multi_block, const char *name) {
+address StubGenerator::generate_sha1_implCompress(bool multi_block, const char *stub_name) {
+  int stubId = multi_block ? StubRoutines::StubID::sha1_implCompressMB_id : StubRoutines::StubID::sha1_implCompress_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Register buf = c_rarg0;
@@ -1466,12 +1648,18 @@ address StubGenerator::generate_sha1_implCompress(bool multi_block, const char *
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_pshuffle_byte_flip_mask() {
+  int stubId = StubRoutines::StubID::pshuffle_byte_flip_mask_id;
+  const char* stub_name = "pshuffle_byte_flip_mask";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "pshuffle_byte_flip_mask");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ emit_data64(0x0405060700010203, relocInfo::none);
@@ -1492,13 +1680,23 @@ address StubGenerator::generate_pshuffle_byte_flip_mask() {
     __ emit_data64(0x0b0a090803020100, relocInfo::none);
   }
 
+  {
+    address entry_address_1 = start+32;
+    address entry_address_2 = start+64;
+    SETUP_STUB_ARCHIVE_DATA_2
+  }
+
   return start;
 }
 
 //Mask for byte-swapping a couple of qwords in an XMM register using (v)pshufb.
 address StubGenerator::generate_pshuffle_byte_flip_mask_sha512() {
+  int stubId = StubRoutines::StubID::pshuffle_byte_flip_mask_sha512_id;
+  const char* stub_name = "pshuffle_byte_flip_mask_sha512";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align32();
-  StubCodeMark mark(this, "StubRoutines", "pshuffle_byte_flip_mask_sha512");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   if (VM_Version::supports_avx2()) {
@@ -1512,15 +1710,23 @@ address StubGenerator::generate_pshuffle_byte_flip_mask_sha512() {
     __ emit_data64(0xFFFFFFFFFFFFFFFF, relocInfo::none);
   }
 
+  {
+    address entry_address_1 = start+32;
+    SETUP_STUB_ARCHIVE_DATA_1
+  }
+
   return start;
 }
 
 // ofs and limit are use for multi-block byte array.
 // int com.sun.security.provider.DigestBase.implCompressMultiBlock(byte[] b, int ofs, int limit)
-address StubGenerator::generate_sha256_implCompress(bool multi_block, const char *name) {
+address StubGenerator::generate_sha256_implCompress(bool multi_block, const char *stub_name) {
+  int stubId = multi_block ? StubRoutines::StubID::sha256_implCompressMB_id : StubRoutines::StubID::sha256_implCompress_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   assert(VM_Version::supports_sha() || VM_Version::supports_avx2(), "");
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Register buf = c_rarg0;
@@ -1556,14 +1762,20 @@ address StubGenerator::generate_sha256_implCompress(bool multi_block, const char
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
-address StubGenerator::generate_sha512_implCompress(bool multi_block, const char *name) {
+address StubGenerator::generate_sha512_implCompress(bool multi_block, const char *stub_name) {
   assert(VM_Version::supports_avx2(), "");
   assert(VM_Version::supports_bmi2(), "");
+
+  int stubId = multi_block ? StubRoutines::StubID::sha512_implCompressMB_id : StubRoutines::StubID::sha512_implCompress_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Register buf = c_rarg0;
@@ -1591,12 +1803,18 @@ address StubGenerator::generate_sha512_implCompress(bool multi_block, const char
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_shuffle_addr() {
+  int stubId = StubRoutines::StubID::shuffle_base64_id;
+  const char* stub_name = "shuffle_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "shuffle_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -1610,12 +1828,18 @@ address StubGenerator::base64_shuffle_addr() {
   __ emit_data64(0x2829272825262425, relocInfo::none);
   __ emit_data64(0x2e2f2d2e2b2c2a2b, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_avx2_shuffle_addr() {
+  int stubId = StubRoutines::StubID::avx2_shuffle_base64_id;
+  const char* stub_name = "avx2_shuffle_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align32();
-  StubCodeMark mark(this, "StubRoutines", "avx2_shuffle_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ emit_data64(0x0809070805060405, relocInfo::none);
@@ -1623,12 +1847,18 @@ address StubGenerator::base64_avx2_shuffle_addr() {
   __ emit_data64(0x0405030401020001, relocInfo::none);
   __ emit_data64(0x0a0b090a07080607, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_avx2_input_mask_addr() {
+  int stubId = StubRoutines::StubID::avx2_input_mask_base64_id;
+  const char* stub_name = "avx2_input_mask_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align32();
-  StubCodeMark mark(this, "StubRoutines", "avx2_input_mask_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ emit_data64(0x8000000000000000, relocInfo::none);
@@ -1636,12 +1866,18 @@ address StubGenerator::base64_avx2_input_mask_addr() {
   __ emit_data64(0x8000000080000000, relocInfo::none);
   __ emit_data64(0x8000000080000000, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_avx2_lut_addr() {
+  int stubId = StubRoutines::StubID::avx2_lut_base64_id;
+  const char* stub_name = "avx2_lut_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align32();
-  StubCodeMark mark(this, "StubRoutines", "avx2_lut_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ emit_data64(0xfcfcfcfcfcfc4741, relocInfo::none);
@@ -1655,12 +1891,18 @@ address StubGenerator::base64_avx2_lut_addr() {
   __ emit_data64(0xfcfcfcfcfcfc4741, relocInfo::none);
   __ emit_data64(0x000020effcfcfcfc, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_encoding_table_addr() {
+  int stubId = StubRoutines::StubID::encoding_table_base64_id;
+  const char* stub_name = "encoding_table_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "encoding_table_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0, "Alignment problem (0x%08llx)", (unsigned long long)start);
@@ -1683,6 +1925,8 @@ address StubGenerator::base64_encoding_table_addr() {
   __ emit_data64(0x333231307a797877, relocInfo::none);
   __ emit_data64(0x5f2d393837363534, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -1692,8 +1936,12 @@ address StubGenerator::base64_encoding_table_addr() {
 // boolean isURL) {
 address StubGenerator::generate_base64_encodeBlock()
 {
+  int stubId = StubRoutines::StubID::base64_encodeBlock_id;
+  const char* stub_name = "implEncode";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "implEncode");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ enter();
@@ -1739,12 +1987,12 @@ address StubGenerator::generate_base64_encodeBlock()
     __ jcc(Assembler::below, L_not512);
 
     __ shll(isURL, 6); // index into decode table based on isURL
-    __ lea(encode_table, ExternalAddress(StubRoutines::x86::base64_encoding_table_addr()));
+    __ lea(encode_table, InternalAddress(StubRoutines::x86::base64_encoding_table_addr()));
     __ addptr(encode_table, isURL);
     __ shrl(isURL, 6); // restore isURL
 
     __ mov64(rax, 0x3036242a1016040aull); // Shifts
-    __ evmovdquq(xmm3, ExternalAddress(StubRoutines::x86::base64_shuffle_addr()), Assembler::AVX_512bit, r15);
+    __ evmovdquq(xmm3, InternalAddress(StubRoutines::x86::base64_shuffle_addr()), Assembler::AVX_512bit, r15);
     __ evmovdquq(xmm2, Address(encode_table, 0), Assembler::AVX_512bit);
     __ evpbroadcastq(xmm1, rax, Assembler::AVX_512bit);
 
@@ -1785,11 +2033,11 @@ address StubGenerator::generate_base64_encodeBlock()
     __ jcc(Assembler::belowEqual, L_process3);
 
     // Set up supporting constant table data
-    __ vmovdqu(xmm9, ExternalAddress(StubRoutines::x86::base64_avx2_shuffle_addr()), rax);
+    __ vmovdqu(xmm9, InternalAddress(StubRoutines::x86::base64_avx2_shuffle_addr()), rax);
     // 6-bit mask for 2nd and 4th (and multiples) 6-bit values
     __ movl(rax, 0x0fc0fc00);
     __ movdl(xmm8, rax);
-    __ vmovdqu(xmm1, ExternalAddress(StubRoutines::x86::base64_avx2_input_mask_addr()), rax);
+    __ vmovdqu(xmm1, InternalAddress(StubRoutines::x86::base64_avx2_input_mask_addr()), rax);
     __ vpbroadcastd(xmm8, xmm8, Assembler::AVX_256bit);
 
     // Multiplication constant for "shifting" right by 6 and 10
@@ -1935,7 +2183,7 @@ address StubGenerator::generate_base64_encodeBlock()
     __ vpsubb(xmm1, xmm1, xmm2, Assembler::AVX_256bit);
 
     // Load the proper lookup table
-    __ lea(r11, ExternalAddress(StubRoutines::x86::base64_avx2_lut_addr()));
+    __ lea(r11, InternalAddress(StubRoutines::x86::base64_avx2_lut_addr()));
     __ movl(r15, isURL);
     __ shll(r15, 5);
     __ vmovdqu(xmm2, Address(r11, r15));
@@ -1996,7 +2244,7 @@ address StubGenerator::generate_base64_encodeBlock()
   __ jcc(Assembler::below, L_exit);
 
   // Load the encoding table based on isURL
-  __ lea(r11, ExternalAddress(StubRoutines::x86::base64_encoding_table_addr()));
+  __ lea(r11, InternalAddress(StubRoutines::x86::base64_encoding_table_addr()));
   __ movl(r15, isURL);
   __ shll(r15, 6);
   __ addptr(r11, r15);
@@ -2069,13 +2317,19 @@ address StubGenerator::generate_base64_encodeBlock()
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 // base64 AVX512vbmi tables
 address StubGenerator::base64_vbmi_lookup_lo_addr() {
+  int stubId = StubRoutines::StubID::lookup_lo_base64_id;
+  const char* stub_name = "lookup_lo_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "lookup_lo_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2089,12 +2343,18 @@ address StubGenerator::base64_vbmi_lookup_lo_addr() {
   __ emit_data64(0x3b3a393837363534, relocInfo::none);
   __ emit_data64(0x8080808080803d3c, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_vbmi_lookup_hi_addr() {
+  int stubId = StubRoutines::StubID::lookup_hi_base64_id;
+  const char* stub_name = "lookup_hi_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "lookup_hi_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2108,11 +2368,17 @@ address StubGenerator::base64_vbmi_lookup_hi_addr() {
   __ emit_data64(0x302f2e2d2c2b2a29, relocInfo::none);
   __ emit_data64(0x8080808080333231, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 address StubGenerator::base64_vbmi_lookup_lo_url_addr() {
+  int stubId = StubRoutines::StubID::lookup_lo_base64url_id;
+  const char* stub_name = "lookup_lo_base64url";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "lookup_lo_base64url");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2126,12 +2392,18 @@ address StubGenerator::base64_vbmi_lookup_lo_url_addr() {
   __ emit_data64(0x3b3a393837363534, relocInfo::none);
   __ emit_data64(0x8080808080803d3c, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_vbmi_lookup_hi_url_addr() {
+  int stubId = StubRoutines::StubID::lookup_hi_base64url_id;
+  const char* stub_name = "lookup_hi_base64url";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "lookup_hi_base64url");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2145,12 +2417,18 @@ address StubGenerator::base64_vbmi_lookup_hi_url_addr() {
   __ emit_data64(0x302f2e2d2c2b2a29, relocInfo::none);
   __ emit_data64(0x8080808080333231, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_vbmi_pack_vec_addr() {
+  int stubId = StubRoutines::StubID::pack_vec_base64_id;
+  const char* stub_name = "pack_vec_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "pack_vec_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2164,12 +2442,18 @@ address StubGenerator::base64_vbmi_pack_vec_addr() {
   __ emit_data64(0x0000000000000000, relocInfo::none);
   __ emit_data64(0x0000000000000000, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_vbmi_join_0_1_addr() {
+  int stubId = StubRoutines::StubID::join_0_1_base64_id;
+  const char* stub_name = "join_0_1_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "join_0_1_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2183,12 +2467,18 @@ address StubGenerator::base64_vbmi_join_0_1_addr() {
   __ emit_data64(0x494a444546404142, relocInfo::none);
   __ emit_data64(0x565051524c4d4e48, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_vbmi_join_1_2_addr() {
+  int stubId = StubRoutines::StubID::join_1_2_base64_id;
+  const char* stub_name = "join_1_2_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "join_1_2_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2202,12 +2492,18 @@ address StubGenerator::base64_vbmi_join_1_2_addr() {
   __ emit_data64(0x5c5d5e58595a5455, relocInfo::none);
   __ emit_data64(0x696a646566606162, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_vbmi_join_2_3_addr() {
+  int stubId = StubRoutines::StubID::join_2_3_base64_id;
+  const char* stub_name = "join_2_3_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "join_2_3_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2221,12 +2517,18 @@ address StubGenerator::base64_vbmi_join_2_3_addr() {
   __ emit_data64(0x767071726c6d6e68, relocInfo::none);
   __ emit_data64(0x7c7d7e78797a7475, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_AVX2_decode_tables_addr() {
+  int stubId = StubRoutines::StubID::avx2_decode_tables_base64_id;
+  const char* stub_name = "AVX2_tables_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "AVX2_tables_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2255,12 +2557,18 @@ address StubGenerator::base64_AVX2_decode_tables_addr() {
   // merge multiplier
   __ emit_data(0x00011000, relocInfo::none, 0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_AVX2_decode_LUT_tables_addr() {
+  int stubId = StubRoutines::StubID::avx2_decode_lut_tables_base64_id;
+  const char* stub_name = "AVX2_tables_URL_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align64();
-  StubCodeMark mark(this, "StubRoutines", "AVX2_tables_URL_base64");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   assert(((unsigned long long)start & 0x3f) == 0,
@@ -2295,11 +2603,17 @@ address StubGenerator::base64_AVX2_decode_LUT_tables_addr() {
   __ emit_data64(0x0804080402011010, relocInfo::none);
   __ emit_data64(0x1010101010101010, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::base64_decoding_table_addr() {
-  StubCodeMark mark(this, "StubRoutines", "decoding_table_base64");
+  int stubId = StubRoutines::StubID::decoding_table_base64_id;
+  const char* stub_name = "decoding_table_base64";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ emit_data64(0xffffffffffffffff, relocInfo::none);
@@ -2369,6 +2683,8 @@ address StubGenerator::base64_decoding_table_addr() {
   __ emit_data64(0xffffffffffffffff, relocInfo::none);
   __ emit_data64(0xffffffffffffffff, relocInfo::none);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -2380,8 +2696,12 @@ address StubGenerator::base64_decoding_table_addr() {
 // Intrinsic function prototype in Base64.java:
 // private void decodeBlock(byte[] src, int sp, int sl, byte[] dst, int dp, boolean isURL, isMIME) {
 address StubGenerator::generate_base64_decodeBlock() {
+  int stubId = StubRoutines::StubID::base64_decodeBlock_id;
+  const char* stub_name = "implDecode";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "implDecode");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   __ enter();
@@ -2474,8 +2794,8 @@ address StubGenerator::generate_base64_decodeBlock() {
     __ cmpl(isURL, 0);
     __ jcc(Assembler::notZero, L_loadURL);
 
-    __ evmovdquq(lookup_lo, ExternalAddress(StubRoutines::x86::base64_vbmi_lookup_lo_addr()), Assembler::AVX_512bit, r13);
-    __ evmovdquq(lookup_hi, ExternalAddress(StubRoutines::x86::base64_vbmi_lookup_hi_addr()), Assembler::AVX_512bit, r13);
+    __ evmovdquq(lookup_lo, InternalAddress(StubRoutines::x86::base64_vbmi_lookup_lo_addr()), Assembler::AVX_512bit, r13);
+    __ evmovdquq(lookup_hi, InternalAddress(StubRoutines::x86::base64_vbmi_lookup_hi_addr()), Assembler::AVX_512bit, r13);
 
     __ BIND(L_continue);
 
@@ -2490,9 +2810,9 @@ address StubGenerator::generate_base64_decodeBlock() {
 
     // load masks required for decoding data
     __ BIND(L_processdata);
-    __ evmovdquq(join01, ExternalAddress(StubRoutines::x86::base64_vbmi_join_0_1_addr()), Assembler::AVX_512bit,r13);
-    __ evmovdquq(join12, ExternalAddress(StubRoutines::x86::base64_vbmi_join_1_2_addr()), Assembler::AVX_512bit, r13);
-    __ evmovdquq(join23, ExternalAddress(StubRoutines::x86::base64_vbmi_join_2_3_addr()), Assembler::AVX_512bit, r13);
+    __ evmovdquq(join01, InternalAddress(StubRoutines::x86::base64_vbmi_join_0_1_addr()), Assembler::AVX_512bit,r13);
+    __ evmovdquq(join12, InternalAddress(StubRoutines::x86::base64_vbmi_join_1_2_addr()), Assembler::AVX_512bit, r13);
+    __ evmovdquq(join23, InternalAddress(StubRoutines::x86::base64_vbmi_join_2_3_addr()), Assembler::AVX_512bit, r13);
 
     __ align32();
     __ BIND(L_process256);
@@ -2571,7 +2891,7 @@ address StubGenerator::generate_base64_decodeBlock() {
 
     __ BIND(L_process64);
 
-    __ evmovdquq(pack24bits, ExternalAddress(StubRoutines::x86::base64_vbmi_pack_vec_addr()), Assembler::AVX_512bit, r13);
+    __ evmovdquq(pack24bits, InternalAddress(StubRoutines::x86::base64_vbmi_pack_vec_addr()), Assembler::AVX_512bit, r13);
 
     __ cmpl(length, 63);
     __ jcc(Assembler::lessEqual, L_finalBit);
@@ -2702,8 +3022,8 @@ address StubGenerator::generate_base64_decodeBlock() {
     __ ret(0);
 
     __ BIND(L_loadURL);
-    __ evmovdquq(lookup_lo, ExternalAddress(StubRoutines::x86::base64_vbmi_lookup_lo_url_addr()), Assembler::AVX_512bit, r13);
-    __ evmovdquq(lookup_hi, ExternalAddress(StubRoutines::x86::base64_vbmi_lookup_hi_url_addr()), Assembler::AVX_512bit, r13);
+    __ evmovdquq(lookup_lo, InternalAddress(StubRoutines::x86::base64_vbmi_lookup_lo_url_addr()), Assembler::AVX_512bit, r13);
+    __ evmovdquq(lookup_hi, InternalAddress(StubRoutines::x86::base64_vbmi_lookup_hi_url_addr()), Assembler::AVX_512bit, r13);
     __ jmp(L_continue);
 
     __ BIND(L_padding);
@@ -2737,7 +3057,7 @@ address StubGenerator::generate_base64_decodeBlock() {
     // Encoding and Decoding using AVX2 Instructions".  URL modifications added.
 
     // Set up constants
-    __ lea(r13, ExternalAddress(StubRoutines::x86::base64_AVX2_decode_tables_addr()));
+    __ lea(r13, InternalAddress(StubRoutines::x86::base64_AVX2_decode_tables_addr()));
     __ vpbroadcastd(xmm4, Address(r13, isURL, Address::times_1), Assembler::AVX_256bit);  // 2F or 5F
     __ vpbroadcastd(xmm10, Address(r13, isURL, Address::times_1, 0x08), Assembler::AVX_256bit);  // -1 or -4
     __ vmovdqu(xmm12, Address(r13, 0x10));  // permute
@@ -2745,7 +3065,7 @@ address StubGenerator::generate_base64_decodeBlock() {
     __ vpbroadcastd(xmm7, Address(r13, 0x50), Assembler::AVX_256bit);  // merge
     __ vpbroadcastd(xmm6, Address(r13, 0x54), Assembler::AVX_256bit);  // merge mult
 
-    __ lea(r13, ExternalAddress(StubRoutines::x86::base64_AVX2_decode_LUT_tables_addr()));
+    __ lea(r13, InternalAddress(StubRoutines::x86::base64_AVX2_decode_LUT_tables_addr()));
     __ shll(isURL, 4);
     __ vmovdqu(xmm11, Address(r13, isURL, Address::times_1, 0x00));  // lut_lo
     __ vmovdqu(xmm8, Address(r13, isURL, Address::times_1, 0x20)); // lut_roll
@@ -2841,7 +3161,7 @@ address StubGenerator::generate_base64_decodeBlock() {
   __ jcc(Assembler::lessEqual, L_exit_no_vzero);
 
   __ shll(isURL, 8);    // index into decode table based on isURL
-  __ lea(decode_table, ExternalAddress(StubRoutines::x86::base64_decoding_table_addr()));
+  __ lea(decode_table, InternalAddress(StubRoutines::x86::base64_decoding_table_addr()));
   __ addptr(decode_table, isURL);
 
   __ jmp(L_bottomLoop);
@@ -2895,6 +3215,8 @@ address StubGenerator::generate_base64_decodeBlock() {
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -2913,9 +3235,12 @@ address StubGenerator::generate_base64_decodeBlock() {
 address StubGenerator::generate_updateBytesCRC32() {
   assert(UseCRC32Intrinsics, "need AVX and CLMUL instructions");
 
-  __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "updateBytesCRC32");
+  int stubId = StubRoutines::StubID::updateBytesCRC32_id;
+  const char* stub_name = "updateBytesCRC32";
+  LOAD_STUB_ARCHIVE_DATA
 
+  __ align(CodeEntryAlignment);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
@@ -2951,6 +3276,8 @@ address StubGenerator::generate_updateBytesCRC32() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -2969,8 +3296,12 @@ address StubGenerator::generate_updateBytesCRC32() {
 */
 address StubGenerator::generate_updateBytesCRC32C(bool is_pclmulqdq_supported) {
   assert(UseCRC32CIntrinsics, "need SSE4_2");
+  int stubId = StubRoutines::StubID::updateBytesCRC32C_id;
+  const char* stub_name = "updateBytesCRC32C";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "updateBytesCRC32C");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   //reg.arg        int#0        int#1        int#2        int#3        int#4        int#5        float regs
@@ -3031,6 +3362,8 @@ address StubGenerator::generate_updateBytesCRC32C(bool is_pclmulqdq_supported) {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -3051,13 +3384,13 @@ address StubGenerator::generate_updateBytesCRC32C(bool is_pclmulqdq_supported) {
  *    rsp+48    - z length
  */
 address StubGenerator::generate_multiplyToLen() {
-  __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "multiplyToLen");
-  address start = __ pc();
+  int stubId = StubRoutines::StubID::multiplyToLen_id;
+  const char* stub_name = "multiplyToLen";
+  LOAD_STUB_ARCHIVE_DATA
 
-  if (SCCache::load_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start)) {
-    return start;
-  }
+  __ align(CodeEntryAlignment);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+  address start = __ pc();
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
   // Unix:  rdi, rsi, rdx, rcx, r8, r9 (c_rarg0, c_rarg1, ...)
@@ -3099,7 +3432,8 @@ address StubGenerator::generate_multiplyToLen() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SCCache::store_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start);
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -3116,8 +3450,12 @@ address StubGenerator::generate_multiplyToLen() {
 *        rax   - int >= mismatched index, < 0 bitwise complement of tail
 */
 address StubGenerator::generate_vectorizedMismatch() {
+  int stubId = StubRoutines::StubID::vectorizedMismatch_id;
+  const char* stub_name = "vectorizedMismatch";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "vectorizedMismatch");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   BLOCK_COMMENT("Entry:");
@@ -3152,6 +3490,8 @@ address StubGenerator::generate_vectorizedMismatch() {
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -3166,14 +3506,13 @@ address StubGenerator::generate_vectorizedMismatch() {
  *
  */
 address StubGenerator::generate_squareToLen() {
+  int stubId = StubRoutines::StubID::squareToLen_id;
+  const char* stub_name = "squareToLen";
+  LOAD_STUB_ARCHIVE_DATA
 
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "squareToLen");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
-
-  if (SCCache::load_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start)) {
-    return start;
-  }
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
   // Unix:  rdi, rsi, rdx, rcx (c_rarg0, c_rarg1, ...)
@@ -3202,13 +3541,18 @@ address StubGenerator::generate_squareToLen() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SCCache::store_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start);
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_method_entry_barrier() {
+  int stubId = StubRoutines::StubID::method_entry_barrier_id;
+  const char* stub_name = "nmethod_entry_barrier";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "nmethod_entry_barrier");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label deoptimize_label;
@@ -3279,6 +3623,8 @@ address StubGenerator::generate_method_entry_barrier() {
   __ movptr(rsp, Address(rsp, 0)); // new rsp was written in the barrier
   __ jmp(Address(rsp, -1 * wordSize)); // jmp target should be callers verified_entry_point
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -3296,13 +3642,13 @@ address StubGenerator::generate_method_entry_barrier() {
  *    rsp+40    - k
  */
 address StubGenerator::generate_mulAdd() {
-  __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "mulAdd");
-  address start = __ pc();
+  int stubId = StubRoutines::StubID::mulAdd_id;
+  const char* stub_name = "mulAdd";
+  LOAD_STUB_ARCHIVE_DATA
 
-  if (SCCache::load_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start)) {
-    return start;
-  }
+  __ align(CodeEntryAlignment);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
+  address start = __ pc();
 
   // Win64: rcx, rdx, r8, r9 (c_rarg0, c_rarg1, ...)
   // Unix:  rdi, rsi, rdx, rcx, r8, r9 (c_rarg0, c_rarg1, ...)
@@ -3337,13 +3683,18 @@ address StubGenerator::generate_mulAdd() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SCCache::store_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start);
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_bigIntegerRightShift() {
+  int stubId = StubRoutines::StubID::bigIntegerRightShiftWorker_id;
+  const char* stub_name = "bigIntegerRightShiftWorker";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "bigIntegerRightShiftWorker");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   Label Shift512Loop, ShiftTwo, ShiftTwoLoop, ShiftOne, Exit;
@@ -3460,6 +3811,8 @@ address StubGenerator::generate_bigIntegerRightShift() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -3477,8 +3830,12 @@ address StubGenerator::generate_bigIntegerRightShift() {
  *    rsp40    - numIter
  */
 address StubGenerator::generate_bigIntegerLeftShift() {
+  int stubId = StubRoutines::StubID::bigIntegerLeftShiftWorker_id;
+  const char* stub_name = "bigIntegerLeftShiftWorker";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this,  "StubRoutines", "bigIntegerLeftShiftWorker");
+  StubCodeMark mark(this,  "StubRoutines", stub_name);
   address start = __ pc();
 
   Label Shift512Loop, ShiftTwo, ShiftTwoLoop, ShiftOne, Exit;
@@ -3584,6 +3941,8 @@ address StubGenerator::generate_bigIntegerLeftShift() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
@@ -3623,8 +3982,11 @@ void StubGenerator::generate_libm_stubs() {
 *       xmm0   - float
 */
 address StubGenerator::generate_float16ToFloat() {
-  StubCodeMark mark(this, "StubRoutines", "float16ToFloat");
+  int stubId = StubRoutines::StubID::float16ToFloat_id;
+  const char* stub_name = "float16ToFloat";
+  LOAD_STUB_ARCHIVE_DATA
 
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   BLOCK_COMMENT("Entry:");
@@ -3634,6 +3996,8 @@ address StubGenerator::generate_float16ToFloat() {
   __ flt16_to_flt(xmm0, c_rarg0);
 
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -3648,8 +4012,11 @@ address StubGenerator::generate_float16ToFloat() {
 *        rax   - float16  jshort
 */
 address StubGenerator::generate_floatToFloat16() {
-  StubCodeMark mark(this, "StubRoutines", "floatToFloat16");
+  int stubId = StubRoutines::StubID::floatToFloat16_id;
+  const char* stub_name = "floatToFloat16";
+  LOAD_STUB_ARCHIVE_DATA
 
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   BLOCK_COMMENT("Entry:");
@@ -3660,17 +4027,22 @@ address StubGenerator::generate_floatToFloat16() {
 
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
-address StubGenerator::generate_cont_thaw(const char* label, Continuation::thaw_kind kind) {
+address StubGenerator::generate_cont_thaw(int stubId, const char* stub_name, Continuation::thaw_kind kind) {
   if (!Continuations::enabled()) return nullptr;
+
+  LOAD_STUB_ARCHIVE_DATA
 
   bool return_barrier = Continuation::is_thaw_return_barrier(kind);
   bool return_barrier_exception = Continuation::is_thaw_return_barrier_exception(kind);
 
-  StubCodeMark mark(this, "StubRoutines", label);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
+
 
   // TODO: Handle Valhalla return types. May require generating different return barriers.
 
@@ -3724,7 +4096,7 @@ address StubGenerator::generate_cont_thaw(const char* label, Continuation::thaw_
   Label L_thaw_success;
   __ testptr(rbx, rbx);
   __ jccb(Assembler::notZero, L_thaw_success);
-  __ jump(ExternalAddress(StubRoutines::throw_StackOverflowError_entry()));
+  __ jump(RuntimeAddress(StubRoutines::throw_StackOverflowError_entry()));
   __ bind(L_thaw_success);
 
   // Make room for the thawed frames and align the stack.
@@ -3783,21 +4155,23 @@ address StubGenerator::generate_cont_thaw(const char* label, Continuation::thaw_
     __ ret(0);
   }
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_cont_thaw() {
-  return generate_cont_thaw("Cont thaw", Continuation::thaw_top);
+  return generate_cont_thaw(StubRoutines::StubID::cont_thaw_id, "Cont thaw", Continuation::thaw_top);
 }
 
 // TODO: will probably need multiple return barriers depending on return type
 
 address StubGenerator::generate_cont_returnBarrier() {
-  return generate_cont_thaw("Cont thaw return barrier", Continuation::thaw_return_barrier);
+  return generate_cont_thaw(StubRoutines::StubID::cont_returnBarrier_id, "Cont thaw return barrier", Continuation::thaw_return_barrier);
 }
 
 address StubGenerator::generate_cont_returnBarrier_exception() {
-  return generate_cont_thaw("Cont thaw return barrier exception", Continuation::thaw_return_barrier_exception);
+  return generate_cont_thaw(StubRoutines::StubID::cont_returnBarrierExc_id, "Cont thaw return barrier exception", Continuation::thaw_return_barrier_exception);
 }
 
 #if INCLUDE_JFR
@@ -3994,7 +4368,11 @@ address StubGenerator::generate_throw_exception(const char* name,
 
 // exception handler for upcall stubs
 address StubGenerator::generate_upcall_stub_exception_handler() {
-  StubCodeMark mark(this, "StubRoutines", "upcall stub exception handler");
+  int stubId = StubRoutines::StubID::upcall_stub_exception_handler_id;
+  const char* stub_name = "upcall stub exception handler";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   // native caller has no idea how to handle exceptions
@@ -4007,11 +4385,17 @@ address StubGenerator::generate_upcall_stub_exception_handler() {
   __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, UpcallLinker::handle_uncaught_exception)));
   __ should_not_reach_here();
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 address StubGenerator::generate_lookup_secondary_supers_table_stub(u1 super_klass_index) {
-  StubCodeMark mark(this, "StubRoutines", "lookup_secondary_supers_table");
+  int stubId = StubRoutines::StubID::lookup_secondary_supers_table_index_0_id + super_klass_index;
+  const char* stub_name = "lookup_secondary_supers_table";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
 
   address start = __ pc();
 
@@ -4026,12 +4410,18 @@ address StubGenerator::generate_lookup_secondary_supers_table_stub(u1 super_klas
                                    super_klass_index);
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 // Slow path implementation for UseSecondarySupersTable.
 address StubGenerator::generate_lookup_secondary_supers_table_slow_path_stub() {
-  StubCodeMark mark(this, "StubRoutines", "lookup_secondary_supers_table");
+  int stubId = StubRoutines::StubID::lookup_secondary_supers_table_slow_path_id;
+  const char* stub_name = "lookup_secondary_supers_table";
+  LOAD_STUB_ARCHIVE_DATA
+
+  StubCodeMark mark(this, "StubRoutines", stub_name);
 
   address start = __ pc();
 
@@ -4054,6 +4444,8 @@ address StubGenerator::generate_lookup_secondary_supers_table_slow_path_stub() {
   __ bind(L_success);
   __ movl(result, 0);
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -4104,10 +4496,10 @@ void StubGenerator::generate_initial_stubs() {
   StubRoutines::x86::_d2i_fixup             = generate_d2i_fixup();
   StubRoutines::x86::_d2l_fixup             = generate_d2l_fixup();
 
-  StubRoutines::x86::_float_sign_mask       = generate_fp_mask("float_sign_mask",  0x7FFFFFFF7FFFFFFF);
-  StubRoutines::x86::_float_sign_flip       = generate_fp_mask("float_sign_flip",  0x8000000080000000);
-  StubRoutines::x86::_double_sign_mask      = generate_fp_mask("double_sign_mask", 0x7FFFFFFFFFFFFFFF);
-  StubRoutines::x86::_double_sign_flip      = generate_fp_mask("double_sign_flip", 0x8000000000000000);
+  StubRoutines::x86::_float_sign_mask       = generate_fp_mask(StubRoutines::StubID::float_sign_mask_id, "float_sign_mask",  0x7FFFFFFF7FFFFFFF);
+  StubRoutines::x86::_float_sign_flip       = generate_fp_mask(StubRoutines::StubID::float_sign_flip_id, "float_sign_flip",  0x8000000080000000);
+  StubRoutines::x86::_double_sign_mask      = generate_fp_mask(StubRoutines::StubID::double_sign_mask_id, "double_sign_mask", 0x7FFFFFFFFFFFFFFF);
+  StubRoutines::x86::_double_sign_flip      = generate_fp_mask(StubRoutines::StubID::double_sign_flip_id, "double_sign_flip", 0x8000000000000000);
 
   // Build this early so it's available for the interpreter.
   StubRoutines::_throw_StackOverflowError_entry =
@@ -4120,15 +4512,20 @@ void StubGenerator::generate_initial_stubs() {
                              CAST_FROM_FN_PTR(address,
                                               SharedRuntime::
                                               throw_delayed_StackOverflowError));
+
   if (UseCRC32Intrinsics) {
     // set table address before stub generation which use it
     StubRoutines::_crc_table_adr = (address)StubRoutines::x86::_crc_table;
     StubRoutines::_updateBytesCRC32 = generate_updateBytesCRC32();
   }
 
+
   if (UseCRC32CIntrinsics) {
     bool supports_clmul = VM_Version::supports_clmul();
+#if 0
+    // This block of code is moved to StubRoutines::x86::init_SCAddressTable()
     StubRoutines::x86::generate_CRC32C_table(supports_clmul);
+#endif
     StubRoutines::_crc32c_table_addr = (address)StubRoutines::x86::_crc32c_table;
     StubRoutines::_updateBytesCRC32C = generate_updateBytesCRC32C(supports_clmul);
   }
@@ -4219,25 +4616,25 @@ void StubGenerator::generate_compiler_stubs() {
 
   // Entry points that are C2 compiler specific.
 
-  StubRoutines::x86::_vector_float_sign_mask = generate_vector_mask("vector_float_sign_mask", 0x7FFFFFFF7FFFFFFF);
-  StubRoutines::x86::_vector_float_sign_flip = generate_vector_mask("vector_float_sign_flip", 0x8000000080000000);
-  StubRoutines::x86::_vector_double_sign_mask = generate_vector_mask("vector_double_sign_mask", 0x7FFFFFFFFFFFFFFF);
-  StubRoutines::x86::_vector_double_sign_flip = generate_vector_mask("vector_double_sign_flip", 0x8000000000000000);
-  StubRoutines::x86::_vector_all_bits_set = generate_vector_mask("vector_all_bits_set", 0xFFFFFFFFFFFFFFFF);
-  StubRoutines::x86::_vector_int_mask_cmp_bits = generate_vector_mask("vector_int_mask_cmp_bits", 0x0000000100000001);
-  StubRoutines::x86::_vector_short_to_byte_mask = generate_vector_mask("vector_short_to_byte_mask", 0x00ff00ff00ff00ff);
+  StubRoutines::x86::_vector_float_sign_mask = generate_vector_mask(StubRoutines::StubID::vector_float_sign_mask_id, "vector_float_sign_mask", 0x7FFFFFFF7FFFFFFF);
+  StubRoutines::x86::_vector_float_sign_flip = generate_vector_mask(StubRoutines::StubID::vector_float_sign_flip_id, "vector_float_sign_flip", 0x8000000080000000);
+  StubRoutines::x86::_vector_double_sign_mask = generate_vector_mask(StubRoutines::StubID::vector_double_sign_mask_id, "vector_double_sign_mask", 0x7FFFFFFFFFFFFFFF);
+  StubRoutines::x86::_vector_double_sign_flip = generate_vector_mask(StubRoutines::StubID::vector_double_sign_flip_id, "vector_double_sign_flip", 0x8000000000000000);
+  StubRoutines::x86::_vector_all_bits_set = generate_vector_mask(StubRoutines::StubID::vector_all_bits_set_id, "vector_all_bits_set", 0xFFFFFFFFFFFFFFFF);
+  StubRoutines::x86::_vector_int_mask_cmp_bits = generate_vector_mask(StubRoutines::StubID::vector_int_mask_cmp_bits_id, "vector_int_mask_cmp_bits", 0x0000000100000001);
+  StubRoutines::x86::_vector_short_to_byte_mask = generate_vector_mask(StubRoutines::StubID::vector_short_to_byte_mask_id, "vector_short_to_byte_mask", 0x00ff00ff00ff00ff);
   StubRoutines::x86::_vector_byte_perm_mask = generate_vector_byte_perm_mask("vector_byte_perm_mask");
-  StubRoutines::x86::_vector_int_to_byte_mask = generate_vector_mask("vector_int_to_byte_mask", 0x000000ff000000ff);
-  StubRoutines::x86::_vector_int_to_short_mask = generate_vector_mask("vector_int_to_short_mask", 0x0000ffff0000ffff);
-  StubRoutines::x86::_vector_32_bit_mask = generate_vector_custom_i32("vector_32_bit_mask", Assembler::AVX_512bit,
+  StubRoutines::x86::_vector_int_to_byte_mask = generate_vector_mask(StubRoutines::StubID::vector_int_to_byte_mask_id, "vector_int_to_byte_mask", 0x000000ff000000ff);
+  StubRoutines::x86::_vector_int_to_short_mask = generate_vector_mask(StubRoutines::StubID::vector_int_to_short_mask_id, "vector_int_to_short_mask", 0x0000ffff0000ffff);
+  StubRoutines::x86::_vector_32_bit_mask = generate_vector_custom_i32(StubRoutines::StubID::vector_32_bit_mask_id, "vector_32_bit_mask", Assembler::AVX_512bit,
                                                                       0xFFFFFFFF, 0, 0, 0);
-  StubRoutines::x86::_vector_64_bit_mask = generate_vector_custom_i32("vector_64_bit_mask", Assembler::AVX_512bit,
+  StubRoutines::x86::_vector_64_bit_mask = generate_vector_custom_i32(StubRoutines::StubID::vector_64_bit_mask_id, "vector_64_bit_mask", Assembler::AVX_512bit,
                                                                       0xFFFFFFFF, 0xFFFFFFFF, 0, 0);
-  StubRoutines::x86::_vector_int_shuffle_mask = generate_vector_mask("vector_int_shuffle_mask", 0x0302010003020100);
+  StubRoutines::x86::_vector_int_shuffle_mask = generate_vector_mask(StubRoutines::StubID::vector_int_shuffle_mask_id, "vector_int_shuffle_mask", 0x0302010003020100);
   StubRoutines::x86::_vector_byte_shuffle_mask = generate_vector_byte_shuffle_mask("vector_byte_shuffle_mask");
-  StubRoutines::x86::_vector_short_shuffle_mask = generate_vector_mask("vector_short_shuffle_mask", 0x0100010001000100);
-  StubRoutines::x86::_vector_long_shuffle_mask = generate_vector_mask("vector_long_shuffle_mask", 0x0000000100000000);
-  StubRoutines::x86::_vector_long_sign_mask = generate_vector_mask("vector_long_sign_mask", 0x8000000000000000);
+  StubRoutines::x86::_vector_short_shuffle_mask = generate_vector_mask(StubRoutines::StubID::vector_short_shuffle_mask_id, "vector_short_shuffle_mask", 0x0100010001000100);
+  StubRoutines::x86::_vector_long_shuffle_mask = generate_vector_mask(StubRoutines::StubID::vector_long_shuffle_mask_id, "vector_long_shuffle_mask", 0x0000000100000000);
+  StubRoutines::x86::_vector_long_sign_mask = generate_vector_mask(StubRoutines::StubID::vector_long_sign_mask_id, "vector_long_sign_mask", 0x8000000000000000);
   StubRoutines::x86::_vector_iota_indices = generate_iota_indices("iota_indices");
   StubRoutines::x86::_vector_count_leading_zeros_lut = generate_count_leading_zeros_lut("count_leading_zeros_lut");
   StubRoutines::x86::_vector_reverse_bit_lut = generate_vector_reverse_bit_lut("reverse_bit_lut");
@@ -4449,7 +4846,10 @@ void StubGenerator::generate_compiler_stubs() {
 #endif // COMPILER2_OR_JVMCI
 }
 
-StubGenerator::StubGenerator(CodeBuffer* code, StubsKind kind) : StubCodeGenerator(code) {
+StubGenerator::StubGenerator(CodeBuffer* code,
+                             StubsKind kind,
+                             StubArchiveData* archive_data)
+    : StubCodeGenerator(code, archive_data) {
     DEBUG_ONLY( _regs_in_thread = false; )
     switch(kind) {
     case Initial_stubs:
@@ -4470,8 +4870,31 @@ StubGenerator::StubGenerator(CodeBuffer* code, StubsKind kind) : StubCodeGenerat
     };
 }
 
-void StubGenerator_generate(CodeBuffer* code, StubCodeGenerator::StubsKind kind) {
-  StubGenerator g(code, kind);
+void StubGenerator::libm_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  sin_init_SCAddressTable(external_addresses);
+  tan_init_SCAddressTable(external_addresses);
+  trignometric_init_SCAddressTable(external_addresses);
+  exp_init_SCAddressTable(external_addresses);
+  pow_init_SCAddressTable(external_addresses);
+  log_init_SCAddressTable(external_addresses);
+  fmod_init_SCAddressTable(external_addresses);
+}
+
+void StubGenerator_SCAdressTable_init() {
+  ResourceMark rm;
+  GrowableArray<address> external_addresses;
+  StubRoutines::x86::init_SCAddressTable(external_addresses);
+  StubGenerator::libm_init_SCAddressTable(external_addresses);
+  StubGenerator::aes_init_SCAddressTable(external_addresses);
+  StubGenerator::ghash_init_SCAddressTable(external_addresses);
+  StubGenerator::chacha_init_SCAddressTable(external_addresses);
+  StubGenerator::adler_init_SCAddressTable(external_addresses);
+  StubGenerator::poly_init_SCAddressTable(external_addresses);
+  SCCache::add_external_addresses(external_addresses);
+}
+
+void StubGenerator_generate(CodeBuffer* code, StubCodeGenerator::StubsKind kind, StubArchiveData* archive_data) {
+  StubGenerator g(code, kind, archive_data);
 }
 
 #undef __

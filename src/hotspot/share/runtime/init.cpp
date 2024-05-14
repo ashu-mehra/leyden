@@ -71,6 +71,7 @@ void compilationPolicy_init();
 void codeCache_init();
 void VM_Version_init();
 void initial_stubs_init();
+void stubs_SCAddressTable_init();
 
 jint universe_init();           // depends on codeCache_init and initial_stubs_init
 // depends on universe_init, must be before interpreter_init (currently only on SPARC)
@@ -135,12 +136,14 @@ jint init_globals() {
   MetaspaceShared::open_static_archive();
   codeCache_init();
   VM_Version_init();              // depends on codeCache_init for emitting code
+  SCCache::initialize();
+  SCCache::init1();
+  stubs_SCAddressTable_init();
   initial_stubs_init();
   jint status = universe_init();  // dependent on codeCache_init and
                                   // initial_stubs_init and metaspace_init.
   if (status != JNI_OK)
     return status;
-  SCCache::initialize();
 #ifdef LEAK_SANITIZER
   {
     // Register the Java heap with LSan.

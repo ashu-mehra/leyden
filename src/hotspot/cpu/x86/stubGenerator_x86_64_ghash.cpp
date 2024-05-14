@@ -26,6 +26,7 @@
 #include "precompiled.hpp"
 #include "asm/assembler.hpp"
 #include "asm/assembler.inline.hpp"
+#include "code/SCCache.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "macroAssembler_x86.hpp"
 #include "stubGenerator_x86_64.hpp"
@@ -79,9 +80,13 @@ void StubGenerator::generate_ghash_stubs() {
 
 // Single and multi-block ghash operations.
 address StubGenerator::generate_ghash_processBlocks() {
+  int stubId = StubRoutines::StubID::ghash_processBlocks_id;
+  const char* stub_name = "ghash_processBlocks";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
   Label L_ghash_loop, L_exit;
-  StubCodeMark mark(this, "StubRoutines", "ghash_processBlocks");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   const Register state        = c_rarg0;
@@ -209,15 +214,21 @@ address StubGenerator::generate_ghash_processBlocks() {
   __ leave();
   __ ret(0);
 
+  SETUP_STUB_ARCHIVE_DATA
+
   return start;
 }
 
 
 // Ghash single and multi block operations using AVX instructions
 address StubGenerator::generate_avx_ghash_processBlocks() {
+  int stubId = StubRoutines::StubID::ghash_processBlocks_id;
+  const char* stub_name = "ghash_processBlocks";
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
 
-  StubCodeMark mark(this, "StubRoutines", "ghash_processBlocks");
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   // arguments
@@ -233,6 +244,8 @@ address StubGenerator::generate_avx_ghash_processBlocks() {
   __ pop(rbx);
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
@@ -535,3 +548,10 @@ void StubGenerator::generateHtbl_eight_blocks(Register htbl) {
 }
 
 #undef __
+
+void StubGenerator::ghash_init_SCAddressTable(GrowableArray<address>& external_addresses) {
+  ADD(GHASH_SHUFFLE_MASK)
+  ADD(GHASH_LONG_SWAP_MASK)
+  ADD(GHASH_BYTE_SWAP_MASK)
+  ADD(GHASH_POLYNOMIAL)
+}

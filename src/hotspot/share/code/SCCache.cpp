@@ -47,6 +47,7 @@
 #include "compiler/abstractCompiler.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/compileTask.hpp"
+#include "gc/shared/barrierSetNMethod.hpp"
 #include "gc/g1/g1BarrierSetRuntime.hpp"
 #include "gc/shared/gcConfig.hpp"
 #include "logging/log.hpp"
@@ -55,6 +56,7 @@
 #include "oops/method.inline.hpp"
 #include "oops/trainingData.hpp"
 #include "prims/jvmtiThreadState.hpp"
+#include "prims/upcallLinker.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/flags/flagSetting.hpp"
 #include "runtime/globals_extension.hpp"
@@ -66,6 +68,7 @@
 #include "runtime/stubRoutines.hpp"
 #include "runtime/timerTrace.hpp"
 #include "runtime/threadIdentifier.hpp"
+#include "utilities/elfFile.hpp"
 #include "utilities/ostream.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Runtime1.hpp"
@@ -88,10 +91,37 @@
 #define O_BINARY 0     // otherwise do nothing.
 #endif
 
+#define _extrs_max 1000
+#define _stubs_max 500
+#define _blobs_max 120
+#define _shared_blobs_max 40
+#define _C2_blobs_max 30
+#define _C1_blobs_max (_blobs_max - _shared_blobs_max - _C2_blobs_max)
+#define _all_max 2000
+
+#define SCCACHE_SET_ADDRESS(type, addr)                   \
+  {                                                       \
+    SCCache* cache = SCCache::cache();                    \
+    assert(cache != nullptr, "sanity check");             \
+    SCAddressTable *table = cache->_table;                \
+    table->type##_addr[table->type##_length++] = (address) (addr);      \
+    assert(table->type##_length <= type##_max, "increase sizse");  \
+  }
+
+#define SET_ADDRESS(type, addr)                           \
+  {                                                       \
+    type##_addr[type##_length++] = (address) (addr);      \
+    assert(type##_length <= type##_max, "increase size"); \
+  }
+
 static elapsedTimer _t_totalLoad;
 static elapsedTimer _t_totalRegister;
 static elapsedTimer _t_totalFind;
 static elapsedTimer _t_totalStore;
+
+static address jvm_library_addr = nullptr;
+static address rodata_start = nullptr;
+static address rodata_end = nullptr;
 
 SCCache* SCCache::_cache = nullptr;
 
@@ -128,6 +158,14 @@ void SCCache::initialize() {
   }
 }
 
+void SCCache::init1() {
+  if (!is_on()) {
+    return;
+  }
+  init_extrs_table();
+  init_stubs_table();
+}
+
 void SCCache::init2() {
   if (!is_on()) {
     return;
@@ -141,16 +179,13 @@ void SCCache::init2() {
       log_warning(scc, init)("Can't create Startup Code Cache because card table base address is not relocatable: " INTPTR_FORMAT, p2i(byte_map_base));
       close();
     }
+    SCCACHE_SET_ADDRESS(_extrs, byte_map_base);
   }
   if (!verify_vm_config()) {
     close();
   }
-  // initialize the table of external routines so we can save
-  // generated code blobs that reference them
-  init_extrs_table();
-  // initialize the table of initial stubs so we can save
-  // generated code blobs that reference them
-  init_early_stubs_table();
+
+  SCCACHE_SET_ADDRESS(_stubs, StubRoutines::forward_exception_entry());
 }
 
 void SCCache::print_timers_on(outputStream* st) {
@@ -565,10 +600,10 @@ void SCCache::init_extrs_table() {
   }
 }
 
-void SCCache::init_early_stubs_table() {
+void SCCache::init_stubs_table() {
   SCCache* cache = SCCache::cache();
   if (cache != nullptr && cache->_table != nullptr) {
-    cache->_table->init_early_stubs();
+    cache->_table->init_stubs();
   }
 }
 
@@ -596,6 +631,13 @@ void SCCache::init_c1_table() {
   SCCache* cache = SCCache::cache();
   if (cache != nullptr && cache->_table != nullptr) {
     cache->_table->init_c1();
+  }
+}
+
+void SCCache::set_stubs_complete() {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->set_stubs_complete();
   }
 }
 
@@ -1381,6 +1423,199 @@ bool SCCache::store_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const char* 
   return true;
 }
 
+bool SCCache::load_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const char* name, StubArchiveData& archive_data) {
+#ifdef ASSERT
+  LogStreamHandle(Debug, scc, stubs) log;
+  if (log.is_enabled()) {
+    FlagSetting fs(PrintRelocations, true);
+    buffer->print_on(&log);
+  }
+#endif
+  SCCache* cache = open_for_read();
+  if (cache == nullptr) {
+    return false;
+  }
+  log_info(scc, stubs)("Looking up blob %s (0x%x) in Startup Code Cache '%s'",
+                       name, id, _cache->cache_path());
+
+  SCCEntry* entry = cache->find_entry(SCCEntry::Stub, id);
+  if (entry == nullptr) {
+    return false;
+  }
+
+  SCCReader reader(cache, entry, nullptr);
+  return reader.compile_stubroutines_blob(buffer, name, archive_data);
+}
+
+bool SCCReader::compile_stubroutines_blob(CodeBuffer* buffer, const char* name, StubArchiveData& archive_data) {
+  uint entry_position = _entry->offset();
+
+  // Read name
+  uint name_offset = entry_position + _entry->name_offset();
+  uint name_size = _entry->name_size(); // Includes '/0'
+  const char* stored_name = addr(name_offset);
+
+  log_info(scc, stubs)("Reading blob '%s' from Startup Code Cache '%s'",
+                       name, _cache->cache_path());
+
+  if (strncmp(stored_name, name, (name_size - 1)) != 0) {
+    log_warning(scc)("Saved blob's name '%s' is different from '%s'",
+                     stored_name, name);
+    ((SCCache*)_cache)->set_failed();
+    return false;
+  }
+
+  // Create fake original CodeBuffer
+  CodeBuffer orig_buffer(name);
+
+  // Read code
+  uint code_offset = entry_position + _entry->code_offset();
+  if (!read_code(buffer, &orig_buffer, code_offset)) {
+    return false;
+  }
+
+  uint offset = read_position();
+  int stored_index_table_cnt = *(int *)addr(offset);
+  assert(stored_index_table_cnt == archive_data.index_table_count(),
+         "unexpected size of index table %d, expected %d", stored_index_table_cnt, archive_data.index_table_count());
+  offset += sizeof(int);
+  set_read_position(offset);
+  uint size = stored_index_table_cnt * sizeof(StubAddrIndexInfo);
+  StubAddrIndexInfo* stubs_index_table = archive_data.index_table();
+  if (!read_bytes((char *)stubs_index_table, size)) {
+    return false;
+  }
+
+  offset = read_position();
+  int stubs_address_cnt = *(int*)addr(offset);
+  offset += sizeof(int);
+  address code_start = buffer->insts()->start();
+  GrowableArray<address>* stubs_address_array = archive_data.stubs_address_array();
+  for (int i = 0; i < stubs_address_cnt; i++) {
+    int addr_offset = *(int *)addr(offset);
+    // convert offset to address
+    address addr = code_start + addr_offset;
+    log_info(scc, stubs)("Adding %p to stubs_address_array", addr);
+    stubs_address_array->append(addr);
+    offset += sizeof(int);
+  }
+  set_read_position(offset);
+
+  // Add addresses to the stubs list before reading relocations
+  for (int i = 0; i < stored_index_table_cnt; i++) {
+    int start_addr_index = stubs_index_table[i].start_index();
+    int address_table_count = stubs_index_table[i].count() - 1; // exclude the end addr
+    for (int j = 0; j < address_table_count; j++) {
+      address addr = stubs_address_array->at(start_addr_index + j);
+      SCCache::add_stub_address(addr);
+    }
+  }
+
+  // Read relocations
+  uint reloc_offset = entry_position + _entry->reloc_offset();
+  set_read_position(reloc_offset);
+  if (!read_relocations(buffer, &orig_buffer, nullptr, nullptr)) {
+    return false;
+  }
+
+  log_debug(scc, stubs)("%d (L%d): Read blob '%s' from Startup Code Cache '%s'",
+                       compile_id(), comp_level(), stored_name, _cache->cache_path());
+#ifdef ASSERT
+  LogStreamHandle(Debug, scc, stubs) log;
+  if (log.is_enabled()) {
+    FlagSetting fs(PrintRelocations, true);
+    buffer->print_on(&log);
+    buffer->decode();
+  }
+#endif
+  // mark entry as loaded
+  ((SCCEntry *)_entry)->set_loaded();
+  return true;
+}
+
+bool SCCache::store_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const char* name, StubArchiveData& archive_data) {
+  SCCache* cache = open_for_write();
+  if (cache == nullptr) {
+    return false;
+  }
+  log_info(scc, stubs)("Writing blob '%s' (0x%x) to Startup Code Cache '%s'", name, id, cache->_cache_path);
+
+#ifdef ASSERT
+  LogStreamHandle(Debug, scc, stubs) log;
+  if (log.is_enabled()) {
+    FlagSetting fs(PrintRelocations, true);
+    buffer->print_on(&log);
+    buffer->decode();
+  }
+#endif
+  if (!cache->align_write()) {
+    return false;
+  }
+  uint entry_position = cache->_write_position;
+
+  // Write name
+  uint name_offset = cache->_write_position - entry_position;
+  uint name_size = (uint)strlen(name) + 1; // Includes '/0'
+  uint n = cache->write_bytes(name, name_size);
+  if (n != name_size) {
+    return false;
+  }
+
+  // Write code section
+  if (!cache->align_write()) {
+    return false;
+  }
+  uint code_offset = cache->_write_position - entry_position;
+  uint code_size = 0;
+  if (!cache->write_code(buffer, code_size)) {
+    return false;
+  }
+
+  // write index table
+  int count = archive_data.index_table_count();
+  n = cache->write_bytes(&count, sizeof(int));
+  if (n != sizeof(int)) {
+    return false;
+  }
+  uint size = count * sizeof(StubAddrIndexInfo);
+  n = cache->write_bytes(archive_data.index_table(), size);
+  if (n != size) {
+    return false;
+  }
+
+  // write address array
+  GrowableArray<address>* stubs_address_array = archive_data.stubs_address_array();
+  int stubs_address_cnt = stubs_address_array->length();
+  n = cache->write_bytes(&stubs_address_cnt, sizeof(int));
+  if (n != sizeof(int)) {
+    return false;
+  }
+  address code_start = buffer->insts()->start();
+  for (int i = 0; i < stubs_address_cnt; i++) {
+    // convert address to offset from start of the code section
+    log_info(scc, stubs)("Writing stub address %p to the cache", stubs_address_array->at(i));
+    int offset = stubs_address_array->at(i) - code_start;
+    n = cache->write_bytes(&offset, sizeof(int));
+    if (n != sizeof(int)) {
+      return false;
+    }
+  }
+
+  // Write relocInfo array
+  uint reloc_offset = cache->_write_position - entry_position;
+  uint reloc_size = 0;
+  if (!cache->write_relocations(buffer, reloc_size)) {
+    return false;
+  }
+
+  uint entry_size = cache->_write_position - entry_position;
+  SCCEntry* entry = new(cache) SCCEntry(entry_position, entry_size, name_offset, name_size,
+                                        code_offset, code_size, reloc_offset, reloc_size,
+                                        SCCEntry::Stub, id);
+  log_info(scc, stubs)("Wrote blob '%s' (0x%x) to Startup Code Cache '%s'", name, id, cache->_cache_path);
+  return true;
+}
+
 Klass* SCCReader::read_klass(const methodHandle& comp_method, bool shared) {
   uint code_offset = read_position();
   uint state = *(uint*)addr(code_offset);
@@ -1810,6 +2045,19 @@ bool SCCache::write_method(Method* method) {
   return true;
 }
 
+bool SCCReader::read_bytes(char* buffer, uint nbytes) {
+  assert(_cache->for_read(), "Code Cache file is not opened for reading");
+  if (nbytes == 0) {
+    return true;
+  }
+  uint new_position = _read_position + nbytes;
+  assert(new_position < _cache->load_size(), "offset:%d >= file size:%d", new_position, _cache->load_size());
+  copy_bytes((const char*)(_load_buffer + _read_position), (address) buffer, nbytes);
+  log_trace(scc)("Read %d bytes at offset %d", nbytes, _read_position);
+  set_read_position(new_position);
+  return true;
+}
+
 // Repair the pc relative information in the code after load
 bool SCCReader::read_relocations(CodeBuffer* buffer, CodeBuffer* orig_buffer,
                                  OopRecorder* oop_recorder, ciMethod* target) {
@@ -2006,6 +2254,7 @@ bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code
     address code_start = cs->start();
     copy_bytes(addr(scc_cs[i]._offset + code_offset), code_start, orig_size_align);
     cs->set_end(code_start + orig_size);
+    set_read_position(code_offset + scc_cs[i]._offset + orig_size_align);
   }
 
   return true;
@@ -2233,6 +2482,20 @@ bool SCCache::write_relocations(CodeBuffer* buffer, uint& all_reloc_size) {
           // Record offset of runtime target
           address target = ((external_word_Relocation*)iter.reloc())->target();
           reloc_data[j] = _table->id_for_address(target, iter, buffer);
+#if 0
+          // is target in rodata section (like some constant)
+          if (target >= rodata_start && target <= rodata_end) {
+            // store offset from libjvm.so load address
+            uint offset = jvm_library_addr - target;
+            current_reloc_data[j] = ENCODE_RELOC_DATA(offset, RODATA_TAG);
+	    if (log.is_enabled()) {
+	      log.print_cr("relocation external_word_type target=%p, offset=%x", target, offset);
+	    }
+          } else {
+            uint id = _table->id_for_address(target, iter, buffer);
+            current_reloc_data[j] = ENCODE_RELOC_DATA(id, ID_TAG);
+          }
+#endif
           break;
         }
         case relocInfo::internal_word_type:
@@ -2253,6 +2516,7 @@ bool SCCache::write_relocations(CodeBuffer* buffer, uint& all_reloc_size) {
       }
       if (log.is_enabled()) {
         iter.print_current_on(&log);
+        log.print_cr("Relocation data: %d", reloc_data[j]);
       }
       j++;
     }
@@ -2373,7 +2637,7 @@ bool SCCache::store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const 
 }
 #endif
 
- bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level) {
+bool SCCache::store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level) {
   SCCache* cache = open_for_write();
   if (cache == nullptr) {
     return false;
@@ -3640,24 +3904,43 @@ void SCCReader::print_on(outputStream* st) {
   st->print_cr("  name: %s", name);
 }
 
-#define _extrs_max 120
-#define _stubs_max 120
-#define _blobs_max 120
-#define _shared_blobs_max 40
-#define _C2_blobs_max 30
-#define _C1_blobs_max (_blobs_max - _shared_blobs_max - _C2_blobs_max)
-#define _all_max 340
-
-#define SET_ADDRESS(type, addr)                           \
-  {                                                       \
-    type##_addr[type##_length++] = (address) (addr);      \
-    assert(type##_length <= type##_max, "increase size"); \
-  }
-
 static bool initializing_extrs = false;
+
+void SCCache::add_stub_address(address addr) {
+  SCCACHE_SET_ADDRESS(_stubs, addr);
+}
+
+void SCCache::add_stubs_addresses(GrowableArray<address>* addresses, int start_index, int count) {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->add_stubs_addresses(addresses, start_index, count);
+  }
+}
+
+void SCAddressTable::add_stubs_addresses(GrowableArray<address>* addresses, int start_index, int count) {
+  for (int i = start_index; i < start_index + count; i++) {
+    SET_ADDRESS(_stubs, addresses->at(i));
+  }
+}
+
+void SCCache::add_external_addresses(GrowableArray<address> addresses) {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->add_external_addresses(addresses);
+  }
+}
+
+void SCAddressTable::add_external_addresses(GrowableArray<address> addresses) {
+  for (int i = 0; i < addresses.length(); i++) {
+    SET_ADDRESS(_extrs, addresses.at(i));
+  }
+}
+
 void SCAddressTable::init_extrs() {
   if (_extrs_complete || initializing_extrs) return; // Done already
+
   initializing_extrs = true;
+
   _extrs_addr = NEW_C_HEAP_ARRAY(address, _extrs_max, mtCode);
 
   _extrs_length = 0;
@@ -3666,6 +3949,31 @@ void SCAddressTable::init_extrs() {
   _C1_blobs_length = 0;
   _C2_blobs_length = 0;
   _final_blobs_length = 0; // Depends on numnber of C1 blobs
+
+  // Externals used by initial stubs
+  SET_ADDRESS(_extrs, SharedRuntime::exception_handler_for_return_address); // used by forward_exception
+#if defined(AMD64) || defined(AARCH64) || defined(RISCV64)
+  SET_ADDRESS(_extrs, MacroAssembler::debug64);  // used by many eg forward_exception, call_stub
+#endif // defined(AMD64) || defined(AARCH64) || defined(RISCV64)
+  SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_std()); // used by call_stub
+  SET_ADDRESS(_extrs, CompressedOops::ptrs_base_addr()); // used by call_stub
+  SET_ADDRESS(_extrs, Thread::current); // used by call_stub
+  SET_ADDRESS(_extrs, SharedRuntime::throw_StackOverflowError);
+  SET_ADDRESS(_extrs, SharedRuntime::throw_delayed_StackOverflowError);
+  SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_rz()); // used by libmFmod
+
+#ifndef PRODUCT
+  SET_ADDRESS(_extrs, &SharedRuntime::_jbyte_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_jshort_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_jint_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_jlong_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_oop_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_checkcast_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_unsafe_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_generic_array_copy_ctr); // used by arraycopy stub
+#endif /* PRODUCT */
+
+  SET_ADDRESS(_extrs, UpcallLinker::handle_uncaught_exception); // used by upcall_stub_exception_handler
 
   // Runtime methods
 #ifdef COMPILER2
@@ -3766,10 +4074,6 @@ void SCAddressTable::init_extrs() {
 
   SET_ADDRESS(_extrs, SafepointSynchronize::handle_polling_page_exception);
 
-  BarrierSet* bs = BarrierSet::barrier_set();
-  if (bs->is_a(BarrierSet::CardTableBarrierSet)) {
-    SET_ADDRESS(_extrs, ci_card_table_address_as<address>());
-  }
   SET_ADDRESS(_extrs, ThreadIdentifier::unsafe_offset());
   SET_ADDRESS(_extrs, Thread::current);
 
@@ -3780,7 +4084,6 @@ void SCAddressTable::init_extrs() {
 #endif
 
   SET_ADDRESS(_extrs, &JvmtiVTMSTransitionDisabler::_VTMS_notify_jvmti_events);
-  SET_ADDRESS(_extrs, StubRoutines::crc_table_addr());
 #if defined(AARCH64)
   SET_ADDRESS(_extrs, JavaThread::aarch64_get_thread_helper);
 #endif
@@ -3807,13 +4110,39 @@ void SCAddressTable::init_extrs() {
   log_info(scc,init)("External addresses recorded");
 }
 
+void SCCache::init_table_for_continuation_stubs() {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->init_table_for_continuation_stubs();
+  }
+}
+
+void SCAddressTable::init_table_for_continuation_stubs() {
+  SET_ADDRESS(_stubs, StubRoutines::throw_StackOverflowError_entry()); // used by cont_thaw
+  SET_ADDRESS(_extrs, Continuation::prepare_thaw); // used by cont_thaw
+  SET_ADDRESS(_extrs, Continuation::thaw_entry()); // used by cont_thaw
+}
+
+void SCCache::init_table_for_final_stubs() {
+  SCCache* cache = SCCache::cache();
+  if (cache != nullptr && cache->_table != nullptr) {
+    cache->_table->init_table_for_final_stubs();
+  }
+}
+
+void SCAddressTable::init_table_for_final_stubs() {
+  SET_ADDRESS(_stubs, G1BarrierSetRuntime::write_ref_array_pre_narrow_oop_entry); // used by arraycopy stubs
+  SET_ADDRESS(_extrs, G1BarrierSetRuntime::write_ref_array_pre_oop_entry); // used by arraycopy stubs
+  SET_ADDRESS(_extrs, G1BarrierSetRuntime::write_ref_array_post_entry); // used by arraycopy stubs
+  SET_ADDRESS(_extrs, BarrierSetNMethod::nmethod_stub_entry_barrier); // used by method_entry_barrier
+}
+
 static bool initializing_early_stubs = false;
-void SCAddressTable::init_early_stubs() {
+void SCAddressTable::init_stubs() {
   if (_complete || initializing_early_stubs) return; // Done already
   initializing_early_stubs = true;
   _stubs_addr = NEW_C_HEAP_ARRAY(address, _stubs_max, mtCode);
   _stubs_length = 0;
-  SET_ADDRESS(_stubs, StubRoutines::forward_exception_entry());
   _early_stubs_complete = true;
   log_info(scc,init)("early stubs recorded");
 }
@@ -4131,6 +4460,11 @@ void SCAddressTable::init_c1() {
   log_info(scc,init)("Runtime1 Blobs recorded");
 }
 
+void SCAddressTable::set_stubs_complete() {
+  assert(!_stubs_complete, "must be");
+  _stubs_complete = true;
+}
+
 #undef SET_ADDRESS
 #undef _extrs_max
 #undef _stubs_max
@@ -4335,69 +4669,84 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
   }
   // Seach for C string
   id = id_for_C_string(addr);
-  if (id >=0) {
+  if (id >= 0) {
     return id + _all_max;
   }
-  if (StubRoutines::contains(addr)) {
+
+  if (!_stubs_complete) {
+    // Search in runtime functions
+    id = search_address(addr, _extrs_addr, _extrs_length);
+    if (id >= 0) {
+      return id;
+    }
     // Search in stubs
     id = search_address(addr, _stubs_addr, _stubs_length);
-    if (id < 0) {
-      StubCodeDesc* desc = StubCodeDesc::desc_for(addr);
-      if (desc == nullptr) {
-        desc = StubCodeDesc::desc_for(addr + frame::pc_return_offset);
-      }
-      const char* sub_name = (desc != nullptr) ? desc->name() : "<unknown>";
-      fatal("Address " INTPTR_FORMAT " for Stub:%s is missing in SCA table", p2i(addr), sub_name);
-    } else {
-      id += _extrs_length;
+    if (id >= 0) {
+      return id + _extrs_length;
     }
+    fatal("Address " INTPTR_FORMAT " is missing in SCA table", p2i(addr));
   } else {
-    CodeBlob* cb = CodeCache::find_blob(addr);
-    if (cb != nullptr) {
-      if (!_complete) {
-        fatal("SCA table is not complete (missing stubs)");
-      }
-      // Search in code blobs
-      id = search_address(addr, _blobs_addr, _final_blobs_length);
+    if (StubRoutines::contains(addr)) {
+      // Search in stubs
+      id = search_address(addr, _stubs_addr, _stubs_length);
       if (id < 0) {
-        fatal("Address " INTPTR_FORMAT " for Blob:%s is missing in SCA table", p2i(addr), cb->name());
+	StubCodeDesc* desc = StubCodeDesc::desc_for(addr);
+	if (desc == nullptr) {
+	  desc = StubCodeDesc::desc_for(addr + frame::pc_return_offset);
+	}
+	const char* sub_name = (desc != nullptr) ? desc->name() : "<unknown>";
+	fatal("Address " INTPTR_FORMAT " for Stub:%s is missing in SCA table", p2i(addr), sub_name);
       } else {
-        id += _extrs_length + _stubs_length;
+	id += _extrs_length;
       }
     } else {
-      // Search in runtime functions
-      id = search_address(addr, _extrs_addr, _extrs_length);
-      if (id < 0) {
-        ResourceMark rm;
-        const int buflen = 1024;
-        char* func_name = NEW_RESOURCE_ARRAY(char, buflen);
-        int offset = 0;
-        if (os::dll_address_to_function_name(addr, func_name, buflen, &offset)) {
-          if (offset > 0) {
-            // Could be address of C string
-            uint dist = (uint)pointer_delta(addr, (address)os::init, 1);
-            CompileTask* task = ciEnv::current()->task();
-            uint compile_id = 0;
-            uint comp_level =0;
-            if (task != nullptr) { // this could be called from compiler runtime initialization (compiler blobs)
-              compile_id = task->compile_id();
-              comp_level = task->comp_level();
-            }
-            log_info(scc)("%d (L%d): Address " INTPTR_FORMAT " (offset %d) for runtime target '%s' is missing in SCA table",
-                          compile_id, comp_level, p2i(addr), dist, (const char*)addr);
-            assert(dist > (uint)(_all_max + MAX_STR_COUNT), "change encoding of distance");
-            return dist;
-          }
-          fatal("Address " INTPTR_FORMAT " for runtime target '%s+%d' is missing in SCA table", p2i(addr), func_name, offset);
-        } else {
-          os::print_location(tty, p2i(addr), true);
-          reloc.print_current_on(tty);
+      CodeBlob* cb = CodeCache::find_blob(addr);
+      if (cb != nullptr) {
+	if (!_complete) {
+	  fatal("SCA table is not complete (missing stubs)");
+	}
+	// Search in code blobs
+	id = search_address(addr, _blobs_addr, _final_blobs_length);
+	if (id < 0) {
+	  fatal("Address " INTPTR_FORMAT " for Blob:%s is missing in SCA table", p2i(addr), cb->name());
+	} else {
+	  id += _extrs_length + _stubs_length;
+	}
+      } else {
+	// Search in runtime functions
+	id = search_address(addr, _extrs_addr, _extrs_length);
+	if (id < 0) {
+	  ResourceMark rm;
+	  const int buflen = 1024;
+	  char* func_name = NEW_RESOURCE_ARRAY(char, buflen);
+	  int offset = 0;
+	  if (os::dll_address_to_function_name(addr, func_name, buflen, &offset)) {
+	    if (offset > 0) {
+	      // Could be address of C string
+	      uint dist = (uint)pointer_delta(addr, (address)os::init, 1);
+	      CompileTask* task = ciEnv::current()->task();
+	      uint compile_id = 0;
+	      uint comp_level =0;
+	      if (task != nullptr) { // this could be called from compiler runtime initialization (compiler blobs)
+		compile_id = task->compile_id();
+		comp_level = task->comp_level();
+	      }
+	      log_info(scc)("%d (L%d): Address " INTPTR_FORMAT " (offset %d) for runtime target '%s' is missing in SCA table",
+			    compile_id, comp_level, p2i(addr), dist, (const char*)addr);
+	      assert(dist > (uint)(_all_max + MAX_STR_COUNT), "change encoding of distance");
+	      return dist;
+	    }
+	    fatal("Address " INTPTR_FORMAT " for runtime target '%s+%d' is missing in SCA table", p2i(addr), func_name, offset);
+	  } else {
+	    os::print_location(tty, p2i(addr), true);
+	    reloc.print_current_on(tty);
 #ifndef PRODUCT
-          buffer->print_on(tty);
-          buffer->decode();
+	    buffer->print_on(tty);
+	    buffer->decode();
 #endif // !PRODUCT
-          fatal("Address " INTPTR_FORMAT " for <unknown> is missing in SCA table", p2i(addr));
-        }
+	    fatal("Address " INTPTR_FORMAT " for <unknown> is missing in SCA table", p2i(addr));
+	  }
+	}
       }
     }
   }

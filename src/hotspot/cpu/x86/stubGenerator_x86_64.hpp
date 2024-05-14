@@ -97,19 +97,19 @@ class StubGenerator: public StubCodeGenerator {
   address generate_vector_reverse_byte_perm_mask_short(const char *stub_name);
   address generate_vector_byte_shuffle_mask(const char *stub_name);
 
-  address generate_fp_mask(const char *stub_name, int64_t mask);
+  address generate_fp_mask(int stubId, const char *stub_name, int64_t mask);
 
   address generate_compress_perm_table(const char *stub_name, int32_t esize);
 
   address generate_expand_perm_table(const char *stub_name, int32_t esize);
 
-  address generate_vector_mask(const char *stub_name, int64_t mask);
+  address generate_vector_mask(int stubId, const char *stub_name, int64_t mask);
 
   address generate_vector_byte_perm_mask(const char *stub_name);
 
   address generate_vector_fp_mask(const char *stub_name, int64_t mask);
 
-  address generate_vector_custom_i32(const char *stub_name, Assembler::AvxVectorLen len,
+  address generate_vector_custom_i32(int stubId, const char *stub_name, Assembler::AvxVectorLen len,
                                      int32_t val0, int32_t val1, int32_t val2, int32_t val3,
                                      int32_t val4 = 0, int32_t val5 = 0, int32_t val6 = 0, int32_t val7 = 0,
                                      int32_t val8 = 0, int32_t val9 = 0, int32_t val10 = 0, int32_t val11 = 0,
@@ -179,10 +179,10 @@ class StubGenerator: public StubCodeGenerator {
   // - If user sets AVX3Threshold=0, then special cases for small blocks sizes operate over
   //   64 byte vector registers (ZMMs).
 
-  address generate_disjoint_copy_avx3_masked(address* entry, const char *name, int shift,
+  address generate_disjoint_copy_avx3_masked(int stubId, address* entry, const char *name, int shift,
                                              bool aligned, bool is_oop, bool dest_uninitialized);
 
-  address generate_conjoint_copy_avx3_masked(address* entry, const char *name, int shift,
+  address generate_conjoint_copy_avx3_masked(int stubId, address* entry, const char *name, int shift,
                                              address nooverlap_target, bool aligned, bool is_oop,
                                              bool dest_uninitialized);
 
@@ -232,18 +232,18 @@ class StubGenerator: public StubCodeGenerator {
 
   address generate_disjoint_short_copy(bool aligned, address *entry, const char *name);
 
-  address generate_fill(BasicType t, bool aligned, const char *name);
+  address generate_fill(int stubId, BasicType t, bool aligned, const char *name);
 
   address generate_conjoint_short_copy(bool aligned, address nooverlap_target,
                                        address *entry, const char *name);
-  address generate_disjoint_int_oop_copy(bool aligned, bool is_oop, address* entry,
+  address generate_disjoint_int_oop_copy(int stubId, bool aligned, bool is_oop, address* entry,
                                          const char *name, bool dest_uninitialized = false);
-  address generate_conjoint_int_oop_copy(bool aligned, bool is_oop, address nooverlap_target,
+  address generate_conjoint_int_oop_copy(int stubId, bool aligned, bool is_oop, address nooverlap_target,
                                          address *entry, const char *name,
                                          bool dest_uninitialized = false);
-  address generate_disjoint_long_oop_copy(bool aligned, bool is_oop, address *entry,
+  address generate_disjoint_long_oop_copy(int stubId, bool aligned, bool is_oop, address *entry,
                                           const char *name, bool dest_uninitialized = false);
-  address generate_conjoint_long_oop_copy(bool aligned, bool is_oop,
+  address generate_conjoint_long_oop_copy(int stubId, bool aligned, bool is_oop,
                                           address nooverlap_target, address *entry,
                                           const char *name, bool dest_uninitialized = false);
 
@@ -565,7 +565,7 @@ class StubGenerator: public StubCodeGenerator {
   void generate_libm_stubs();
 
 
-  address generate_cont_thaw(const char* label, Continuation::thaw_kind kind);
+  address generate_cont_thaw(int stubId, const char* label, Continuation::thaw_kind kind);
   address generate_cont_thaw();
 
   // TODO: will probably need multiple return barriers depending on return type
@@ -620,7 +620,25 @@ class StubGenerator: public StubCodeGenerator {
   void generate_final_stubs();
 
  public:
-  StubGenerator(CodeBuffer* code, StubsKind kind);
+  StubGenerator(CodeBuffer* code, StubsKind kind, StubArchiveData* archive_data);
+
+  static void libm_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void sin_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void tan_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void trignometric_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void exp_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void pow_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void log_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void fmod_init_SCAddressTable(GrowableArray<address>& external_addresses);
+
+  static void aes_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void ghash_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void chacha_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void adler_init_SCAddressTable(GrowableArray<address>& external_addresses);
+  static void poly_init_SCAddressTable(GrowableArray<address>& external_addresses);
 };
+
+
+#define ADD(addr) external_addresses.append((address)(addr));
 
 #endif // CPU_X86_STUBGENERATOR_X86_64_HPP

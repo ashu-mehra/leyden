@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "asm/codeBuffer.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#include "code/SCCache.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/access.inline.hpp"
 #include "oops/klass.hpp"
@@ -32,6 +33,7 @@
 #include "prims/vectorSupport.hpp"
 #include "runtime/continuation.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
+#include "runtime/os.hpp"
 #include "runtime/timerTrace.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -202,7 +204,8 @@ address StubRoutines::_lookup_secondary_supers_table_stubs[Klass::SECONDARY_SUPE
 // The first one generates stubs needed during universe init (e.g., _handle_must_compile_first_entry).
 // The second phase includes all other stubs (which may depend on universe being initialized.)
 
-extern void StubGenerator_generate(CodeBuffer* code, StubCodeGenerator::StubsKind kind); // only interface to generators
+extern void StubGenerator_generate(CodeBuffer* code, StubCodeGenerator::StubsKind kind, StubArchiveData* archive_data); // only interface to generators
+extern void StubGenerator_SCAdressTable_init();
 
 void UnsafeCopyMemory::create_table(int max_size) {
   UnsafeCopyMemory::_table = new UnsafeCopyMemory[max_size];
@@ -239,17 +242,70 @@ static BufferBlob* initialize_stubs(StubCodeGenerator::StubsKind kind,
   TraceTime timer(timer_msg, TRACETIME_LOG(Info, startuptime));
   // Add extra space for large CodeEntryAlignment
   int size = code_size + CodeEntryAlignment * max_aligned_stubs;
+  if (LoadCachedCode) {
+    size *= 2;
+  }
   BufferBlob* stubs_code = BufferBlob::create(buffer_name, size);
   if (stubs_code == nullptr) {
     vm_exit_out_of_memory(code_size, OOM_MALLOC_ERROR, "CodeCache: no room for %s", buffer_name);
   }
-  CodeBuffer buffer(stubs_code);
-  StubGenerator_generate(&buffer, kind);
-  // When new stubs added we need to make sure there is some space left
-  // to catch situation when we should increase size again.
-  assert(code_size == 0 || buffer.insts_remaining() > 200, "increase %s", assert_msg);
-
   LogTarget(Info, stubs) lt;
+  CodeBuffer buffer(stubs_code, code_size);
+  if (SCCache::is_on() && (StoreStubs || LoadStubs)) {
+    int stubs_group_id = SharedRuntime::encode_stubroutines_id(kind);
+    StubArchiveData archive_data(kind);
+
+    if (kind == StubCodeGenerator::StubsKind::Continuation_stubs) {
+      SCCache::init_table_for_continuation_stubs();
+    } else if (kind == StubCodeGenerator::StubsKind::Final_stubs) {
+      SCCache::init_table_for_final_stubs();
+    }
+
+    if (LoadStubs) {
+      if (SCCache::load_stubroutines_blob(&buffer, stubs_group_id, buffer_name, archive_data)) {
+	if (lt.is_enabled()) {
+	  LogStream ls(lt);
+	  ls.print_cr("Loaded blob '%s' from Startup Code Cache", buffer_name);
+	}
+      } else {
+	if (lt.is_enabled()) {
+	  LogStream ls(lt);
+	  ls.print_cr("Failed to load blob '%s' from Startup Code Cache", buffer_name);
+	}
+      }
+    }
+
+    StubGenerator_generate(&buffer, kind, &archive_data);
+
+    // When new stubs added we need to make sure there is some space left
+    // to catch situation when we should increase size again.
+    assert(code_size == 0 || buffer.insts_remaining() > 200, "increase %s", assert_msg);
+
+    if (StoreStubs) {
+      if (SCCache::store_stubroutines_blob(&buffer, stubs_group_id, buffer_name, archive_data)) {
+	if (lt.is_enabled()) {
+	  LogStream ls(lt);
+	  ls.print_cr("Stored blob '%s' to Startup Code Cache", buffer_name);
+	} 
+      } else {
+	if (lt.is_enabled()) {
+	  LogStream ls(lt);
+	  ls.print_cr("Failed to store blob '%s' to Startup Code Cache", buffer_name);
+	} 
+      }
+    }
+  } else {
+    StubGenerator_generate(&buffer, kind, nullptr);
+    // When new stubs added we need to make sure there is some space left
+    // to catch situation when we should increase size again.
+    assert(code_size == 0 || buffer.insts_remaining() > 200, "increase %s", assert_msg);
+  }
+  if (SCCache::is_on()) {
+    if (kind == StubCodeGenerator::StubsKind::Final_stubs) {
+      SCCache::set_stubs_complete();
+    }
+  }
+
   if (lt.is_enabled()) {
     LogStream ls(lt);
     ls.print_cr("%s\t [" INTPTR_FORMAT ", " INTPTR_FORMAT "] used: %d, free: %d",
@@ -257,6 +313,10 @@ static BufferBlob* initialize_stubs(StubCodeGenerator::StubsKind kind,
                 buffer.total_content_size(), buffer.insts_remaining());
   }
   return stubs_code;
+}
+
+void StubRoutines::init_SCAddressTable() {
+  StubGenerator_SCAdressTable_init();
 }
 
 void StubRoutines::initialize_initial_stubs() {
@@ -299,6 +359,7 @@ void StubRoutines::initialize_final_stubs() {
   }
 }
 
+void stubs_SCAddressTable_init() { StubRoutines::init_SCAddressTable(); }
 void initial_stubs_init()      { StubRoutines::initialize_initial_stubs(); }
 void continuation_stubs_init() { StubRoutines::initialize_continuation_stubs(); }
 void final_stubs_init()        { StubRoutines::initialize_final_stubs(); }
@@ -315,6 +376,23 @@ void compiler_stubs_init(bool in_compiler_thread) {
     StubCodeDesc::freeze();
   } else if (!in_compiler_thread && !DelayCompilerStubsGeneration) {
     StubRoutines::initialize_compiler_stubs();
+  }
+}
+
+int StubRoutines::stubId_to_index(int stubId) {
+  assert(stubId < StubID::number_of_ids, "validity check");
+  if (stubId <= StubID::last_initial_stub) {
+    // it is an intial stub
+    return stubId;
+  } else if (stubId <= StubID::last_continuation_stub) {
+    // it is a continuation stub
+    return stubId - StubID::last_initial_stub - 1;
+  } else if (stubId <= StubID::last_compiler_stub) {
+    // it is a compiler stub
+    return stubId - StubID::last_continuation_stub - 1;
+  } else {
+    // must be a final stub
+    return stubId - StubID::last_compiler_stub - 1;
   }
 }
 

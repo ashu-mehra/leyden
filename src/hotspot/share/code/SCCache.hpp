@@ -264,6 +264,7 @@ public:
 
 // Addresses of stubs, blobs and runtime finctions called from compiled code.
 class SCAddressTable : public CHeapObj<mtCode> {
+  friend SCCache;
 private:
   address* _extrs_addr;
   address* _stubs_addr;
@@ -283,6 +284,7 @@ private:
   bool _opto_complete;
   bool _early_c1_complete;
   bool _c1_complete;
+  bool _stubs_complete;
 
 public:
   SCAddressTable() {
@@ -295,10 +297,11 @@ public:
     _opto_complete = false;
     _early_c1_complete = false;
     _c1_complete = false;
+    _stubs_complete = false;
   }
   ~SCAddressTable();
   void init_extrs();
-  void init_early_stubs();
+  void init_stubs();
   void init();
   void init_opto();
   void init_early_c1();
@@ -310,6 +313,12 @@ public:
   address address_for_id(int id);
   bool opto_complete() const { return _opto_complete; }
   bool c1_complete() const { return _c1_complete; }
+  void add_stub_address(address addr);
+  void add_external_addresses(GrowableArray<address> addresses);
+  void add_stubs_addresses(GrowableArray<address>* addresses, int start_index, int count);
+  void set_stubs_complete();
+  void init_table_for_continuation_stubs();
+  void init_table_for_final_stubs();
 };
 
 struct SCCodeSection {
@@ -336,6 +345,7 @@ enum class DataKind: int {
 };
 
 class SCCache;
+class StubArchiveData;
 
 class SCCReader { // Concurent per compilation request
 private:
@@ -363,7 +373,9 @@ public:
 
   bool compile(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler);
   bool compile_blob(CodeBuffer* buffer, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args);
+  bool compile_stubroutines_blob(CodeBuffer* buffer, const char* name, StubArchiveData& archive_data);
 
+  bool read_bytes(char* buffer, uint nbytes);
   Klass* read_klass(const methodHandle& comp_method, bool shared);
   Method* read_method(const methodHandle& comp_method, bool shared);
 
@@ -476,7 +488,7 @@ public:
   int store_strings();
 
   static void init_extrs_table();
-  static void init_early_stubs_table();
+  static void init_stubs_table();
   static void init_table();
   static void init_opto_table();
   static void init_early_c1_table();
@@ -538,6 +550,9 @@ public:
   static bool store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args = nullptr);
 #endif
 
+  static bool load_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const char* name, StubArchiveData& archive_data);
+  static bool store_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const char* name, StubArchiveData& archive_data);
+
 private:
   static bool load_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level);
   static bool store_blob(CodeBuffer* buffer, uint32_t id, const char* name, OopMapSet* oop_maps, GrowableArray<int>* extra_args, CompLevel comp_level);
@@ -587,6 +602,7 @@ private:
 public:
   static SCCache* cache() { return _cache; }
   static void initialize();
+  static void init1();
   static void init2();
   static void close();
   static bool is_on() { return _cache != nullptr && !_cache->closing(); }
@@ -629,6 +645,14 @@ public:
   static void new_workflow_start_writing_cache() NOT_CDS_JAVA_HEAP_RETURN;
   static void new_workflow_end_writing_cache() NOT_CDS_JAVA_HEAP_RETURN;
   static void new_workflow_load_cache() NOT_CDS_JAVA_HEAP_RETURN;
+
+ public:
+  static void add_stub_address(address addr);
+  static void add_external_addresses(GrowableArray<address> addresses);
+  static void add_stubs_addresses(GrowableArray<address>* addresses, int start_index, int count);
+  static void set_stubs_complete();
+  static void init_table_for_continuation_stubs();
+  static void init_table_for_final_stubs();
 };
 
 #endif // SHARE_CODE_SCCACHE_HPP
