@@ -116,9 +116,17 @@
   }
 
 static elapsedTimer _t_totalLoad;
+static elapsedTimer _t_stubRoutinesLoad;
+static elapsedTimer _t_runtimeBlobLoad;
+static elapsedTimer _t_c1BlobLoad;
+static elapsedTimer _t_optoBlobLoad;
 static elapsedTimer _t_totalRegister;
 static elapsedTimer _t_totalFind;
 static elapsedTimer _t_totalStore;
+static elapsedTimer _t_stubRoutinesStore;
+static elapsedTimer _t_runtimeBlobStore;
+static elapsedTimer _t_c1BlobStore;
+static elapsedTimer _t_optoBlobStore;
 
 static address jvm_library_addr = nullptr;
 static address rodata_start = nullptr;
@@ -209,12 +217,20 @@ void SCCache::init2() {
 
 void SCCache::print_timers_on(outputStream* st) {
   if (LoadCachedCode) {
-    st->print_cr ("    SC Load Time:         %7.3f s", _t_totalLoad.seconds());
-    st->print_cr ("      nmethod register:     %7.3f s", _t_totalRegister.seconds());
-    st->print_cr ("      find cached code:     %7.3f s", _t_totalFind.seconds());
+    st->print_cr ("    SC Load Time:             %3.7f s", _t_totalLoad.seconds());
+    st->print_cr ("      nmethod register:         %3.7f s", _t_totalRegister.seconds());
+    st->print_cr ("      find cached code:         %3.7f s", _t_totalFind.seconds());
+    st->print_cr ("    Stub Routines Load Time:  %3.7f s", _t_stubRoutinesLoad.seconds());
+    st->print_cr ("    Runtime Blob Load Time:   %3.7f s", _t_runtimeBlobLoad.seconds());
+    st->print_cr ("    C1 Blob Load Time:        %3.7f s", _t_c1BlobLoad.seconds());
+    st->print_cr ("    Opto Blob Load Time:      %3.7f s", _t_optoBlobLoad.seconds());
   }
   if (StoreCachedCode) {
-    st->print_cr ("    SC Store Time:        %7.3f s", _t_totalStore.seconds());
+    st->print_cr ("    SC Store Time:             %3.7f s", _t_totalStore.seconds());
+    st->print_cr ("    Stub Routines Store Time:  %3.7f s", _t_stubRoutinesStore.seconds());
+    st->print_cr ("    Runtime Blob Store Time:   %3.7f s", _t_runtimeBlobStore.seconds());
+    st->print_cr ("    C1 Blob Store Time:        %3.7f s", _t_c1BlobStore.seconds());
+    st->print_cr ("    Opto Blob Store Timee:     %3.7f s", _t_optoBlobStore.seconds());
   }
 }
 
@@ -301,6 +317,12 @@ void SCCache::close() {
             }
           }
         }
+      }
+    } else if (SCCache::is_on_for_write()) {
+      LogStreamHandle(Info, init) log;
+      if (log.is_enabled()) {
+        log.print_cr("Startup Code Cache statistics (when closed): ");
+        SCCache::print_timers_on(&log);
       }
     }
 
@@ -1448,6 +1470,7 @@ bool SCCache::store_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const char* 
 }
 
 bool SCCache::load_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const char* name, StubArchiveData& archive_data) {
+  TraceTime t1("SC stub routines load time", &_t_stubRoutinesLoad, enable_timers(), false);
 #ifdef ASSERT
   LogStreamHandle(Debug, scc, stubs) log;
   if (log.is_enabled()) {
@@ -1558,6 +1581,7 @@ bool SCCReader::compile_stubroutines_blob(CodeBuffer* buffer, const char* name, 
 }
 
 bool SCCache::store_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const char* name, StubArchiveData& archive_data) {
+  TraceTime t1("SC stub routines store time", &_t_stubRoutinesStore, enable_timers(), false);
   SCCache* cache = open_for_write();
   if (cache == nullptr) {
     return false;
@@ -2285,12 +2309,14 @@ bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code
 }
 
 bool SCCache::load_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+  TraceTime t1("SC runtime blob load time", &_t_runtimeBlobLoad, enable_timers(), false);
   uint32_t blobId = SharedRuntime::shared_to_blobId(id);
   return load_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_none);
 }
 
 #ifdef COMPILER1
 bool SCCache::load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+  TraceTime t1("SC c1 blob load time", &_t_c1BlobLoad, enable_timers(), false);
   uint32_t blobId = Runtime1::c1_to_blobId(id);
   return load_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_simple);
 }
@@ -2298,6 +2324,7 @@ bool SCCache::load_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* 
 
 #ifdef COMPILER2
 bool SCCache::load_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet* &oop_maps, GrowableArray<int>* extra_args) {
+  TraceTime t1("SC opto blob load time", &_t_optoBlobLoad, enable_timers(), false);
   uint32_t blobId = OptoRuntime::opto_to_blobId(id);
   return load_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_full_optimization);
 }
@@ -2630,12 +2657,14 @@ bool SCCache::write_code(CodeBuffer* buffer, uint& code_size) {
 }
 
 bool SCCache::store_runtime_blob(CodeBuffer* buffer, SharedRuntime::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+  TraceTime t1("SC runtime blob store time", &_t_runtimeBlobStore, enable_timers(), false);
   uint32_t blobId = SharedRuntime::shared_to_blobId(id);
   return store_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_none);
 }
 
 #ifdef COMPILER1
 bool SCCache::store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+  TraceTime t1("SC c1 blob store time", &_t_c1BlobStore, enable_timers(), false);
   uint32_t blobId = Runtime1::c1_to_blobId(id);
   return store_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_simple);
 }
@@ -2643,6 +2672,7 @@ bool SCCache::store_c1_blob(CodeBuffer* buffer, Runtime1::StubID id, const char*
 
 #ifdef COMPILER2
 bool SCCache::store_opto_blob(CodeBuffer* buffer, OptoRuntime::StubID id, const char* name, OopMapSet *oop_maps, GrowableArray<int>* extra_args) {
+  TraceTime t1("SC opto blob store time", &_t_optoBlobStore, enable_timers(), false);
   uint32_t blobId = OptoRuntime::opto_to_blobId(id);
   return store_blob(buffer, blobId, name, oop_maps, extra_args, CompLevel_full_optimization);
 }

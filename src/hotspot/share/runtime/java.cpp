@@ -219,6 +219,9 @@ void log_vm_init_stats(bool use_tty) {
       SCCache::print_statistics_on(out);
       out->cr();
       SCCache::print_timers_on(out);
+    } else if (SCCache::is_on_for_write()) {
+      out->print_cr("Startup Code Cache: ");
+      SCCache::print_timers_on(out);
     }
 
     VMThread::print_counters_on(out);
