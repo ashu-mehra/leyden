@@ -215,6 +215,9 @@ void log_vm_init_stats() {
       SCCache::print_statistics_on(&log);
       log.cr();
       SCCache::print_timers_on(&log);
+    } else if (SCCache::is_on_for_write()) {
+      log.print_cr("Startup Code Cache: ");
+      SCCache::print_timers_on(&log);
     }
 
     VMThread::print_counters_on(&log);
