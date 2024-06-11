@@ -29,7 +29,7 @@
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
-#include "utilities/lineReader.hpp"
+#include "utilities/istream.hpp"
 #include "utilities/resizeableResourceHash.hpp"
 
 class constantPoolHandle;
@@ -68,8 +68,8 @@ public:
 class ClassListParser : public StackObj {
   static const char* CONSTANT_POOL_TAG;
   static const char* DYNAMIC_PROXY_TAG;
-  static const char* LAMBDA_PROXY_TAG;
   static const char* LAMBDA_FORM_TAG;
+  static const char* LAMBDA_PROXY_TAG;
 public:
   static const char* ARRAY_TAG;
 
@@ -96,15 +96,14 @@ private:
   static volatile Thread* _parsing_thread; // the thread that created _instance
   static ClassListParser* _instance; // the singleton.
   const char* _classlist_file;
-  FILE* _file;
 
   ID2KlassTable _id2klass_table;
 
-  LineReader          _line_reader;
+  FileInput           _file_input;
+  inputStream         _input_stream;
   char*               _line;                  // The buffer that holds the current line. Some characters in
                                               // the buffer may be overwritten by '\0' during parsing.
   int                 _line_len;              // Original length of the input line.
-  int                 _line_no;               // Line number for current line being parsed
   const char*         _class_name;
   GrowableArray<const char*>* _indy_items;    // items related to invoke dynamic for archiving lambda proxy classes
   int                 _id;
@@ -112,10 +111,6 @@ private:
   GrowableArray<int>* _interfaces;
   bool                _interfaces_specified;
   const char*         _source;
-  bool                _lambda_form_line;
-  bool                _constant_pool_line;
-  bool                _class_reflection_data_line;
-  bool                _loader_negative_cache_line;
   ParseMode           _parse_mode;
 
   bool parse_int_option(const char* option_name, int* value);
@@ -134,7 +129,9 @@ private:
 
   void resolve_indy(JavaThread* current, Symbol* class_name_symbol);
   void resolve_indy_impl(Symbol* class_name_symbol, TRAPS);
-  bool parse_one_line();
+  void clean_up_input_line();
+  void read_class_name_and_attributes();
+  void parse_class_name_and_attributes(TRAPS);
   Klass* load_current_class(Symbol* class_name_symbol, TRAPS);
   void parse_constant_pool_tag();
   void parse_class_reflection_data_tag();
@@ -142,6 +139,8 @@ private:
   void parse_loader_negative_cache_tag();
   void parse_array_dimension_tag();
 
+  size_t lineno() { return _input_stream.lineno(); }
+  FILE* do_open(const char* file);
   ClassListParser(const char* file, ParseMode _parse_mode);
   ~ClassListParser();
   void print_diagnostic_info(outputStream* st, const char* msg, va_list ap) ATTRIBUTE_PRINTF(3, 0);
@@ -150,9 +149,9 @@ private:
   void error(const char* msg, ...) ATTRIBUTE_PRINTF(2, 0);
   oop loader_from_type(const char* loader_name);
 public:
-  static int parse_classlist(const char* classlist_path, ParseMode parse_mode, TRAPS) {
+  static void parse_classlist(const char* classlist_path, ParseMode parse_mode, TRAPS) {
     ClassListParser parser(classlist_path, parse_mode);
-    return parser.parse(THREAD); // returns the number of classes loaded.
+    parser.parse(THREAD);
   }
 
   static bool is_parsing_thread();
@@ -168,10 +167,10 @@ public:
     return LAMBDA_FORM_TAG;
   }
 
-  int parse(TRAPS);
-  void split_tokens_by_whitespace(int offset);
+  void parse(TRAPS);
+  void split_tokens_by_whitespace(int offset, GrowableArray<const char*>* items);
   int split_at_tag_from_line();
-  bool parse_at_tags();
+  void parse_at_tags(TRAPS);
   char* _token;
   void parse_int(int* value);
   void parse_uint(int* value);
@@ -180,6 +179,9 @@ public:
   void skip_whitespaces();
   void skip_non_whitespaces();
 
+  bool parse_lambda_forms_invokers_only() {
+    return _parse_mode == _parse_lambda_forms_invokers_only;
+  }
   bool is_id_specified() {
     return _id != _unspecified;
   }
@@ -202,14 +204,13 @@ public:
       error("%s id %d is not yet loaded", which, id);
     }
   }
+  void check_class_name(const char* class_name);
 
   const char* current_class_name() {
     return _class_name;
   }
 
   bool is_loading_from_source();
-
-  bool lambda_form_line() { return _lambda_form_line; }
 
   // Look up the super or interface of the current class being loaded
   // (in this->load_current_class()).

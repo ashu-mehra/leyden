@@ -125,7 +125,16 @@ bool ClassPrelinker::is_class_resolution_deterministic(InstanceKlass* cp_holder,
       return true;
     }
 
-    if (ClassPreloader::is_preloaded_class(ik)) {
+    if (!PreloadSharedClasses && ClassPreloader::is_vm_class(ik)) {
+      if (ik->class_loader() != cp_holder->class_loader()) {
+        // At runtime, cp_holder() may not be able to resolve to the same
+        // ik. For example, a different version of ik may be defined in
+        // cp->pool_holder()'s loader using MethodHandles.Lookup.defineClass().
+        return false;
+      } else {
+        return true;
+      }
+    } else if (PreloadSharedClasses && ClassPreloader::is_preloaded_class(ik)) {
       if (cp_holder->is_shared_platform_class()) {
         ClassPreloader::add_initiated_class(cp_holder, ik);
         return true;
@@ -326,14 +335,9 @@ void ClassPrelinker::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecod
     // Do not resolve any field/methods from a class that has not been loaded yet.
     return;
   }
+
   Klass* resolved_klass = cp->klass_ref_at(raw_index, bc, CHECK);
-
   const char* is_static = "";
-  const char* is_regen = "";
-
-  if (RegeneratedClasses::is_a_regenerated_object((address)ik)) {
-    is_regen = " (regenerated)";
-  }
 
   switch (bc) {
   case Bytecodes::_getstatic:
@@ -353,14 +357,14 @@ void ClassPrelinker::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecod
     if (!VM_Version::supports_fast_class_init_checks()) {
       return; // Do not resolve since interpreter lacks fast clinit barriers support
     }
-    InterpreterRuntime::cds_resolve_invoke(bc, raw_index, mh, cp, CHECK);
+    InterpreterRuntime::cds_resolve_invoke(bc, raw_index, cp, CHECK);
     is_static = " *** static";
     break;
 
   case Bytecodes::_invokevirtual:
   case Bytecodes::_invokespecial:
   case Bytecodes::_invokeinterface:
-    InterpreterRuntime::cds_resolve_invoke(bc, raw_index, mh, cp, CHECK);
+    InterpreterRuntime::cds_resolve_invoke(bc, raw_index, cp, CHECK);
     break;
 
   case Bytecodes::_invokehandle:
@@ -376,9 +380,9 @@ void ClassPrelinker::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecod
     bool resolved = cp->is_resolved(raw_index, bc);
     Symbol* name = cp->name_ref_at(raw_index, bc);
     Symbol* signature = cp->signature_ref_at(raw_index, bc);
-    log_trace(cds, resolve)("%s %s [%3d] %s%s -> %s.%s:%s%s",
+    log_trace(cds, resolve)("%s %s [%3d] %s -> %s.%s:%s%s",
                             (resolved ? "Resolved" : "Failed to resolve"),
-                            Bytecodes::name(bc), cp_index, ik->external_name(), is_regen,
+                            Bytecodes::name(bc), cp_index, ik->external_name(),
                             resolved_klass->external_name(),
                             name->as_C_string(), signature->as_C_string(), is_static);
   }
@@ -399,7 +403,7 @@ void ClassPrelinker::preresolve_indy_cp_entries(JavaThread* current, InstanceKla
     ResolvedIndyEntry* rie = indy_entries->adr_at(i);
     int cp_index = rie->constant_pool_index();
     if (preresolve_list->at(cp_index) == true && !rie->is_resolved() && is_indy_resolution_deterministic(cp(), cp_index)) {
-      InterpreterRuntime::cds_resolve_invokedynamic(ConstantPool::encode_invokedynamic_index(i), cp, THREAD);
+      InterpreterRuntime::cds_resolve_invokedynamic(i, cp, THREAD);
       if (HAS_PENDING_EXCEPTION) {
         CLEAR_PENDING_EXCEPTION; // just ignore
       }

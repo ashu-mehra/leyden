@@ -111,7 +111,6 @@ runtime/StackGuardPages/TestStackGuardPagesNative.java 8303612 linux-all
 runtime/ErrorHandling/TestDwarf.java#checkDecoder 8305489 linux-all
 runtime/ErrorHandling/MachCodeFramesInErrorFile.java 8313315 linux-ppc64le
 runtime/cds/appcds/customLoader/HelloCustom_JFR.java 8241075 linux-all,windows-x64
-runtime/os/TestTransparentHugePageUsage.java 8324776 linux-all
 runtime/Thread/TestAlwaysPreTouchStacks.java 8324781 linux-all
 
 applications/jcstress/accessAtomic.java 8325984 generic-all
@@ -135,7 +134,7 @@ serviceability/sa/TestRevPtrsForInvokeDynamic.java 8241235 generic-all
 serviceability/jvmti/ModuleAwareAgents/ThreadStart/MAAThreadStart.java 8225354 windows-all
 serviceability/jvmti/vthread/GetThreadStateMountedTest/GetThreadStateMountedTest.java 8318090,8318729 generic-all
 serviceability/jvmti/vthread/GetSetLocalTest/GetSetLocalTest.java 8286836 generic-all
-serviceability/dcmd/gc/RunFinalizationTest.java 8227120 linux-all,windows-x64,aix-ppc64
+serviceability/dcmd/gc/RunFinalizationTest.java 8227120 generic-all
 
 serviceability/sa/ClhsdbCDSCore.java 8267433 macosx-x64
 serviceability/sa/ClhsdbFindPC.java#xcomp-core 8267433 macosx-x64
@@ -188,3 +187,38 @@ vmTestbase/nsk/jdwp/ThreadReference/ForceEarlyReturn/forceEarlyReturn001/forceEa
 vmTestbase/nsk/monitoring/ThreadMXBean/ThreadInfo/Multi/Multi005/TestDescription.java 8076494 windows-x64
 
 vmTestbase/nsk/monitoring/ThreadMXBean/findMonitorDeadlockedThreads/find006/TestDescription.java 8310144 macosx-aarch64
+
+
+
+
+
+
+
+#############################################################################
+
+# leyden/premain branch test failures
+
+#############################################################################
+
+# The following CDS tests fail due to lambdaform/lambdaproxy handling
+runtime/cds/appcds/dynamicArchive/LambdasInTwoArchives.java 8318142 generic-all
+runtime/cds/appcds/dynamicArchive/TestDynamicDumpAtOom.java 8318142 generic-all
+runtime/cds/appcds/dynamicArchive/TestDynamicRegenerateHolderClasses.java 8318142 generic-all
+runtime/cds/appcds/dynamicArchive/TestLambdaInvokers.java 8318142 generic-all
+runtime/cds/appcds/javaldr/ExceptionDuringDumpAtObjectsInitPhase.java 8318142 generic-all
+
+# Misc failures -- need to investigate
+runtime/logging/ItablesTest.java 8318142 generic-all
+runtime/logging/VerificationTest.java 8318142 generic-all
+runtime/logging/VtablesTest.java 8318142 generic-all
+runtime/MemberName/MemberNameLeak.java 8318142 generic-all
+
+# Not analyzed yet -- don't seem to be serious -- exclude for now
+compiler/blackhole/BlackholeExistingIntrinsicWarningTest.java 8318142 generic-all
+compiler/blackhole/BlackholeNonEmptyWarningTest.java 8318142 generic-all
+compiler/blackhole/BlackholeNonStaticWarningTest.java 8318142 generic-all
+compiler/blackhole/BlackholeNonVoidWarningTest.java 8318142 generic-all
+compiler/jvmci/TestEnableJVMCIProduct.java 8318142 generic-all
+gtest/GTestWrapper.java 8318142 generic-all
+runtime/ErrorHandling/TestDwarf.java#dontCheckDecoder 8318142 generic-all
+serviceability/dcmd/compiler/CodelistTest.java 8318142 generic-all

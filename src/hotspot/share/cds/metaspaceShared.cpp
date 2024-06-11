@@ -262,6 +262,14 @@ static char* compute_shared_base(size_t cds_max) {
 
 void MetaspaceShared::initialize_for_static_dump() {
   assert(CDSConfig::is_dumping_static_archive(), "sanity");
+
+  if (CDSConfig::is_dumping_preimage_static_archive() || CDSConfig::is_dumping_final_static_archive()) {
+    if (!((UseG1GC || UseParallelGC || UseSerialGC) && UseCompressedClassPointers)) {
+      vm_exit_during_initialization("Cannot create the CacheDataStore",
+                                    "UseCompressedClassPointers must be enabled, and collector must be G1, Parallel, or Serial");
+    }
+  }
+
   log_info(cds)("Core region alignment: " SIZE_FORMAT, core_region_alignment());
   // The max allowed size for CDS archive. We use this to limit SharedBaseAddress
   // to avoid address space wrap around.
@@ -559,11 +567,9 @@ void VM_PopulateDumpSharedSpace::doit() {
   _builder.gather_source_objs();
   _builder.reserve_buffer();
 
-  char* cloned_vtables = CppVtables::dumptime_init(&_builder);
+  CppVtables::dumptime_init(&_builder);
 
-  // Initialize random for updating the hash of symbols
-  os::init_random(0x12345678);
-
+  _builder.sort_metadata_objs();
   _builder.dump_rw_metadata();
   _builder.dump_ro_metadata();
   _builder.relocate_metaspaceobj_embedded_pointers();
@@ -590,8 +596,8 @@ void VM_PopulateDumpSharedSpace::doit() {
   log_info(cds)("Adjust method info dictionary");
   SystemDictionaryShared::adjust_method_info_dictionary();
 
-  log_info(cds)("Adjust training data dictionary");
-  TrainingData::adjust_training_data_dictionary();
+  log_info(cds)("Make training data shareable");
+  _builder.make_training_data_shareable();
 
   // The vtable clones contain addresses of the current process.
   // We don't want to write these addresses into the archive.
@@ -610,7 +616,7 @@ void VM_PopulateDumpSharedSpace::doit() {
   _mapinfo = new FileMapInfo(static_archive, true);
   _mapinfo->populate_header(MetaspaceShared::core_region_alignment());
   _mapinfo->set_serialized_data(serialized_data);
-  _mapinfo->set_cloned_vtables(cloned_vtables);
+  _mapinfo->set_cloned_vtables(CppVtables::vtables_serialized_base());
 }
 
 class CollectCLDClosure : public CLDClosure {
@@ -761,10 +767,12 @@ void MetaspaceShared::preload_and_dump() {
     if (PENDING_EXCEPTION->is_a(vmClasses::OutOfMemoryError_klass())) {
       log_error(cds)("Out of memory. Please run with a larger Java heap, current MaxHeapSize = "
                      SIZE_FORMAT "M", MaxHeapSize/M);
+      CLEAR_PENDING_EXCEPTION;
       MetaspaceShared::unrecoverable_writing_error();
     } else {
       log_error(cds)("%s: %s", PENDING_EXCEPTION->klass()->external_name(),
                      java_lang_String::as_utf8_string(java_lang_Throwable::message(PENDING_EXCEPTION)));
+      CLEAR_PENDING_EXCEPTION;
       MetaspaceShared::unrecoverable_writing_error("VM exits due to exception, use -Xlog:cds,exceptions=trace for detail");
     }
   }
@@ -833,18 +841,18 @@ void MetaspaceShared::preload_classes(TRAPS) {
   }
 
   log_info(cds)("Loading classes to share ...");
-  int class_count = ClassListParser::parse_classlist(classlist_path,
-                                                     ClassListParser::_parse_all, CHECK);
+  ClassListParser::parse_classlist(classlist_path,
+                                   ClassListParser::_parse_all, CHECK);
   if (ExtraSharedClassListFile) {
-    class_count += ClassListParser::parse_classlist(ExtraSharedClassListFile,
-                                                    ClassListParser::_parse_all, CHECK);
+    ClassListParser::parse_classlist(ExtraSharedClassListFile,
+                                     ClassListParser::_parse_all, CHECK);
   }
   if (classlist_path != default_classlist) {
     struct stat statbuf;
     if (os::stat(default_classlist, &statbuf) == 0) {
       // File exists, let's use it.
-      class_count += ClassListParser::parse_classlist(default_classlist,
-                                                      ClassListParser::_parse_lambda_forms_invokers_only, CHECK);
+      ClassListParser::parse_classlist(default_classlist,
+                                       ClassListParser::_parse_lambda_forms_invokers_only, CHECK);
     }
   }
 
@@ -854,7 +862,6 @@ void MetaspaceShared::preload_classes(TRAPS) {
   CDSProtectionDomain::create_jar_manifest(dummy, strlen(dummy), CHECK);
 
   log_info(cds)("Loading classes to share: done.");
-  log_info(cds)("Shared spaces: preloaded %d classes", class_count);
 }
 
 void MetaspaceShared::preload_and_dump_impl(StaticArchiveBuilder& builder, TRAPS) {
@@ -1652,6 +1659,10 @@ MapArchiveResult MetaspaceShared::map_archive(FileMapInfo* mapinfo, char* mapped
   assert(UseSharedSpaces, "must be runtime");
   if (mapinfo == nullptr) {
     return MAP_ARCHIVE_SUCCESS; // The dynamic archive has not been specified. No error has happened -- trivially succeeded.
+  }
+
+  if (!mapinfo->validate_leyden_config()) {
+    return MAP_ARCHIVE_OTHER_FAILURE;
   }
 
   mapinfo->set_is_mapped(false);

@@ -2009,7 +2009,7 @@ private:
   // Cached hint for bci_to_dp and bci_to_data
   int _hint_di;
 
-  Mutex* _extra_data_lock; // FIXME: CDS support
+  Mutex* volatile _extra_data_lock; // FIXME: CDS support
 
   MethodData(const methodHandle& method);
 public:
@@ -2035,6 +2035,7 @@ public:
     uint _nof_decompiles;             // count of all nmethod removals
     uint _nof_overflow_recompiles;    // recompile count, excluding recomp. bits
     uint _nof_overflow_traps;         // trap count, excluding _trap_hist
+    uint __gap;
     union {
       intptr_t _align;
       // JVMCI separates trap history for OSR compilations from normal compilations
@@ -2042,7 +2043,7 @@ public:
     } _trap_hist;
 
   public:
-    CompilerCounters() : _nof_decompiles(0), _nof_overflow_recompiles(0), _nof_overflow_traps(0) {
+    CompilerCounters() : _nof_decompiles(0), _nof_overflow_recompiles(0), _nof_overflow_traps(0), __gap(0) {
 #ifndef ZERO
       // Some Zero platforms do not have expected alignment, and do not use
       // this code. static_assert would still fire and fail for them.
@@ -2578,7 +2579,7 @@ public:
 
   void clean_method_data(bool always_clean);
   void clean_weak_method_links();
-  Mutex* extra_data_lock() { return _extra_data_lock; }
+  Mutex* extra_data_lock();
   void check_extra_data_locked() const NOT_DEBUG_RETURN;
 };
 

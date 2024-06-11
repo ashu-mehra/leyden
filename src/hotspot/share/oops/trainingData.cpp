@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -63,6 +63,7 @@ Array<MethodTrainingData*>* TrainingData::_recompilation_schedule = nullptr;
 Array<MethodTrainingData*>* TrainingData::_recompilation_schedule_for_dumping = nullptr;
 volatile bool* TrainingData::_recompilation_status = nullptr;
 int TrainingData::TrainingDataLocker::_lock_mode;
+volatile bool TrainingData::TrainingDataLocker::_snapshot = false;
 
 MethodTrainingData::MethodTrainingData() {
   assert(CDSConfig::is_dumping_static_archive() || UseSharedSpaces, "only for CDS");
@@ -75,18 +76,6 @@ KlassTrainingData::KlassTrainingData() {
 CompileTrainingData::CompileTrainingData() : _level(-1), _compile_id(-1) {
   assert(CDSConfig::is_dumping_static_archive() || UseSharedSpaces, "only for CDS");
 }
-
-#if INCLUDE_CDS
-void TrainingData::restore_all_unshareable_info(TRAPS) {
-  if (have_data() && !archived_training_data_dictionary()->empty()) {
-    const unsigned size = static_cast<unsigned>(archived_training_data_dictionary()->entry_count());
-    Visitor visitor(size);
-    archived_training_data_dictionary()->iterate([&](TrainingData *td) {
-      td->restore_unshareable_info(visitor, THREAD);
-    });
-  }
-}
-#endif
 
 void TrainingData::initialize() {
   // this is a nop if training modes are not enabled
@@ -257,9 +246,9 @@ CompileTrainingData* CompileTrainingData::make(CompileTask* task) {
   }
   mtd->notice_compilation(level);
 
+  TrainingDataLocker l;
   CompileTrainingData* ctd = CompileTrainingData::allocate(mtd, level, compile_id);
   if (ctd != nullptr) {
-    TrainingDataLocker l;
     if (mtd->_last_toplevel_compiles[level - 1] != nullptr) {
       if (mtd->_last_toplevel_compiles[level - 1]->compile_id() < compile_id) {
         mtd->_last_toplevel_compiles[level - 1]->clear_init_deps();
@@ -373,7 +362,10 @@ void CompileTrainingData::notice_jit_observation(ciEnv* env, ciBaseObject* what)
       if (cik->is_initialized()) {
         InstanceKlass* ik = md->as_instance_klass()->get_instanceKlass();
         KlassTrainingData* ktd = KlassTrainingData::make(ik);
-        assert(ktd != nullptr, "");
+        if (ktd == nullptr) {
+          // Allocation failure or snapshot in progress
+          return;
+        }
         // This JIT task is (probably) requesting that ik be initialized,
         // so add him to my _init_deps list.
         TrainingDataLocker l;
@@ -551,6 +543,7 @@ void TrainingData::init_dumptime_table(TRAPS) {
     });
   } else {
     TrainingDataLocker l;
+    TrainingDataLocker::snapshot();
 
     ResourceMark rm;
     Visitor visitor(training_data_set()->size());
@@ -731,20 +724,6 @@ void TrainingData::serialize_training_data(SerializeClosure* soc) {
   }
 }
 
-void TrainingData::adjust_training_data_dictionary() {
-  if (!need_data()) {
-    return;
-  }
-  assert(_dumptime_training_data_dictionary != nullptr, "");
-  Visitor visitor(_dumptime_training_data_dictionary->length());
-  for (int i = 0; i < _dumptime_training_data_dictionary->length(); i++) {
-    TrainingData* td = _dumptime_training_data_dictionary->at(i).training_data();
-    td = ArchiveBuilder::current()->get_buffered_addr(td);
-    assert(MetaspaceShared::is_in_shared_metaspace(td) || ArchiveBuilder::current()->is_in_buffer_space(td), "");
-    td->remove_unshareable_info(visitor);
-  }
-}
-
 void TrainingData::print_archived_training_data_on(outputStream* st) {
   st->print_cr("Archived TrainingData Dictionary");
   TrainingDataPrinter tdp(st);
@@ -917,8 +896,7 @@ template <typename T>
 void TrainingData::DepList<T>::prepare(ClassLoaderData* loader_data) {
   if (_deps == nullptr && _deps_dyn != nullptr) {
     int len = _deps_dyn->length();
-    _deps = MetadataFactory::new_array_or_null<T>(loader_data, len);
-    guarantee(_deps != nullptr, "allocation failed"); // FIXME: propagate preparation failure?
+    _deps = MetadataFactory::new_array_from_c_heap<T>(len, mtClassShared);
     for (int i = 0; i < len; i++) {
       _deps->at_put(i, _deps_dyn->at(i)); // copy
     }
@@ -927,23 +905,26 @@ void TrainingData::DepList<T>::prepare(ClassLoaderData* loader_data) {
 
 KlassTrainingData* KlassTrainingData::allocate(InstanceKlass* holder) {
   assert(need_data() || have_data(), "");
-  size_t size = align_metadata_size(align_up(sizeof(KlassTrainingData), BytesPerWord) / BytesPerWord);
-  ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
-  return new (loader_data, size, MetaspaceObj::KlassTrainingDataType) KlassTrainingData(holder);
+  if (TrainingDataLocker::can_add()) {
+    return new (mtClassShared) KlassTrainingData(holder);
+  }
+  return nullptr;
 }
 
 MethodTrainingData* MethodTrainingData::allocate(KlassTrainingData* ktd, Method* m) {
   assert(need_data() || have_data(), "");
-  size_t size = align_metadata_size(align_up(sizeof(MethodTrainingData), BytesPerWord) / BytesPerWord);
-  ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
-  return new (loader_data, size, MetaspaceObj::MethodTrainingDataType) MethodTrainingData(ktd, m->name(), m->signature());
+  if (TrainingDataLocker::can_add()) {
+    return new (mtClassShared) MethodTrainingData(ktd, m->name(), m->signature());
+  }
+  return nullptr;
 }
 
 CompileTrainingData* CompileTrainingData::allocate(MethodTrainingData* mtd, int level, int compile_id) {
   assert(need_data() || have_data(), "");
-  size_t size = align_metadata_size(align_up(sizeof(CompileTrainingData), BytesPerWord) / BytesPerWord);
-  ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
-  return new (loader_data, size, MetaspaceObj::CompileTrainingDataType) CompileTrainingData(mtd, level, compile_id);
+  if (TrainingDataLocker::can_add()) {
+    return new (mtClassShared) CompileTrainingData(mtd, level, compile_id);
+  }
+  return nullptr;
 }
 
 void TrainingDataPrinter::do_value(TrainingData* td) {
@@ -980,36 +961,14 @@ void TrainingDataPrinter::do_value(TrainingData* td) {
 
 
 #if INCLUDE_CDS
-void KlassTrainingData::remove_unshareable_info(Visitor& visitor) {
-  if (visitor.is_visited(this)) {
-    return;
-  }
-  visitor.visit(this);
-  TrainingData::remove_unshareable_info(visitor);
+void KlassTrainingData::remove_unshareable_info() {
+  TrainingData::remove_unshareable_info();
+  _holder_mirror = nullptr;
   _comp_deps.remove_unshareable_info();
 }
 
-void KlassTrainingData::restore_unshareable_info(Visitor& visitor, TRAPS) {
-  if (visitor.is_visited(this)) {
-    return;
-  }
-  visitor.visit(this);
-  TrainingData::restore_unshareable_info(visitor, CHECK);
-  _comp_deps.restore_unshareable_info(CHECK);
-}
-
-void MethodTrainingData::remove_unshareable_info(Visitor& visitor) {
-  if (visitor.is_visited(this)) {
-    return;
-  }
-  visitor.visit(this);
-  TrainingData::remove_unshareable_info(visitor);
-  for (int i = 0; i < CompLevel_count; i++) {
-    CompileTrainingData* ctd = _last_toplevel_compiles[i];
-    if (ctd != nullptr) {
-      ctd->remove_unshareable_info(visitor);
-    }
-  }
+void MethodTrainingData::remove_unshareable_info() {
+  TrainingData::remove_unshareable_info();
   if (_final_counters != nullptr) {
     _final_counters->remove_unshareable_info();
   }
@@ -1018,45 +977,11 @@ void MethodTrainingData::remove_unshareable_info(Visitor& visitor) {
   }
 }
 
-void MethodTrainingData::restore_unshareable_info(Visitor& visitor, TRAPS) {
-  if (visitor.is_visited(this)) {
-    return;
-  }
-  visitor.visit(this);
-  TrainingData::restore_unshareable_info(visitor, CHECK);
-  for (int i = 0; i < CompLevel_count; i++) {
-    CompileTrainingData* ctd = _last_toplevel_compiles[i];
-    if (ctd != nullptr) {
-      ctd->restore_unshareable_info(visitor, CHECK);
-    }
-  }
-  if (_final_counters != nullptr ) {
-    _final_counters->restore_unshareable_info(CHECK);
-  }
-  if (_final_profile != nullptr) {
-    _final_profile->restore_unshareable_info(CHECK);
-  }
-}
-
-void CompileTrainingData::remove_unshareable_info(Visitor& visitor) {
-  if (visitor.is_visited(this)) {
-    return;
-  }
-  visitor.visit(this);
-  TrainingData::remove_unshareable_info(visitor);
+void CompileTrainingData::remove_unshareable_info() {
+  TrainingData::remove_unshareable_info();
   _init_deps.remove_unshareable_info();
   _ci_records.remove_unshareable_info();
   _init_deps_left = compute_init_deps_left(true);
 }
 
-void CompileTrainingData::restore_unshareable_info(Visitor& visitor, TRAPS) {
-  if (visitor.is_visited(this)) {
-    return;
-  }
-  visitor.visit(this);
-  TrainingData::restore_unshareable_info(visitor, CHECK);
-  _init_deps.restore_unshareable_info(CHECK);
-  _ci_records.restore_unshareable_info(CHECK);
-  guarantee(_init_deps_left == (int)compute_init_deps_left(), "mismatch");
-}
 #endif // INCLUDE_CDS

@@ -21,3 +21,14 @@ JVM invocation.
 
 - [InvokeDynamic.md](InvokeDynamic.md) CDS optimizations for invokedynamic
 
+## Regression Testing
+
+Leyden-specific tests have been added to the following directories in the repo:
+
+- [test/hotspot/jtreg/runtime/cds/appcds/applications](../runtime/cds/appcds/applications)
+- [test/hotspot/jtreg/runtime/cds/appcds/indy](../runtime/cds/appcds/indy)
+- [test/hotspot/jtreg/runtime/cds/appcds/leyden](../runtime/cds/appcds/leyden)
+- [test/hotspot/jtreg/runtime/cds/appcds/preloadedClasses](../runtime/cds/appcds/preloadedClasses)
+
+These test cases can be executed using jtreg. Some of the tests (in the applications directories)
+require binaries to be built separately. Please refer to the script [lib/build-for-jtreg.sh](lib/build-for-jtreg.sh)

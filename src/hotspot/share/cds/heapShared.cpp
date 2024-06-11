@@ -429,12 +429,6 @@ bool HeapShared::archive_object(oop obj) {
   } else {
     count_allocation(obj->size());
     ArchiveHeapWriter::add_source_obj(obj);
-
-    // The archived objects are discovered in a predictable order. Compute
-    // their identity_hash() as soon as we see them. This ensures that the
-    // the identity_hash in the object header will have a predictable value,
-    // making the archive reproducible.
-    obj->identity_hash();
     CachedOopInfo info = make_cached_oop_info(obj);
     archived_object_cache()->put_when_absent(obj, info);
     archived_object_cache()->maybe_grow();
@@ -757,11 +751,13 @@ void HeapShared::archive_objects(ArchiveHeapInfo *heap_info) {
     // Cache for recording where the archived objects are copied to
     create_archived_object_cache();
 
-    log_info(cds)("Heap range = [" PTR_FORMAT " - "  PTR_FORMAT "]",
-                   UseCompressedOops ? p2i(CompressedOops::begin()) :
-                                       p2i((address)G1CollectedHeap::heap()->reserved().start()),
-                   UseCompressedOops ? p2i(CompressedOops::end()) :
-                                       p2i((address)G1CollectedHeap::heap()->reserved().end()));
+    if (UseCompressedOops || UseG1GC) {
+      log_info(cds)("Heap range = [" PTR_FORMAT " - "  PTR_FORMAT "]",
+                    UseCompressedOops ? p2i(CompressedOops::begin()) :
+                                         p2i((address)G1CollectedHeap::heap()->reserved().start()),
+                    UseCompressedOops ? p2i(CompressedOops::end()) :
+                                         p2i((address)G1CollectedHeap::heap()->reserved().end()));
+    }
     copy_objects();
 
     CDSHeapVerifier::verify();
@@ -1811,8 +1807,8 @@ void HeapShared::check_default_subgraph_classes() {
           name != vmSymbols::java_lang_ArrayIndexOutOfBoundsException() &&
           name != vmSymbols::java_lang_ArrayStoreException() &&
           name != vmSymbols::java_lang_ClassCastException() &&
+          name != vmSymbols::java_lang_InternalError() &&
           name != vmSymbols::java_lang_NullPointerException() &&
-          name != vmSymbols::java_lang_VirtualMachineError() &&
           !is_archivable_hidden_klass(ik)) {
         ResourceMark rm;
         const char* category = ArchiveUtils::class_category(ik);

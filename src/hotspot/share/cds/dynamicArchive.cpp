@@ -153,7 +153,7 @@ public:
       // Note that these tables still point to the *original* objects, so
       // they would need to call DynamicArchive::original_to_target() to
       // get the correct addresses.
-      assert(current_dump_space() == ro_region(), "Must be RO space");
+      assert(current_dump_region() == ro_region(), "Must be RO space");
       SymbolTable::write_to_archive(symbols());
 
       ArchiveBuilder::OtherROAllocMark mark;
@@ -176,8 +176,8 @@ public:
     log_info(cds)("Adjust method info dictionary");
     SystemDictionaryShared::adjust_method_info_dictionary();
 
-    log_info(cds)("Adjust training data dictionary");
-    TrainingData::adjust_training_data_dictionary();
+    log_info(cds)("Make training data shareable");
+    make_training_data_shareable();
 
     relocate_to_requested();
 

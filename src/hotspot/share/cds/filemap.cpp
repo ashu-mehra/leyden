@@ -218,6 +218,8 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
   _has_full_module_graph = CDSConfig::is_dumping_full_module_graph();
   _has_archived_invokedynamic = CDSConfig::is_dumping_invokedynamic();
   _has_archived_packages = CDSConfig::is_dumping_packages();
+  _gc_kind = (int)Universe::heap()->kind();
+  jio_snprintf(_gc_name, sizeof(_gc_name), Universe::heap()->name());
 
   // The following fields are for sanity checks for whether this archive
   // will function correctly with this JVM and the bootclasspath it's
@@ -296,6 +298,8 @@ void FileMapHeader::print(outputStream* st) {
   st->print_cr("- heap_roots_offset:              " SIZE_FORMAT, _heap_roots_offset);
   st->print_cr("- _heap_oopmap_start_pos:         " SIZE_FORMAT, _heap_oopmap_start_pos);
   st->print_cr("- _heap_ptrmap_start_pos:         " SIZE_FORMAT, _heap_ptrmap_start_pos);
+  st->print_cr("- _rw_ptrmap_start_pos:           " SIZE_FORMAT, _rw_ptrmap_start_pos);
+  st->print_cr("- _ro_ptrmap_start_pos:           " SIZE_FORMAT, _ro_ptrmap_start_pos);
   st->print_cr("- allow_archiving_with_java_agent:%d", _allow_archiving_with_java_agent);
   st->print_cr("- use_optimized_module_handling:  %d", _use_optimized_module_handling);
   st->print_cr("- has_full_module_graph           %d", _has_full_module_graph);
@@ -1592,7 +1596,7 @@ static size_t write_bitmap(const CHeapBitMap* map, char* output, size_t offset) 
 // lots of leading zeros.
 size_t FileMapInfo::remove_bitmap_leading_zeros(CHeapBitMap* map) {
   size_t old_zeros = map->find_first_set_bit(0);
-  size_t old_size = map->size_in_bytes();
+  size_t old_size = map->size();
 
   // Slice and resize bitmap
   map->truncate(old_zeros, map->size());
@@ -1601,15 +1605,18 @@ size_t FileMapInfo::remove_bitmap_leading_zeros(CHeapBitMap* map) {
     size_t new_zeros = map->find_first_set_bit(0);
     assert(new_zeros == 0, "Should have removed leading zeros");
   )
-
-  assert(map->size_in_bytes() < old_size, "Map size should have decreased");
+  assert(map->size() <= old_size, "sanity");
   return old_zeros;
 }
 
-char* FileMapInfo::write_bitmap_region(const CHeapBitMap* rw_ptrmap, const CHeapBitMap* ro_ptrmap,
-                                       const CHeapBitMap* cc_ptrmap,
+char* FileMapInfo::write_bitmap_region(CHeapBitMap* rw_ptrmap, CHeapBitMap* ro_ptrmap,
+                                       CHeapBitMap* cc_ptrmap,
                                        ArchiveHeapInfo* heap_info,
                                        size_t &size_in_bytes) {
+  size_t removed_rw_zeros = remove_bitmap_leading_zeros(rw_ptrmap);
+  size_t removed_ro_zeros = remove_bitmap_leading_zeros(ro_ptrmap);
+  header()->set_rw_ptrmap_start_pos(removed_rw_zeros);
+  header()->set_ro_ptrmap_start_pos(removed_ro_zeros);
   size_in_bytes = rw_ptrmap->size_in_bytes() + ro_ptrmap->size_in_bytes() + cc_ptrmap->size_in_bytes();
 
   if (heap_info->is_used()) {
@@ -2032,9 +2039,9 @@ bool FileMapInfo::relocate_pointers_in_core_regions(intx addr_delta) {
     address valid_new_base = (address)header()->mapped_base_address();
     address valid_new_end  = (address)mapped_end();
 
-    SharedDataRelocator rw_patcher((address*)rw_patch_base, (address*)rw_patch_end, valid_old_base, valid_old_end,
+    SharedDataRelocator rw_patcher((address*)rw_patch_base + header()->rw_ptrmap_start_pos(), (address*)rw_patch_end, valid_old_base, valid_old_end,
                                 valid_new_base, valid_new_end, addr_delta);
-    SharedDataRelocator ro_patcher((address*)ro_patch_base, (address*)ro_patch_end, valid_old_base, valid_old_end,
+    SharedDataRelocator ro_patcher((address*)ro_patch_base + header()->ro_ptrmap_start_pos(), (address*)ro_patch_end, valid_old_base, valid_old_end,
                                 valid_new_base, valid_new_end, addr_delta);
     rw_ptrmap.iterate(&rw_patcher);
     ro_ptrmap.iterate(&ro_patcher);
@@ -2427,13 +2434,28 @@ bool FileMapInfo::initialize() {
     }
   }
 
+  return true;
+}
+
+bool FileMapInfo::validate_leyden_config() {
+  // These checks need to be done after FileMapInfo::initialize(), which gets called before Universe::heap()
+  // is available.
   if (header()->has_preloaded_classes()) {
     if (JvmtiExport::should_post_class_file_load_hook()) {
-      log_info(cds)("CDS archive has preloaded classes. It cannot be used when JVMTI ClassFileLoadHook is in use.");
+      log_error(cds)("CDS archive has preloaded classes. It cannot be used when JVMTI ClassFileLoadHook is in use.");
       return false;
     }
     if (JvmtiExport::has_early_vmstart_env()) {
-      log_info(cds)("CDS archive has preloaded classes. It cannot be used when JVMTI early vm start is in use.");
+      log_error(cds)("CDS archive has preloaded classes. It cannot be used when JVMTI early vm start is in use.");
+      return false;
+    }
+    if (!CDSConfig::is_using_full_module_graph() && !CDSConfig::is_dumping_final_static_archive()) {
+      log_error(cds)("CDS archive has preloaded classes. It cannot be used when archived full module graph is not used.");
+      return false;
+    }
+    if (header()->gc_kind() != (int)Universe::heap()->kind()) {
+      log_error(cds)("CDS archive has preloaded classes. It cannot be used because GC used during dump time (%s) is not the same as runtime (%s)",
+                     header()->gc_name(), Universe::heap()->name());
       return false;
     }
   }

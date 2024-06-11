@@ -42,6 +42,7 @@
 #include "compiler/compilerEvent.hpp"
 #include "compiler/compilerOracle.hpp"
 #include "compiler/directivesParser.hpp"
+#include "gc/shared/memAllocator.hpp"
 #include "interpreter/linkResolver.hpp"
 #include "jvm.h"
 #include "jfr/jfrEvents.hpp"
@@ -79,6 +80,7 @@
 #include "utilities/events.hpp"
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/nonblockingQueue.inline.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Compiler.hpp"
 #endif
@@ -395,29 +397,36 @@ void CompileQueue::add_pending(CompileTask* task) {
   }
 }
 
+static bool process_pending(CompileTask* task) {
+//  guarantee(task->method()->queued_for_compilation(), "");
+  if (task->is_unloaded()) {
+    return true; // unloaded
+  }
+  task->method()->set_queued_for_compilation(); // FIXME
+  if (task->method()->pending_queue_processed()) {
+    return true; // already queued
+  }
+  // Mark the method as being in the compile queue.
+  task->method()->set_pending_queue_processed();
+  if (CompileBroker::compilation_is_complete(task->method(), task->osr_bci(), task->comp_level(),
+                                             task->requires_online_compilation(), task->compile_reason())) {
+    return true; // already compiled
+  }
+  return false; // active
+}
+
 void CompileQueue::transfer_pending() {
   assert(_lock->owned_by_self(), "must own lock");
   while (!_queue.empty()) {
     CompileTask* task = _queue.pop();
-//    guarantee(task->method()->queued_for_compilation(), "");
-    task->method()->set_queued_for_compilation(); // FIXME
-    if (task->method()->pending_queue_processed()) {
+    bool is_stale = process_pending(task);
+    if (is_stale) {
       task->set_next(_first_stale);
       task->set_prev(nullptr);
       _first_stale = task;
-      continue; // skip
     } else {
-      // Mark the method as being in the compile queue.
-      task->method()->set_pending_queue_processed();
+      add(task);
     }
-    if (CompileBroker::compilation_is_complete(task->method(), task->osr_bci(), task->comp_level(),
-                                               task->requires_online_compilation(), task->compile_reason())) {
-      task->set_next(_first_stale);
-      task->set_prev(nullptr);
-      _first_stale = task;
-      continue; // skip
-    }
-    add(task);
   }
 }
 
@@ -588,10 +597,12 @@ void CompileQueue::remove_and_mark_stale(CompileTask* task) {
 // methods in the compile queue need to be marked as used on the stack
 // so that they don't get reclaimed by Redefine Classes
 void CompileQueue::mark_on_stack() {
-  CompileTask* task = _first;
-  while (task != nullptr) {
+  for (CompileTask* task = _first; task != nullptr; task = task->next()) {
     task->mark_on_stack();
-    task = task->next();
+  }
+  for (CompileTask* task = _queue.first(); !_queue.is_end(task); task = task->next()) {
+    assert(task != nullptr, "");
+    task->mark_on_stack();
   }
 }
 
@@ -1362,13 +1373,11 @@ void CompileBroker::compile_method_base(const methodHandle& method,
     tty->cr();
   }
 
-  if (compile_reason != CompileTask::Reason_DirectivesChanged) {
-    // A request has been made for compilation.  Before we do any
-    // real work, check to see if the method has been compiled
-    // in the meantime with a definitive result.
-    if (compilation_is_complete(method(), osr_bci, comp_level, requires_online_compilation, compile_reason)) {
-      return;
-    }
+  // A request has been made for compilation.  Before we do any
+  // real work, check to see if the method has been compiled
+  // in the meantime with a definitive result.
+  if (compilation_is_complete(method(), osr_bci, comp_level, requires_online_compilation, compile_reason)) {
+    return;
   }
 
 #ifndef PRODUCT
@@ -1426,13 +1435,11 @@ void CompileBroker::compile_method_base(const methodHandle& method,
       return;
     }
 
-    if (compile_reason != CompileTask::Reason_DirectivesChanged) {
-      // We need to check again to see if the compilation has
-      // completed.  A previous compilation may have registered
-      // some result.
-      if (compilation_is_complete(method(), osr_bci, comp_level, requires_online_compilation, compile_reason)) {
-        return;
-      }
+    // We need to check again to see if the compilation has
+    // completed.  A previous compilation may have registered
+    // some result.
+    if (compilation_is_complete(method(), osr_bci, comp_level, requires_online_compilation, compile_reason)) {
+      return;
     }
 
     // We now know that this compilation is not pending, complete,
@@ -1625,7 +1632,7 @@ nmethod* CompileBroker::compile_method(const methodHandle& method, int osr_bci,
   if (osr_bci == InvocationEntryBci) {
     // standard compilation
     nmethod* method_code = method->code();
-    if (method_code != nullptr && (compile_reason != CompileTask::Reason_DirectivesChanged)) {
+    if (method_code != nullptr) {
       if (compilation_is_complete(method(), osr_bci, comp_level, requires_online_compilation, compile_reason)) {
         return method_code;
       }
@@ -1644,6 +1651,7 @@ nmethod* CompileBroker::compile_method(const methodHandle& method, int osr_bci,
   assert(!HAS_PENDING_EXCEPTION, "No exception should be present");
   // some prerequisites that are compiler specific
   if (compile_reason != CompileTask::Reason_Preload && (comp->is_c2() || comp->is_jvmci())) {
+    InternalOOMEMark iom(THREAD);
     method->constants()->resolve_string_constants(CHECK_AND_CLEAR_NONASYNC_NULL);
     // Resolve all classes seen in the signature of the method
     // we are compiling.
@@ -1815,7 +1823,7 @@ bool CompileBroker::compilation_is_prohibited(const methodHandle& method, int os
 
   // The method may be explicitly excluded by the user.
   double scale;
-  if (excluded || (CompilerOracle::has_option_value(method, CompileCommand::CompileThresholdScaling, scale) && scale == 0)) {
+  if (excluded || (CompilerOracle::has_option_value(method, CompileCommandEnum::CompileThresholdScaling, scale) && scale == 0)) {
     bool quietly = CompilerOracle::be_quiet();
     if (PrintCompilation && !quietly) {
       // This does not happen quietly...
@@ -2063,7 +2071,7 @@ bool CompileBroker::init_compiler_runtime() {
 void CompileBroker::free_buffer_blob_if_allocated(CompilerThread* thread) {
   BufferBlob* blob = thread->get_buffer_blob();
   if (blob != nullptr) {
-    blob->purge(true /* free_code_cache_data */, true /* unregister_nmethod */);
+    blob->purge();
     MutexLocker mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
     CodeCache::free(blob);
   }
@@ -2412,7 +2420,8 @@ static void post_compilation_event(EventCompilation& event, CompileTask* task) {
                                         task->is_success(),
                                         task->osr_bci() != CompileBroker::standard_entry_bci,
                                         task->nm_total_size(),
-                                        task->num_inlined_bytecodes());
+                                        task->num_inlined_bytecodes(),
+                                        task->arena_bytes());
 }
 
 int DirectivesStack::_depth = 0;
@@ -2438,6 +2447,10 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
   elapsedTimer time;
 
   DirectiveSet* directive = task->directive();
+  if (directive->PrintCompilationOption) {
+    ResourceMark rm;
+    task->print_tty();
+  }
 
   CompilerThread* thread = CompilerThread::current();
   ResourceMark rm(thread);
@@ -2650,11 +2663,6 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
 
   if (tdata != nullptr) {
     tdata->record_compilation_end(task);
-  }
-
-  if (directive->PrintCompilationOption) {
-    ResourceMark rm;
-    task->print_tty();
   }
 
   methodHandle method(thread, task->method());

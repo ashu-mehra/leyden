@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -136,6 +136,7 @@ class TrainingData : public Metadata {
     void metaspace_pointers_do(MetaspaceClosure *iter);
   };
   class TrainingDataLocker {
+    static volatile bool _snapshot;
     static int _lock_mode;
     static void lock() {
       assert(_lock_mode != 0, "Forgot to call TrainingDataLocker::initialize()");
@@ -157,11 +158,22 @@ class TrainingData : public Metadata {
       }
     }
   public:
+    static void snapshot() {
+      assert_locked();
+      _snapshot = true;
+    }
+    static bool can_add() {
+      assert_locked();
+      return !_snapshot;
+    }
     static void initialize() {
       _lock_mode = need_data() ? +1 : -1;   // if -1, we go lock-free
     }
     static void assert_locked() {
-      assert(TrainingDataLocker::safely_locked(), "use under TrainingDataLocker");
+      assert(safely_locked(), "use under TrainingDataLocker");
+    }
+    static void assert_can_add() {
+      assert(can_add(), "Cannot add TrainingData objects");
     }
     TrainingDataLocker() {
       lock();
@@ -193,6 +205,7 @@ class TrainingData : public Metadata {
     }
     TrainingData* install(TrainingData* tdata) {
       TrainingDataLocker::assert_locked();
+      TrainingDataLocker::assert_can_add();
       auto key = tdata->key();
       if (key->is_empty())   return tdata;  // unkeyed TD not installed
       bool created = false;
@@ -303,7 +316,6 @@ public:
       return *adr_at(i);
     }
     bool append_if_missing(E dep) {
-      //assert(_deps == nullptr, "must be growable");
       if (_deps_dyn == nullptr) {
         _deps_dyn = new GrowableArrayCHeap<E, mtCompiler>(10);
         _deps_dyn->append(dep);
@@ -324,7 +336,6 @@ public:
       }
     }
     void append(E dep) {
-      //assert(_deps == nullptr, "must be growable");
       if (_deps_dyn == nullptr) {
         _deps_dyn = new GrowableArrayCHeap<E, mtCompiler>(10);
       }
@@ -343,7 +354,6 @@ public:
     void remove_unshareable_info() {
       _deps_dyn = nullptr;
     }
-    void restore_unshareable_info(TRAPS) {}
 #endif
     void prepare(ClassLoaderData* loader_data);
     void metaspace_pointers_do(MetaspaceClosure *iter);
@@ -352,16 +362,13 @@ public:
   virtual void metaspace_pointers_do(MetaspaceClosure *iter);
 
 #if INCLUDE_CDS
-  virtual void remove_unshareable_info(Visitor& vistor) {}
-  virtual void restore_unshareable_info(Visitor& visitor, TRAPS) {}
-  static void restore_all_unshareable_info(TRAPS);
+  virtual void remove_unshareable_info() {}
 #endif
   static void init_dumptime_table(TRAPS);
   static void iterate_roots(MetaspaceClosure* it);
   static void dump_training_data();
   static void cleanup_training_data();
   static void serialize_training_data(SerializeClosure* soc);
-  static void adjust_training_data_dictionary();
   static void print_archived_training_data_on(outputStream* st);
   static void write_training_data_dictionary(TrainingDataDictionary* dictionary);
   static size_t estimate_size_for_archive();
@@ -458,8 +465,7 @@ class KlassTrainingData : public TrainingData {
   }
 
 #if INCLUDE_CDS
-  virtual void remove_unshareable_info(Visitor& visitor);
-  virtual void restore_unshareable_info(Visitor& visitor, TRAPS);
+  virtual void remove_unshareable_info();
 #endif
 
   void metaspace_pointers_do(MetaspaceClosure *iter);
@@ -573,7 +579,6 @@ public:
       }
 #if INCLUDE_CDS
       void remove_unshareable_info() { _data.remove_unshareable_info(); }
-      void restore_unshareable_info(TRAPS) { _data.restore_unshareable_info(THREAD); }
 #endif
       void prepare(ClassLoaderData* loader_data) {
         _data.prepare(loader_data);
@@ -590,9 +595,6 @@ public:
 #if INCLUDE_CDS
     void remove_unshareable_info() {
       ciMethod__inline_instructions_size.remove_unshareable_info();
-    }
-    void restore_unshareable_info(TRAPS) {
-      ciMethod__inline_instructions_size.restore_unshareable_info(THREAD);
     }
 #endif
     void prepare(ClassLoaderData* loader_data) {
@@ -674,8 +676,7 @@ public:
   virtual void print_value_on(outputStream* st) const { print_on(st, true); }
 
 #if INCLUDE_CDS
-  virtual void remove_unshareable_info(Visitor& visitor);
-  virtual void restore_unshareable_info(Visitor& visitor, TRAPS);
+  virtual void remove_unshareable_info();
 #endif
 
   virtual void metaspace_pointers_do(MetaspaceClosure* iter);
@@ -801,8 +802,7 @@ class MethodTrainingData : public TrainingData {
   virtual MetaspaceObj::Type type() const { return MethodTrainingDataType; }
 
 #if INCLUDE_CDS
-  virtual void remove_unshareable_info(Visitor& visitor);
-  virtual void restore_unshareable_info(Visitor& visitor, TRAPS);
+  virtual void remove_unshareable_info();
 #endif
 
   virtual int size() const {

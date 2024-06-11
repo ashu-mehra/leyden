@@ -78,8 +78,10 @@ ArchiveHeapWriter::BufferOffsetToSourceObjectTable*
   ArchiveHeapWriter::_buffer_offset_to_source_obj_table = nullptr;
 
 
-typedef ResourceHashtable<size_t, size_t,
-      127, // prime number
+typedef ResourceHashtable<
+      size_t,    // offset of a filler from ArchiveHeapWriter::buffer_bottom()
+      size_t,    // size of this filler (in bytes)
+      127,       // prime number
       AnyObj::C_HEAP,
       mtClassShared> FillersTable;
 static FillersTable* _fillers;
@@ -101,7 +103,6 @@ void ArchiveHeapWriter::init() {
     _permobj_seg_bytesizes = new GrowableArrayCHeap<size_t, mtClassShared>(5);
     _permobj_seg_lengths = new GrowableArrayCHeap<int, mtClassShared>(5);
 
-    guarantee(UseG1GC, "implementation limitation");
     guarantee(MIN_GC_REGION_ALIGNMENT <= /*G1*/HeapRegion::min_region_size_in_words() * HeapWordSize, "must be");
   }
 }
@@ -424,13 +425,13 @@ void ArchiveHeapWriter::maybe_fill_gc_region_gap(size_t required_byte_size) {
     log_info(cds, heap)("Inserting filler obj array of %d elements (" SIZE_FORMAT " bytes total) @ buffer offset " SIZE_FORMAT,
                         array_length, fill_bytes, _buffer_used);
     HeapWord* filler = init_filler_array_at_buffer_top(array_length, fill_bytes);
-    _fillers->put(_buffer_used, fill_bytes);
     _buffer_used = filler_end;
+    _fillers->put(buffered_address_to_offset((address)filler), fill_bytes);
   }
 }
 
 size_t ArchiveHeapWriter::get_filler_size_at(address buffered_addr) {
-  size_t* p = _fillers->get(buffered_addr - buffer_bottom());
+  size_t* p = _fillers->get(buffered_address_to_offset(buffered_addr));
   if (p != nullptr) {
     assert(*p > 0, "filler must be larger than zero bytes");
     return *p;
@@ -508,16 +509,20 @@ size_t ArchiveHeapWriter::copy_one_source_obj_to_buffer(oop src_obj) {
 
 void ArchiveHeapWriter::set_requested_address(ArchiveHeapInfo* info) {
   assert(!info->is_used(), "only set once");
-  assert(UseG1GC, "must be");
-  address heap_end = (address)G1CollectedHeap::heap()->reserved().end();
-  log_info(cds, heap)("Heap end = %p", heap_end);
 
   size_t heap_region_byte_size = _buffer_used;
   assert(heap_region_byte_size > 0, "must archived at least one object!");
 
-
   if (UseCompressedOops) {
-    _requested_bottom = align_down(heap_end - heap_region_byte_size, HeapRegion::GrainBytes);
+    if (UseG1GC) {
+      address heap_end = (address)G1CollectedHeap::heap()->reserved().end();
+      log_info(cds, heap)("Heap end = %p", heap_end);
+      _requested_bottom = align_down(heap_end - heap_region_byte_size, HeapRegion::GrainBytes);
+      _requested_bottom = align_down(_requested_bottom, MIN_GC_REGION_ALIGNMENT);
+      assert(is_aligned(_requested_bottom, HeapRegion::GrainBytes), "sanity");
+    } else {
+      _requested_bottom = align_up(CompressedOops::begin(), MIN_GC_REGION_ALIGNMENT);
+    }
   } else {
     // We always write the objects as if the heap started at this address. This
     // makes the contents of the archive heap deterministic.
@@ -525,10 +530,10 @@ void ArchiveHeapWriter::set_requested_address(ArchiveHeapInfo* info) {
     // Note that at runtime, the heap address is selected by the OS, so the archive
     // heap will not be mapped at 0x10000000, and the contents need to be patched.
     _requested_bottom = (address)NOCOOPS_REQUESTED_BASE;
+    _requested_bottom = align_up(_requested_bottom, MIN_GC_REGION_ALIGNMENT);
   }
-
-  assert(is_aligned(_requested_bottom, HeapRegion::GrainBytes), "sanity");
-
+  
+  assert(is_aligned(_requested_bottom, MIN_GC_REGION_ALIGNMENT), "sanity");
   _requested_top = _requested_bottom + _buffer_used;
 
   info->set_buffer_region(MemRegion(offset_to_buffered_address<HeapWord*>(0),
@@ -614,10 +619,8 @@ void ArchiveHeapWriter::update_header_for_requested_obj(oop requested_obj, oop s
   fake_oop->set_narrow_klass(nk);
 
   // We need to retain the identity_hash, because it may have been used by some hashtables
-  // in the shared heap. This also has the side effect of pre-initializing the
-  // identity_hash for all shared objects, so they are less likely to be written
-  // into during run time, increasing the potential of memory sharing.
-  if (src_obj != nullptr) {
+  // in the shared heap.
+  if (src_obj != nullptr && !src_obj->fast_no_hash_check()) {
     intptr_t src_hash = src_obj->identity_hash();
     fake_oop->set_mark(markWord::prototype().copy_set_hash(src_hash));
     assert(fake_oop->mark().is_unlocked(), "sanity");
