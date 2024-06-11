@@ -2507,20 +2507,6 @@ bool SCCache::write_relocations(CodeBuffer* buffer, uint& all_reloc_size) {
           // Record offset of runtime target
           address target = ((external_word_Relocation*)iter.reloc())->target();
           reloc_data[j] = _table->id_for_address(target, iter, buffer);
-#if 0
-          // is target in rodata section (like some constant)
-          if (target >= rodata_start && target <= rodata_end) {
-            // store offset from libjvm.so load address
-            uint offset = jvm_library_addr - target;
-            current_reloc_data[j] = ENCODE_RELOC_DATA(offset, RODATA_TAG);
-	    if (log.is_enabled()) {
-	      log.print_cr("relocation external_word_type target=%p, offset=%x", target, offset);
-	    }
-          } else {
-            uint id = _table->id_for_address(target, iter, buffer);
-            current_reloc_data[j] = ENCODE_RELOC_DATA(id, ID_TAG);
-          }
-#endif
           break;
         }
         case relocInfo::internal_word_type:
