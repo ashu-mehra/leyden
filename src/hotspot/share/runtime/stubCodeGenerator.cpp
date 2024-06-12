@@ -85,9 +85,12 @@ StubCodeGenerator::~StubCodeGenerator() {
 #endif
 }
 
-void StubCodeGenerator::setup_code_desc(const char* name, address start, address end) {
+void StubCodeGenerator::setup_code_desc(const char* name, address start, address end, bool loaded_from_cache) {
   StubCodeDesc* cdesc = new StubCodeDesc("StubRoutines", name, start, end);
   cdesc->set_disp(uint(start - _masm->code_section()->outer()->insts_begin()));
+  if (loaded_from_cache) {
+    cdesc->set_loaded_from_cache();
+  }
   print_stub_code_desc(cdesc);
   // copied from ~~StubCodeMark()
   Forte::register_stub(cdesc->name(), cdesc->begin(), cdesc->end());
@@ -131,20 +134,43 @@ void StubCodeGenerator::print_stub_code_desc(StubCodeDesc* cdesc) {
 int StubCodeGenerator::num_stubs(StubsKind kind) {
   switch (kind) {
   case StubsKind::Initial_stubs:
-    return StubRoutines::StubID::last_initial_stub + 1;
+    return StubRoutines::initial_stubs_cnt();
     break;
   case StubsKind::Continuation_stubs:
-    return StubRoutines::StubID::last_continuation_stub - StubRoutines::StubID::last_initial_stub;
+    return StubRoutines::continuation_stubs_cnt();
     break;
   case StubsKind::Compiler_stubs:
-    return StubRoutines::StubID::last_compiler_stub - StubRoutines::StubID::last_continuation_stub;
+    return StubRoutines::compiler_stubs_cnt();
     break;
   case StubsKind::Final_stubs:
-    return StubRoutines::StubID::last_final_stub - StubRoutines::StubID::last_compiler_stub;
+    return StubRoutines::final_stubs_cnt();
     break;
   default:
     ShouldNotReachHere();
   }
+}
+
+void StubCodeGenerator::print_statistics_on(outputStream* st) {
+  st->print_cr("StubRoutines Stubs:");
+  st->print_cr("  Initial stubs:         %d", StubRoutines::initial_stubs_cnt());
+  st->print_cr("  Continuation stubs:    %d", StubRoutines::continuation_stubs_cnt());
+  st->print_cr("  Compiler stubs:        %d", StubRoutines::compiler_stubs_cnt());
+  st->print_cr("  Final stubs:           %d", StubRoutines::final_stubs_cnt());
+
+  int emitted = 0;
+  int loaded_from_cache = 0;
+
+  StubCodeDesc* scd = StubCodeDesc::first();
+  while (scd != nullptr) {
+    if (!strcmp(scd->group(), "StubRoutines")) {
+      emitted += 1;
+      if (scd->loaded_from_cache()) {
+	loaded_from_cache += 1;
+      }
+    }
+    scd = StubCodeDesc::next(scd);
+  }
+  st->print_cr("Total stubroutines stubs emitted: %d (generated=%d, loaded from cache=%d)", emitted, emitted - loaded_from_cache, loaded_from_cache);
 }
 
 // Implementation of CodeMark

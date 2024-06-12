@@ -288,6 +288,10 @@ class StubRoutines: AllStatic {
 #undef DECLARE_LAST_STUB_ID
 
   static int stubId_to_index(int stubId);
+  static int initial_stubs_cnt() { return StubID::last_initial_stub + 1; }
+  static int continuation_stubs_cnt() { return StubID::last_continuation_stub - StubID::last_initial_stub; }
+  static int compiler_stubs_cnt() { return StubID::last_compiler_stub - StubID::last_continuation_stub; }
+  static int final_stubs_cnt() { return StubID::last_final_stub - StubID::last_compiler_stub; }
 
   static jint    _verify_oop_count;
   static address _verify_oop_subroutine_entry;

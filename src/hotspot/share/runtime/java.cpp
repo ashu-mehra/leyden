@@ -80,6 +80,7 @@
 #include "runtime/javaThread.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/statSampler.hpp"
+#include "runtime/stubCodeGenerator.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/task.hpp"
 #include "runtime/threads.hpp"
@@ -240,6 +241,8 @@ void log_vm_init_stats() {
     perf_jvm_print_on(&log);
     log.cr();
     MethodHandles::print_counters_on(&log);
+    log.cr();
+    StubCodeGenerator::print_statistics_on(&log);
   }
 }
 
