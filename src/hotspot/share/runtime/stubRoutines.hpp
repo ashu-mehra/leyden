@@ -260,6 +260,7 @@ class UnsafeMemoryAccessMark : public StackObj {
   stub(arrayof_jbyte_fill)                           \
   stub(arrayof_jshort_fill)                          \
   stub(arrayof_jint_fill)                            \
+  stub(unsafe_setmemory)                             \
   stub(method_entry_barrier)                         \
   stub(vectorizedMismatch)                           \
   stub(upcall_stub_exception_handler)                \
