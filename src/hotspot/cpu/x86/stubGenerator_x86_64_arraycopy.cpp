@@ -2715,10 +2715,13 @@ static void do_setmemory_atomic_loop(USM_TYPE type, Register dest,
 // Examines the alignment of the operands and dispatches
 // to an int, short, or byte fill loop.
 //
-address StubGenerator::generate_unsafe_setmemory(const char *name,
+address StubGenerator::generate_unsafe_setmemory(const char *stub_name,
                                                  address unsafe_byte_fill) {
+  int stubId = StubRoutines::StubID::unsafe_setmemory_id;
+  LOAD_STUB_ARCHIVE_DATA
+
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
   __ enter();   // required for proper stackwalking of RuntimeStub frame
 
@@ -2811,6 +2814,8 @@ address StubGenerator::generate_unsafe_setmemory(const char *name,
     __ leave();    // Clear effect of enter()
     __ jump(RuntimeAddress(unsafe_byte_fill));
   }
+
+  SETUP_STUB_ARCHIVE_DATA
 
   return start;
 }
