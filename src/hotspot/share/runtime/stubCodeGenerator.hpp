@@ -116,7 +116,7 @@ class StubCodeGenerator: public StackObj {
   MacroAssembler*  _masm;
   StubArchiveData* _archive_data;
 
-  void setup_code_desc(const char* name, address start, address end);
+  void setup_code_desc(const char* name, address start, address end, bool loaded_from_cache);
 
  public:
   StubCodeGenerator(CodeBuffer* code, bool print_code) : StubCodeGenerator(code, nullptr, print_code) {}
@@ -146,6 +146,7 @@ class StubCodeGenerator: public StackObj {
   };
 
   static int num_stubs(StubsKind kind);
+  static void print_statistics_on(outputStream* st);
 };
 
 // Used to locate addresses owned by a stub in the _address_array.
@@ -226,7 +227,7 @@ public:
       const StubArchiveData* ad = (const StubArchiveData*) _archive_data; \
       address start = ad->current_stub_entry_addr(0); \
       address end = ad->current_stub_end_addr(); \
-      setup_code_desc(stub_name, start, end); \
+      setup_code_desc(stub_name, start, end, true); \
       return start; \
     } \
   }
@@ -238,7 +239,7 @@ public:
       address start = ad->current_stub_entry_addr(0); \
       entry_address = ad->current_stub_entry_addr(1); \
       address end = ad->current_stub_end_addr(); \
-      setup_code_desc(stub_name, start, end); \
+      setup_code_desc(stub_name, start, end, true); \
       return start; \
     } \
   }
