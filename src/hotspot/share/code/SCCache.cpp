@@ -4012,6 +4012,7 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, &SharedRuntime::_checkcast_array_copy_ctr); // used by arraycopy stub
   SET_ADDRESS(_extrs, &SharedRuntime::_unsafe_array_copy_ctr); // used by arraycopy stub
   SET_ADDRESS(_extrs, &SharedRuntime::_generic_array_copy_ctr); // used by arraycopy stub
+  SET_ADDRESS(_extrs, &SharedRuntime::_unsafe_set_memory_ctr); // used by arraycopy stub
 #endif /* PRODUCT */
 
   SET_ADDRESS(_extrs, UpcallLinker::handle_uncaught_exception); // used by upcall_stub_exception_handler
