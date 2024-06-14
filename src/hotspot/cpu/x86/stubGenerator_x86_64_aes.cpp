@@ -220,7 +220,13 @@ void StubGenerator::generate_aes_stubs() {
 address StubGenerator::generate_galoisCounterMode_AESCrypt() {
   int stubId = StubRoutines::StubID::galoisCounterMode_AESCrypt_id;
   const char* stub_name = "galoisCounterMode_AESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -290,7 +296,8 @@ address StubGenerator::generate_galoisCounterMode_AESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -312,7 +319,13 @@ address StubGenerator::generate_galoisCounterMode_AESCrypt() {
 address StubGenerator::generate_avx2_galoisCounterMode_AESCrypt() {
   int stubId = StubRoutines::StubID::galoisCounterMode_AESCrypt_id;
   const char* stub_name = "galoisCounterMode_AESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -380,7 +393,8 @@ address StubGenerator::generate_avx2_galoisCounterMode_AESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -389,7 +403,13 @@ address StubGenerator::generate_avx2_galoisCounterMode_AESCrypt() {
 address StubGenerator::generate_counterMode_VectorAESCrypt()  {
   int stubId = StubRoutines::StubID::counterMode_AESCrypt_id;
   const char* stub_name = "counterMode_AESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -452,7 +472,8 @@ address StubGenerator::generate_counterMode_VectorAESCrypt()  {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -484,7 +505,13 @@ address StubGenerator::generate_counterMode_AESCrypt_Parallel() {
 
   int stubId = StubRoutines::StubID::counterMode_AESCrypt_id;
   const char* stub_name = "counterMode_AESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -768,7 +795,8 @@ address StubGenerator::generate_counterMode_AESCrypt_Parallel() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -778,7 +806,13 @@ address StubGenerator::generate_cipherBlockChaining_decryptVectorAESCrypt() {
 
   int stubId = StubRoutines::StubID::cipherBlockChaining_decryptAESCrypt_id;
   const char* stub_name = "cipherBlockChaining_decryptAESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1050,7 +1084,8 @@ address StubGenerator::generate_cipherBlockChaining_decryptVectorAESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -1067,7 +1102,13 @@ address StubGenerator::generate_aescrypt_encryptBlock() {
 
   int stubId = StubRoutines::StubID::aescrypt_encryptBlock_id;
   const char* stub_name = "aescrypt_encryptBlock";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1152,7 +1193,8 @@ address StubGenerator::generate_aescrypt_encryptBlock() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -1169,7 +1211,13 @@ address StubGenerator::generate_aescrypt_decryptBlock() {
 
   int stubId = StubRoutines::StubID::aescrypt_decryptBlock_id;
   const char* stub_name = "aescrypt_decryptBlock";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1255,7 +1303,8 @@ address StubGenerator::generate_aescrypt_decryptBlock() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -1278,7 +1327,13 @@ address StubGenerator::generate_cipherBlockChaining_encryptAESCrypt() {
 
   int stubId = StubRoutines::StubID::cipherBlockChaining_encryptAESCrypt_id;
   const char* stub_name = "cipherBlockChaining_encryptAESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1411,7 +1466,8 @@ address StubGenerator::generate_cipherBlockChaining_encryptAESCrypt() {
   __ jcc(Assembler::notEqual, L_loopTop_256);
   __ jmp(L_exit);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -1436,7 +1492,13 @@ address StubGenerator::generate_cipherBlockChaining_decryptAESCrypt_Parallel() {
 
   int stubId = StubRoutines::StubID::cipherBlockChaining_decryptAESCrypt_id;
   const char* stub_name = "cipherBlockChaining_decryptAESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1676,7 +1738,8 @@ __ opc(xmm_result3, src_reg);         \
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -1684,7 +1747,13 @@ __ opc(xmm_result3, src_reg);         \
 address StubGenerator::generate_electronicCodeBook_encryptAESCrypt() {
   int stubId = StubRoutines::StubID::electronicCodeBook_encryptAESCrypt_id;
   const char* stub_name = "electronicCodeBook_encryptAESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1702,7 +1771,8 @@ address StubGenerator::generate_electronicCodeBook_encryptAESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
  }
@@ -1710,7 +1780,13 @@ address StubGenerator::generate_electronicCodeBook_encryptAESCrypt() {
 address StubGenerator::generate_electronicCodeBook_decryptAESCrypt() {
   int stubId = StubRoutines::StubID::electronicCodeBook_decryptAESCrypt_id;
   const char* stub_name = "electronicCodeBook_decryptAESCrypt";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1728,7 +1804,8 @@ address StubGenerator::generate_electronicCodeBook_decryptAESCrypt() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }

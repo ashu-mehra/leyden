@@ -116,7 +116,13 @@ void StubGenerator::generate_chacha_stubs() {
 address StubGenerator::generate_chacha20Block_avx() {
   int stubId = StubRoutines::StubID::chacha20Block_id;
   const char* stub_name = "chacha20Block";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -302,7 +308,8 @@ address StubGenerator::generate_chacha20Block_avx() {
   __ leave();
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -311,7 +318,13 @@ address StubGenerator::generate_chacha20Block_avx() {
 address StubGenerator::generate_chacha20Block_avx512() {
   int stubId = StubRoutines::StubID::chacha20Block_id;
   const char* stub_name = "chacha20Block";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -479,7 +492,8 @@ address StubGenerator::generate_chacha20Block_avx512() {
   __ leave();
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
