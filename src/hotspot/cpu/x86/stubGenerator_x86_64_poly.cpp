@@ -914,7 +914,13 @@ void StubGenerator::poly1305_process_blocks_avx512(
 address StubGenerator::generate_poly1305_processBlocks() {
   int stubId = StubRoutines::StubID::poly1305_processBlocks_id;
   const char* stub_name = "poly1305_processBlocks";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -1036,7 +1042,8 @@ address StubGenerator::generate_poly1305_processBlocks() {
   __ leave();
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }

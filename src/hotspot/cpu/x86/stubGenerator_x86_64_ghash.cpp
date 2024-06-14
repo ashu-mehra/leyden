@@ -82,7 +82,13 @@ void StubGenerator::generate_ghash_stubs() {
 address StubGenerator::generate_ghash_processBlocks() {
   int stubId = StubRoutines::StubID::ghash_processBlocks_id;
   const char* stub_name = "ghash_processBlocks";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   Label L_ghash_loop, L_exit;
@@ -214,7 +220,8 @@ address StubGenerator::generate_ghash_processBlocks() {
   __ leave();
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -224,7 +231,13 @@ address StubGenerator::generate_ghash_processBlocks() {
 address StubGenerator::generate_avx_ghash_processBlocks() {
   int stubId = StubRoutines::StubID::ghash_processBlocks_id;
   const char* stub_name = "ghash_processBlocks";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
 
@@ -245,7 +258,8 @@ address StubGenerator::generate_avx_ghash_processBlocks() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
