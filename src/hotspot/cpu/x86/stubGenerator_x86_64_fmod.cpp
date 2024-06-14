@@ -76,7 +76,13 @@ ATTRIBUTE_ALIGNED(32) static const uint64_t CONST_e307[] = {
 address StubGenerator::generate_libmFmod() {
   int stubId = StubRoutines::StubID::libmFmod_id;
   const char* stub_name = "libmFmod";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   __ align(CodeEntryAlignment);
   StubCodeMark mark(this, "StubRoutines", stub_name);
@@ -527,7 +533,8 @@ address StubGenerator::generate_libmFmod() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }

@@ -26,6 +26,7 @@
 #include "asm/macroAssembler.hpp"
 #include "asm/macroAssembler.inline.hpp"
 #include "code/codeCache.hpp"
+#include "code/SCCache.hpp"
 #include "compiler/disassembler.hpp"
 #include "oops/oop.inline.hpp"
 #include "prims/forte.hpp"
@@ -131,6 +132,38 @@ void StubCodeGenerator::print_stub_code_desc(StubCodeDesc* cdesc) {
   }
 }
 
+bool StubCodeGenerator::find_archive_data(int stubId) {
+  if (_archive_data == nullptr) {
+    return false;
+  }
+  return _archive_data->find_archive_data(stubId);
+}
+
+void StubCodeGenerator::load_archive_data(int stubId, const char* stub_name, address* start, address* end, address* entry_address1) {
+#ifdef ASSERT
+  assert(find_archive_data(stubId), "archive data does not exist");
+#endif
+  assert(_archive_data != nullptr, "archive data is not set");
+  _archive_data->as_const()->load_archive_data(start, end, entry_address1);
+  assert(*start != nullptr, "failed to load start address of the stub %d", stubId);
+  assert(*end != nullptr, "failed to load end address of the stub %d", stubId);
+  setup_code_desc(stub_name, *start, *end, true);
+}
+
+void StubCodeGenerator::setup_stub_archive_data(int stubId, address start, address end, address entry_address1, address entry_address2) {
+  if (_archive_data == nullptr) {
+    return;
+  }
+  _archive_data->store_archive_data(stubId, start, end, entry_address1, entry_address2);
+  SCCache::add_stub_address(start);
+  if (entry_address1 != nullptr) {
+    SCCache::add_stub_address(entry_address1);
+  }
+  if (entry_address2 != nullptr) {
+    SCCache::add_stub_address(entry_address2);
+  }
+}
+ 
 int StubCodeGenerator::num_stubs(StubsKind kind) {
   switch (kind) {
   case StubsKind::Initial_stubs:
@@ -202,7 +235,7 @@ StubCodeMark::~StubCodeMark() {
   }
 }
 
-bool StubArchiveData::load_archive_data_for(int stubId) {
+bool StubArchiveData::find_archive_data(int stubId) {
   assert(_index_table != nullptr, "sanity check");
   int index = StubRoutines::stubId_to_index(stubId);
   assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
@@ -215,32 +248,31 @@ bool StubArchiveData::load_archive_data_for(int stubId) {
   return true;
 }
 
-void StubArchiveData::store_archive_data(int stubId, address start, address end) {
-  int index = StubRoutines::stubId_to_index(stubId);
-  assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
-  int start_addr_index = _address_array.length();
-  _address_array.append(start);
-  _address_array.append(end);
-  _index_table[index].init_entry(start_addr_index, 2);
+void StubArchiveData::load_archive_data(address* start, address* end, address* entry_address1) const {
+  assert(start != nullptr, "start address cannot be null");
+  assert(end != nullptr, "end address cannot be null");
+  *start = current_stub_entry_addr(0);
+  *end = current_stub_end_addr();
+  if (entry_address1 != nullptr) {
+    *entry_address1 = current_stub_entry_addr(1);
+  }
 }
 
-void StubArchiveData::store_archive_data(int stubId, address start, address entry_address_1, address end) {
+void StubArchiveData::store_archive_data(int stubId, address start, address end, address entry_address1, address entry_address2) {
   int index = StubRoutines::stubId_to_index(stubId);
   assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
+  assert(start != nullptr, "start address cannot be null");
+  assert(end != nullptr, "end address cannot be null");
   int start_addr_index = _address_array.length();
   _address_array.append(start);
-  _address_array.append(entry_address_1);
+  if (entry_address1 != nullptr) {
+    _address_array.append(entry_address1);
+  }
+  if (entry_address2 != nullptr) {
+    assert(entry_address1 != nullptr, "entry_address1 cannot be null if entry_address2 is not null");
+    _address_array.append(entry_address2);
+  }
   _address_array.append(end);
-  _index_table[index].init_entry(start_addr_index, 3);
-}
-
-void StubArchiveData::store_archive_data(int stubId, address start, address entry_address_1, address entry_address_2, address end) {
-  int index = StubRoutines::stubId_to_index(stubId);
-  assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
-  int start_addr_index = _address_array.length();
-  _address_array.append(start);
-  _address_array.append(entry_address_1);
-  _address_array.append(entry_address_2);
-  _address_array.append(end);
-  _index_table[index].init_entry(start_addr_index, 4);
+  int count = _address_array.length() - start_addr_index;
+  _index_table[index].init_entry(start_addr_index, count);
 }

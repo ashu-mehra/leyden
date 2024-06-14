@@ -764,7 +764,13 @@ ATTRIBUTE_ALIGNED(8) static const juint _DOUBLE0DOT5[] = {
 address StubGenerator::generate_libmPow() {
   int stubId = StubRoutines::StubID::libmPow_id;
   const char* stub_name = "libmPow";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -1865,7 +1871,8 @@ address StubGenerator::generate_libmPow() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }

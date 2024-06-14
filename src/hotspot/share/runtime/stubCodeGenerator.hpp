@@ -147,6 +147,9 @@ class StubCodeGenerator: public StackObj {
 
   static int num_stubs(StubsKind kind);
   static void print_statistics_on(outputStream* st);
+  bool find_archive_data(int stubId);
+  void load_archive_data(int stubId, const char* stub_name, address* start, address* end, address* entry_address1 = nullptr);
+  void setup_stub_archive_data(int stubId, address start, address end, address entry_address1 = nullptr, address entry_address2 = nullptr);
 };
 
 // Used to locate addresses owned by a stub in the _address_array.
@@ -208,6 +211,7 @@ public:
   StubAddrIndexInfo* index_table() { return _index_table; }
 
   address current_stub_entry_addr(int index) const {
+    assert(index < _current->count()-1, "index %d should be less than %d for entry address", index, _current->count()-1);
     return _address_array.at(_current->start_index() + index);
   }
 
@@ -215,64 +219,12 @@ public:
     return _address_array.at(_current->end_index());
   }
 
-  bool load_archive_data_for(int stubId);
-  void store_archive_data(int stubId, address start, address end);
-  void store_archive_data(int stubId, address start, address entry_address_1, address end);
-  void store_archive_data(int stubId, address start, address entry_address_1, address entry_address_2, address end);
+  bool find_archive_data(int stubId);
+  void load_archive_data(address* start, address* end, address* entry_address1) const;
+  void store_archive_data(int stubId, address start, address end, address entry1 = nullptr, address entry2 = nullptr);
+
+  const StubArchiveData* as_const() { return (const StubArchiveData*)this; }
 };
-
-#define LOAD_STUB_ARCHIVE_DATA \
-  { \
-    if (_archive_data != nullptr && _archive_data->load_archive_data_for(stubId)) { \
-      const StubArchiveData* ad = (const StubArchiveData*) _archive_data; \
-      address start = ad->current_stub_entry_addr(0); \
-      address end = ad->current_stub_end_addr(); \
-      setup_code_desc(stub_name, start, end, true); \
-      return start; \
-    } \
-  }
-
-#define LOAD_STUB_ARCHIVE_DATA_1(entry_address) \
-  { \
-    if (_archive_data != nullptr && _archive_data->load_archive_data_for(stubId)) { \
-      const StubArchiveData* ad = (const StubArchiveData*) _archive_data; \
-      address start = ad->current_stub_entry_addr(0); \
-      entry_address = ad->current_stub_entry_addr(1); \
-      address end = ad->current_stub_end_addr(); \
-      setup_code_desc(stub_name, start, end, true); \
-      return start; \
-    } \
-  }
-
-#define SETUP_STUB_ARCHIVE_DATA \
-  { \
-    if (_archive_data != nullptr) { \
-      address end = __ pc(); \
-      _archive_data->store_archive_data(stubId, start, end); \
-      SCCache::add_stub_address(start); \
-    } \
-  }
-
-#define SETUP_STUB_ARCHIVE_DATA_1 \
-  { \
-    if (_archive_data != nullptr) { \
-      address end = __ pc(); \
-      _archive_data->store_archive_data(stubId, start, entry_address_1, end); \
-      SCCache::add_stub_address(start); \
-      SCCache::add_stub_address(entry_address_1); \
-    } \
-  }
-
-#define SETUP_STUB_ARCHIVE_DATA_2 \
-  { \
-    if (_archive_data != nullptr) { \
-      address end = __ pc(); \
-      _archive_data->store_archive_data(stubId, start, entry_address_1, entry_address_2, end); \
-      SCCache::add_stub_address(start); \
-      SCCache::add_stub_address(entry_address_1); \
-      SCCache::add_stub_address(entry_address_2); \
-    } \
-  }
 
 // Stack-allocated helper class used to associate a stub code with a name.
 // All stub code generating functions that use a StubCodeMark will be registered

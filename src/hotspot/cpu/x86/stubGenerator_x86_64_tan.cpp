@@ -460,7 +460,13 @@ ATTRIBUTE_ALIGNED(8) static const juint _QQ_2_tan[] =
 address StubGenerator::generate_libmTan() {
   int stubId = StubRoutines::StubID::libmTan_id;
   const char* stub_name = "libmTan";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -1031,7 +1037,8 @@ address StubGenerator::generate_libmTan() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }

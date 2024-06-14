@@ -178,7 +178,13 @@
 address StubGenerator::generate_libmCos() {
   int stubId = StubRoutines::StubID::libmCos_id;
   const char* stub_name = "libmCos";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   StubCodeMark mark(this, "StubRoutines", "libmCos");
   address start = __ pc();
@@ -625,7 +631,8 @@ address StubGenerator::generate_libmCos() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }

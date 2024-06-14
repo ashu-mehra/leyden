@@ -181,7 +181,13 @@ ATTRIBUTE_ALIGNED(16) static const juint _coeff[] =
 address StubGenerator::generate_libmLog() {
   int stubId = StubRoutines::StubID::libmLog_id;
   const char* stub_name = "libmLog";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -365,7 +371,8 @@ address StubGenerator::generate_libmLog() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
@@ -525,7 +532,13 @@ ATTRIBUTE_ALIGNED(16) static const juint _coeff_log10[] =
 address StubGenerator::generate_libmLog10() {
   int stubId = StubRoutines::StubID::libmLog10_id;
   const char* stub_name = "libmLog10";
-  LOAD_STUB_ARCHIVE_DATA
+
+  if (find_archive_data(stubId)) {
+    address start = nullptr;
+    address end = nullptr;
+    load_archive_data(stubId, stub_name, &start, &end);
+    return start;
+  }
 
   StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
@@ -715,7 +728,8 @@ address StubGenerator::generate_libmLog10() {
   __ leave(); // required for proper stackwalking of RuntimeStub frame
   __ ret(0);
 
-  SETUP_STUB_ARCHIVE_DATA
+  address end = __ pc();
+  setup_stub_archive_data(stubId, start, end);
 
   return start;
 }
