@@ -68,8 +68,17 @@
 #if INCLUDE_JVMCI
 #include "jvmci/jvmciJavaClasses.hpp"
 #endif
+#if INCLUDE_JFR
+#include "jfr/support/jfrIntrinsics.hpp"
+#endif
 
 #define __ masm->
+
+#ifdef PRODUCT
+#define BLOCK_COMMENT(str) /* nothing */
+#else
+#define BLOCK_COMMENT(str) __ block_comment(str)
+#endif // PRODUCT
 
 const int StackAlignmentInSlots = StackAlignmentInBytes / VMRegImpl::stack_slot_size;
 
@@ -3413,6 +3422,249 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(SharedRuntime::StubID id, addr
   // frame_size_words or bytes??
   return RuntimeStub::new_runtime_stub(name, &buffer, frame_complete, frame_size_in_words, oop_maps, true);
 }
+
+// Continuation point for throwing of implicit exceptions that are
+// not handled in the current activation. Fabricates an exception
+// oop and initiates normal exception dispatching in this
+// frame. Since we need to preserve callee-saved values (currently
+// only for C2, but done for C1 as well) we need a callee-saved oop
+// map and therefore have to make these stubs into RuntimeStubs
+// rather than BufferBlobs.  If the compiler needs all registers to
+// be preserved between the fault point and the exception handler
+// then it must assume responsibility for that in
+// AbstractCompiler::continuation_for_implicit_null_exception or
+// continuation_for_implicit_division_by_zero_exception. All other
+// implicit exceptions (e.g., NullPointerException or
+// AbstractMethodError on entry) are either at call sites or
+// otherwise assume that stack unwinding will be initiated, so
+// caller saved registers were assumed volatile in the compiler.
+address SharedRuntime::generate_throw_exception(SharedRuntime::StubID id,
+                                                address runtime_entry,
+                                                const char* name) {
+  // Information about frame layout at time of blocking runtime call.
+  // Note that we only have to preserve callee-saved registers since
+  // the compilers are responsible for supplying a continuation point
+  // if they expect all registers to be preserved.
+  enum layout {
+    rbp_off = frame::arg_reg_save_area_bytes/BytesPerInt,
+    rbp_off2,
+    return_off,
+    return_off2,
+    framesize // inclusive of return address
+  };
+
+  int insts_size = 512;
+  int locs_size  = 64;
+
+  // allocate space for the code
+  ResourceMark rm;
+
+  CodeBuffer code(name, insts_size, locs_size);
+  OopMapSet* oop_maps  = nullptr;
+  GrowableArray<int> extra_args;
+
+  if (SCCache::load_runtime_blob(&code, id, name, oop_maps, &extra_args)) {
+    // return pre-existing blob
+    assert(oop_maps != nullptr, "expected oop maps");
+    // TODO sanity check the frame size and frame complete offset?
+    assert(extra_args.length() == 1, "unexpected arg count");
+    RuntimeStub* stub = RuntimeStub::new_runtime_stub(name, &code, extra_args.at(0), (framesize >> (LogBytesPerWord - LogBytesPerInt)), oop_maps, true);
+    return stub->entry_point();
+  }
+
+  oop_maps  = new OopMapSet();
+  MacroAssembler* masm = new MacroAssembler(&code);
+
+  address start = __ pc();
+
+  // This is an inlined and slightly modified version of call_VM
+  // which has the ability to fetch the return PC out of
+  // thread-local storage and also sets up last_Java_sp slightly
+  // differently than the real call_VM
+
+  __ enter(); // required for proper stackwalking of RuntimeStub frame
+
+  assert(is_even(framesize/2), "sp not 16-byte aligned");
+
+  // return address and rbp are already in place
+  __ subptr(rsp, (framesize-4) << LogBytesPerInt); // prolog
+
+  int frame_complete = __ pc() - start;
+
+  // Set up last_Java_sp and last_Java_fp
+  address the_pc = __ pc();
+  __ set_last_Java_frame(rsp, rbp, the_pc, rscratch1);
+  __ andptr(rsp, -(StackAlignmentInBytes));    // Align stack
+
+  // Call runtime
+  __ movptr(c_rarg0, r15_thread);
+  BLOCK_COMMENT("call runtime_entry");
+  __ call(RuntimeAddress(runtime_entry));
+
+  // Generate oop map
+  OopMap* map = new OopMap(framesize, 0);
+
+  oop_maps->add_gc_map(the_pc - start, map);
+
+  __ reset_last_Java_frame(true);
+
+  __ leave(); // required for proper stackwalking of RuntimeStub frame
+
+  // check for pending exceptions
+#ifdef ASSERT
+  Label L;
+  __ cmpptr(Address(r15_thread, Thread::pending_exception_offset()), NULL_WORD);
+  __ jcc(Assembler::notEqual, L);
+  __ should_not_reach_here();
+  __ bind(L);
+#endif // ASSERT
+  __ jump(RuntimeAddress(StubRoutines::forward_exception_entry()));
+
+  extra_args.append(frame_complete);
+  SCCache::store_runtime_blob(&code, id, name, oop_maps, &extra_args);
+
+  // codeBlob framesize is in words (not VMRegImpl::slot_size)
+  RuntimeStub* stub =
+    RuntimeStub::new_runtime_stub(name,
+                                  &code,
+                                  frame_complete,
+                                  (framesize >> (LogBytesPerWord - LogBytesPerInt)),
+                                  oop_maps, false);
+  return stub->entry_point();
+}
+
+#if INCLUDE_JFR
+
+// For c2: c_rarg0 is junk, call to runtime to write a checkpoint.
+// It returns a jobject handle to the event writer.
+// The handle is dereferenced and the return value is the event writer oop.
+address SharedRuntime::generate_jfr_write_checkpoint() {
+  enum layout {
+    rbp_off,
+    rbpH_off,
+    return_off,
+    return_off2,
+    framesize // inclusive of return address
+  };
+
+  SharedRuntime::StubID id = SharedRuntime::StubID::jfr_write_checkpoint_entry_id;
+  const char* name = "jfr_write_checkpoint";
+
+  // allocate space for the code
+  ResourceMark rm;
+
+  CodeBuffer code("jfr_write_checkpoint", 1024, 64);
+  OopMapSet* oop_maps = nullptr;
+  GrowableArray<int> extra_args;
+
+  if (SCCache::load_runtime_blob(&code, id, name, oop_maps, &extra_args)) {
+    // return pre-existing blob
+    assert(oop_maps != nullptr, "expected oop maps");
+    // TODO sanity check the frame size and frame complete offset?
+    assert(extra_args.length() == 1, "unexpected arg count");
+    RuntimeStub* stub = RuntimeStub::new_runtime_stub(name, &code, extra_args.at(0), (framesize >> (LogBytesPerWord - LogBytesPerInt)), oop_maps, true);
+    return stub->entry_point();
+  }
+
+  MacroAssembler* masm = new MacroAssembler(&code);
+  address start = __ pc();
+
+  __ enter();
+  address the_pc = __ pc();
+
+  int frame_complete = the_pc - start;
+
+  __ set_last_Java_frame(rsp, rbp, the_pc, rscratch1);
+  __ movptr(c_rarg0, r15_thread);
+  __ call_VM_leaf(CAST_FROM_FN_PTR(address, JfrIntrinsicSupport::write_checkpoint), 1);
+  __ reset_last_Java_frame(true);
+
+  // rax is jobject handle result, unpack and process it through a barrier.
+  __ resolve_global_jobject(rax, r15_thread, c_rarg0);
+
+  __ leave();
+  __ ret(0);
+
+  oop_maps = new OopMapSet();
+  OopMap* map = new OopMap(framesize, 1);
+  oop_maps->add_gc_map(frame_complete, map);
+
+  extra_args.append(frame_complete);
+  SCCache::store_runtime_blob(&code, id, name, oop_maps, &extra_args);
+
+  RuntimeStub* stub =
+    RuntimeStub::new_runtime_stub(code.name(),
+                                  &code,
+                                  frame_complete,
+                                  (framesize >> (LogBytesPerWord - LogBytesPerInt)),
+                                  oop_maps,
+                                  false);
+  return stub->entry_point();
+}
+
+// For c2: call to return a leased buffer.
+address SharedRuntime::generate_jfr_return_lease() {
+  enum layout {
+    rbp_off,
+    rbpH_off,
+    return_off,
+    return_off2,
+    framesize // inclusive of return address
+  };
+
+  SharedRuntime::StubID id = SharedRuntime::StubID::jfr_return_lease_entry_id;
+  const char* name = "jfr_return_lease";
+
+  // allocate space for the code
+  ResourceMark rm;
+
+  CodeBuffer code("jfr_return_lease", 1024, 64);
+  OopMapSet* oop_maps = nullptr;
+  GrowableArray<int> extra_args;
+
+  if (SCCache::load_runtime_blob(&code, id, name, oop_maps, &extra_args)) {
+    // return pre-existing blob
+    assert(oop_maps != nullptr, "expected oop maps");
+    // TODO sanity check the frame size and frame complete offset?
+    assert(extra_args.length() == 1, "unexpected arg count");
+    RuntimeStub* stub = RuntimeStub::new_runtime_stub(name, &code, extra_args.at(0), (framesize >> (LogBytesPerWord - LogBytesPerInt)), oop_maps, true);
+    return stub->entry_point();
+  }
+
+  MacroAssembler* masm = new MacroAssembler(&code);
+  address start = __ pc();
+
+  __ enter();
+  address the_pc = __ pc();
+
+  int frame_complete = the_pc - start;
+
+  __ set_last_Java_frame(rsp, rbp, the_pc, rscratch2);
+  __ movptr(c_rarg0, r15_thread);
+  __ call_VM_leaf(CAST_FROM_FN_PTR(address, JfrIntrinsicSupport::return_lease), 1);
+  __ reset_last_Java_frame(true);
+
+  __ leave();
+  __ ret(0);
+
+  oop_maps = new OopMapSet();
+  OopMap* map = new OopMap(framesize, 1);
+  oop_maps->add_gc_map(frame_complete, map);
+
+  extra_args.append(frame_complete);
+  SCCache::store_runtime_blob(&code, id, name, oop_maps, &extra_args);
+
+  RuntimeStub* stub =
+    RuntimeStub::new_runtime_stub(code.name(),
+                                  &code,
+                                  frame_complete,
+                                  (framesize >> (LogBytesPerWord - LogBytesPerInt)),
+                                  oop_maps,
+                                  false);
+  return stub->entry_point();
+}
+
+#endif // INCLUDE_JFR
 
 //------------------------------Montgomery multiplication------------------------
 //

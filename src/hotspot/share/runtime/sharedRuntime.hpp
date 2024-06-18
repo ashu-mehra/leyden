@@ -53,6 +53,13 @@ class vframeStream;
   template(polling_page_vectors_safepoint_handler)        \
   template(polling_page_safepoint_handler)                \
   template(polling_page_return_handler)                   \
+  template(throw_StackOverflowError_entry)                \
+  template(throw_delayed_StackOverflowError_entry)        \
+  template(throw_AbstractMethodError_entry)               \
+  template(throw_IncompatibleClassChangeError_entry)      \
+  template(throw_NullPointerException_at_call_entry)      \
+  template(jfr_write_checkpoint_entry)                    \
+  template(jfr_return_lease_entry)                        \
   last_entry(number_of_ids)                               \
 
 class SharedRuntime: AllStatic {
@@ -89,6 +96,15 @@ private:
   static SafepointBlob*      _polling_page_safepoint_handler_blob;
   static SafepointBlob*      _polling_page_return_handler_blob;
 
+  static address             _throw_StackOverflowError_entry;
+  static address             _throw_delayed_StackOverflowError_entry;
+  static address             _throw_AbstractMethodError_entry;
+  static address             _throw_IncompatibleClassChangeError_entry;
+  static address             _throw_NullPointerException_at_call_entry;
+
+  JFR_ONLY(static address _jfr_write_checkpoint_entry;)
+  JFR_ONLY(static address _jfr_return_lease_entry;)
+
 #ifdef COMPILER2
   static UncommonTrapBlob*   _uncommon_trap_blob;
 #endif // COMPILER2
@@ -104,8 +120,13 @@ private:
   enum { POLL_AT_RETURN,  POLL_AT_LOOP, POLL_AT_VECTOR_LOOP };
   static SafepointBlob* generate_handler_blob(SharedRuntime::StubID id, address call_ptr, int poll_type);
   static RuntimeStub*   generate_resolve_blob(SharedRuntime::StubID id, address destination, const char* name);
+  static address        generate_throw_exception(SharedRuntime::StubID id, address runtime_entry, const char* name);
+
+  JFR_ONLY(static address        generate_jfr_write_checkpoint();)
+  JFR_ONLY(static address        generate_jfr_return_lease();)
 
  public:
+  static void generate_initial_stubs(void);
   static void generate_stubs(void);
 
   // max bytes for each dtrace string parameter
@@ -213,6 +234,13 @@ private:
     IMPLICIT_DIVIDE_BY_ZERO,
     STACK_OVERFLOW
   };
+
+  static address throw_StackOverflowError_entry()                   { return _throw_StackOverflowError_entry; }
+  static address throw_delayed_StackOverflowError_entry()           { return _throw_delayed_StackOverflowError_entry; }
+  static address throw_AbstractMethodError_entry()                  { return _throw_AbstractMethodError_entry; }
+  static address throw_IncompatibleClassChangeError_entry()         { return _throw_IncompatibleClassChangeError_entry; }
+  static address throw_NullPointerException_at_call_entry()         { return _throw_NullPointerException_at_call_entry; }
+
   static void    throw_AbstractMethodError(JavaThread* current);
   static void    throw_IncompatibleClassChangeError(JavaThread* current);
   static void    throw_ArithmeticException(JavaThread* current);
@@ -271,6 +299,9 @@ private:
   static SafepointBlob* polling_page_return_handler_blob()     { return _polling_page_return_handler_blob; }
   static SafepointBlob* polling_page_safepoint_handler_blob()  { return _polling_page_safepoint_handler_blob; }
   static SafepointBlob* polling_page_vectors_safepoint_handler_blob()  { return _polling_page_vectors_safepoint_handler_blob; }
+
+  JFR_ONLY(static address jfr_write_checkpoint() { return _jfr_write_checkpoint_entry; })
+  JFR_ONLY(static address jfr_return_lease() { return _jfr_return_lease_entry; })
 
   static nmethod* cont_doYield_stub() {
     assert(_cont_doYield_stub != nullptr, "oops");
