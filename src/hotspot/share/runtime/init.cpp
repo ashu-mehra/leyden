@@ -152,10 +152,11 @@ jint init_globals() {
   }
 #endif // LEAK_SANITIZER
   SCCache::init2();        // depends on universe_init
+  SharedRuntime::generate_initial_stubs(); // should be called before continuation_stubs_init
   AsyncLogWriter::initialize();
   gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
   continuations_init();      // must precede continuation stub generation
-  continuation_stubs_init(); // depends on continuations_init
+  continuation_stubs_init(); // depends on continuations_init and SharedRuntime::generate_initial_stubs
   interpreter_init_stub();   // before methods get loaded
   accessFlags_init();
   InterfaceSupport_init();

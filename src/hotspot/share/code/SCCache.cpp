@@ -3999,8 +3999,6 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_std()); // used by call_stub
   SET_ADDRESS(_extrs, CompressedOops::ptrs_base_addr()); // used by call_stub
   SET_ADDRESS(_extrs, Thread::current); // used by call_stub
-  SET_ADDRESS(_extrs, SharedRuntime::throw_StackOverflowError);
-  SET_ADDRESS(_extrs, SharedRuntime::throw_delayed_StackOverflowError);
   SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_rz()); // used by libmFmod
 
 #ifndef PRODUCT
@@ -4148,6 +4146,15 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, LIR_Assembler::double_signflip_pool);
 #endif
 
+  SET_ADDRESS(_extrs, SharedRuntime::throw_StackOverflowError);
+  SET_ADDRESS(_extrs, SharedRuntime::throw_delayed_StackOverflowError);
+  SET_ADDRESS(_extrs, SharedRuntime::throw_AbstractMethodError);
+  SET_ADDRESS(_extrs, SharedRuntime::throw_IncompatibleClassChangeError);
+  SET_ADDRESS(_extrs, SharedRuntime::throw_NullPointerException_at_call);
+
+  SET_ADDRESS(_extrs, JfrIntrinsicSupport::write_checkpoint);
+  SET_ADDRESS(_extrs, JfrIntrinsicSupport::return_lease);
+
   _extrs_complete = true;
   log_info(scc,init)("External addresses recorded");
 }
@@ -4160,7 +4167,7 @@ void SCCache::init_table_for_continuation_stubs() {
 }
 
 void SCAddressTable::init_table_for_continuation_stubs() {
-  SET_ADDRESS(_stubs, StubRoutines::throw_StackOverflowError_entry()); // used by cont_thaw
+  SET_ADDRESS(_stubs, SharedRuntime::throw_StackOverflowError_entry()); // used by cont_thaw
   SET_ADDRESS(_extrs, Continuation::prepare_thaw); // used by cont_thaw
   SET_ADDRESS(_extrs, Continuation::thaw_entry()); // used by cont_thaw
 }
@@ -4222,8 +4229,6 @@ void SCAddressTable::init() {
   SET_ADDRESS(_stubs, StubRoutines::cont_thaw());
   SET_ADDRESS(_stubs, StubRoutines::cont_returnBarrier());
   SET_ADDRESS(_stubs, StubRoutines::cont_returnBarrierExc());
-
-  JFR_ONLY(SET_ADDRESS(_stubs, StubRoutines::jfr_write_checkpoint());)
 
 
   SET_ADDRESS(_stubs, StubRoutines::jbyte_arraycopy());
@@ -4392,11 +4397,12 @@ void SCAddressTable::init() {
   SET_ADDRESS(_blobs, SharedRuntime::polling_page_vectors_safepoint_handler_blob()->entry_point());
   SET_ADDRESS(_blobs, SharedRuntime::uncommon_trap_blob()->entry_point());
 #endif
-  SET_ADDRESS(_blobs, StubRoutines::throw_AbstractMethodError_entry());
-  SET_ADDRESS(_blobs, StubRoutines::throw_IncompatibleClassChangeError_entry());
-  SET_ADDRESS(_blobs, StubRoutines::throw_NullPointerException_at_call_entry());
-  SET_ADDRESS(_blobs, StubRoutines::throw_StackOverflowError_entry());
-  SET_ADDRESS(_blobs, StubRoutines::throw_delayed_StackOverflowError_entry());
+  SET_ADDRESS(_blobs, SharedRuntime::throw_delayed_StackOverflowError_entry());
+  SET_ADDRESS(_blobs, SharedRuntime::throw_AbstractMethodError_entry());
+  SET_ADDRESS(_blobs, SharedRuntime::throw_IncompatibleClassChangeError_entry());
+  SET_ADDRESS(_blobs, SharedRuntime::throw_NullPointerException_at_call_entry());
+
+  JFR_ONLY(SET_ADDRESS(_blobs, SharedRuntime::jfr_write_checkpoint());)
 
   assert(_blobs_length <= _shared_blobs_max, "increase _shared_blobs_max to %d", _blobs_length);
   _final_blobs_length = _blobs_length;

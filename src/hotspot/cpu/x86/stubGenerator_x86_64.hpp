@@ -586,36 +586,6 @@ class StubGenerator: public StubCodeGenerator {
   address generate_cont_returnBarrier();
   address generate_cont_returnBarrier_exception();
 
-#if INCLUDE_JFR
-  void generate_jfr_stubs();
-  // For c2: c_rarg0 is junk, call to runtime to write a checkpoint.
-  // It returns a jobject handle to the event writer.
-  // The handle is dereferenced and the return value is the event writer oop.
-  RuntimeStub* generate_jfr_write_checkpoint();
-  // For c2: call to runtime to return a buffer lease.
-  RuntimeStub* generate_jfr_return_lease();
-#endif // INCLUDE_JFR
-
-  // Continuation point for throwing of implicit exceptions that are
-  // not handled in the current activation. Fabricates an exception
-  // oop and initiates normal exception dispatching in this
-  // frame. Since we need to preserve callee-saved values (currently
-  // only for C2, but done for C1 as well) we need a callee-saved oop
-  // map and therefore have to make these stubs into RuntimeStubs
-  // rather than BufferBlobs.  If the compiler needs all registers to
-  // be preserved between the fault point and the exception handler
-  // then it must assume responsibility for that in
-  // AbstractCompiler::continuation_for_implicit_null_exception or
-  // continuation_for_implicit_division_by_zero_exception. All other
-  // implicit exceptions (e.g., NullPointerException or
-  // AbstractMethodError on entry) are either at call sites or
-  // otherwise assume that stack unwinding will be initiated, so
-  // caller saved registers were assumed volatile in the compiler.
-  address generate_throw_exception(const char* name,
-                                   address runtime_entry,
-                                   Register arg1 = noreg,
-                                   Register arg2 = noreg);
-
   // shared exception handler for FFM upcall stubs
   address generate_upcall_stub_exception_handler();
 

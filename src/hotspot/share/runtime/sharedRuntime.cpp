@@ -101,6 +101,15 @@ SafepointBlob*      SharedRuntime::_polling_page_vectors_safepoint_handler_blob;
 SafepointBlob*      SharedRuntime::_polling_page_safepoint_handler_blob;
 SafepointBlob*      SharedRuntime::_polling_page_return_handler_blob;
 
+address             SharedRuntime::_throw_StackOverflowError_entry;
+address             SharedRuntime::_throw_delayed_StackOverflowError_entry;
+address             SharedRuntime::_throw_AbstractMethodError_entry;
+address             SharedRuntime::_throw_IncompatibleClassChangeError_entry;
+address             SharedRuntime::_throw_NullPointerException_at_call_entry;
+
+JFR_ONLY(address SharedRuntime::_jfr_write_checkpoint_entry = nullptr;)
+JFR_ONLY(address SharedRuntime::_jfr_return_lease_entry = nullptr;)
+
 #ifdef COMPILER2
 UncommonTrapBlob*   SharedRuntime::_uncommon_trap_blob;
 #endif // COMPILER2
@@ -113,6 +122,12 @@ PerfTickCounters* SharedRuntime::_perf_resolve_static_total_time      = nullptr;
 PerfTickCounters* SharedRuntime::_perf_handle_wrong_method_total_time = nullptr;
 PerfTickCounters* SharedRuntime::_perf_ic_miss_total_time             = nullptr;
 
+void SharedRuntime::generate_initial_stubs() {
+  _throw_StackOverflowError_entry = generate_throw_exception(SharedRuntime::StubID::throw_StackOverflowError_entry_id,
+                                                             CAST_FROM_FN_PTR(address, SharedRuntime::throw_StackOverflowError),
+                                                             "StackOverflowError throw_exception");
+}
+
 //----------------------------generate_stubs-----------------------------------
 void SharedRuntime::generate_stubs() {
   _wrong_method_blob                   = generate_resolve_blob(SharedRuntime::StubID::wrong_method_id, CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method),          "wrong_method_stub");
@@ -122,6 +137,20 @@ void SharedRuntime::generate_stubs() {
   _resolve_virtual_call_blob           = generate_resolve_blob(SharedRuntime::StubID::resolve_virtual_call_id, CAST_FROM_FN_PTR(address, SharedRuntime::resolve_virtual_call_C),       "resolve_virtual_call");
   _resolve_static_call_blob            = generate_resolve_blob(SharedRuntime::StubID::resolve_static_call_id, CAST_FROM_FN_PTR(address, SharedRuntime::resolve_static_call_C),        "resolve_static_call");
   _resolve_static_call_entry           = _resolve_static_call_blob->entry_point();
+  _throw_delayed_StackOverflowError_entry = generate_throw_exception(SharedRuntime::StubID::throw_delayed_StackOverflowError_entry_id,
+                                                                     CAST_FROM_FN_PTR(address, SharedRuntime::throw_delayed_StackOverflowError),
+                                                                     "delayed StackOverflowError throw_exception");
+  _throw_AbstractMethodError_entry = generate_throw_exception(SharedRuntime::StubID::throw_AbstractMethodError_entry_id,
+                                                              CAST_FROM_FN_PTR(address, SharedRuntime::throw_AbstractMethodError),
+                                                              "AbstractMethodError throw_exception");
+  _throw_IncompatibleClassChangeError_entry = generate_throw_exception(SharedRuntime::StubID::throw_IncompatibleClassChangeError_entry_id,
+                                                                       CAST_FROM_FN_PTR(address, SharedRuntime::throw_IncompatibleClassChangeError),
+                                                                       "IncompatibleClassChangeError throw_exception");
+  _throw_NullPointerException_at_call_entry = generate_throw_exception(SharedRuntime::StubID::throw_NullPointerException_at_call_entry_id,
+                                                                       CAST_FROM_FN_PTR(address, SharedRuntime::throw_NullPointerException_at_call),
+                                                                       "NullPointerException at call throw_exception");
+  _jfr_write_checkpoint_entry = generate_jfr_write_checkpoint();
+  _jfr_return_lease_entry = generate_jfr_return_lease();
 
   AdapterHandlerLibrary::initialize();
 
@@ -944,7 +973,7 @@ address SharedRuntime::continuation_for_implicit_exception(JavaThread* current,
         // method stack banging.
         assert(current->deopt_mark() == nullptr, "no stack overflow from deopt blob/uncommon trap");
         Events::log_exception(current, "StackOverflowError at " INTPTR_FORMAT, p2i(pc));
-        return StubRoutines::throw_StackOverflowError_entry();
+        return SharedRuntime::throw_StackOverflowError_entry();
       }
 
       case IMPLICIT_NULL: {
@@ -970,7 +999,7 @@ address SharedRuntime::continuation_for_implicit_exception(JavaThread* current,
             // Assert that the signal comes from the expected location in stub code.
             assert(vt_stub->is_null_pointer_exception(pc),
                    "obtained signal from unexpected location in stub code");
-            return StubRoutines::throw_NullPointerException_at_call_entry();
+            return SharedRuntime::throw_NullPointerException_at_call_entry();
           }
         } else {
           CodeBlob* cb = CodeCache::find_blob(pc);
@@ -991,7 +1020,7 @@ address SharedRuntime::continuation_for_implicit_exception(JavaThread* current,
             }
             Events::log_exception(current, "NullPointerException in code blob at " INTPTR_FORMAT, p2i(pc));
             // There is no handler here, so we will simply unwind.
-            return StubRoutines::throw_NullPointerException_at_call_entry();
+            return SharedRuntime::throw_NullPointerException_at_call_entry();
           }
 
           // Otherwise, it's a compiled method.  Consult its exception handlers.
@@ -1002,13 +1031,13 @@ address SharedRuntime::continuation_for_implicit_exception(JavaThread* current,
             // is not set up yet) => use return address pushed by
             // caller => don't push another return address
             Events::log_exception(current, "NullPointerException in IC check " INTPTR_FORMAT, p2i(pc));
-            return StubRoutines::throw_NullPointerException_at_call_entry();
+            return SharedRuntime::throw_NullPointerException_at_call_entry();
           }
 
           if (nm->method()->is_method_handle_intrinsic()) {
             // exception happened inside MH dispatch code, similar to a vtable stub
             Events::log_exception(current, "NullPointerException in MH adapter " INTPTR_FORMAT, p2i(pc));
-            return StubRoutines::throw_NullPointerException_at_call_entry();
+            return SharedRuntime::throw_NullPointerException_at_call_entry();
           }
 
 #ifndef PRODUCT
@@ -1550,7 +1579,7 @@ JRT_BLOCK_ENTRY(address, SharedRuntime::handle_wrong_method_abstract(JavaThread*
   assert(callerFrame.is_compiled_frame(), "must be");
 
   // Install exception and return forward entry.
-  address res = StubRoutines::throw_AbstractMethodError_entry();
+  address res = SharedRuntime::throw_AbstractMethodError_entry();
   JRT_BLOCK
     methodHandle callee(current, invoke.static_target(current));
     if (!callee.is_null()) {
@@ -2477,7 +2506,7 @@ void AdapterHandlerLibrary::initialize() {
     // AbstractMethodError for invalid invocations.
     address wrong_method_abstract = SharedRuntime::get_handle_wrong_method_abstract_stub();
     _abstract_method_handler = AdapterHandlerLibrary::new_entry(new AdapterFingerPrint(0, nullptr),
-                                                                StubRoutines::throw_AbstractMethodError_entry(),
+                                                                SharedRuntime::throw_AbstractMethodError_entry(),
                                                                 wrong_method_abstract, wrong_method_abstract);
 
     _buffer = BufferBlob::create("adapters", AdapterHandlerLibrary_size);
