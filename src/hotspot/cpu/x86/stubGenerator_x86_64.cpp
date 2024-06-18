@@ -46,9 +46,6 @@
 #if INCLUDE_JVMCI
 #include "jvmci/jvmci_globals.hpp"
 #endif
-#if INCLUDE_JFR
-#include "jfr/support/jfrIntrinsics.hpp"
-#endif
 
 // For a more detailed description of the stub routine structure
 // see the comment in stubRoutines.hpp
