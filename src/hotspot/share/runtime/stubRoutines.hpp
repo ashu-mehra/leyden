@@ -300,11 +300,6 @@ class StubRoutines: AllStatic {
   static address _call_stub_entry;
   static address _forward_exception_entry;
   static address _catch_exception_entry;
-  static address _throw_AbstractMethodError_entry;
-  static address _throw_IncompatibleClassChangeError_entry;
-  static address _throw_NullPointerException_at_call_entry;
-  static address _throw_StackOverflowError_entry;
-  static address _throw_delayed_StackOverflowError_entry;
 
   static address _atomic_xchg_entry;
   static address _atomic_cmpxchg_entry;
@@ -432,11 +427,6 @@ class StubRoutines: AllStatic {
   static address _cont_returnBarrier;
   static address _cont_returnBarrierExc;
 
-  JFR_ONLY(static RuntimeStub* _jfr_write_checkpoint_stub;)
-  JFR_ONLY(static address _jfr_write_checkpoint;)
-  JFR_ONLY(static RuntimeStub* _jfr_return_lease_stub;)
-  JFR_ONLY(static address _jfr_return_lease;)
-
   // Vector Math Routines
   static address _vector_f_math[VectorSupport::NUM_VEC_SIZES][VectorSupport::NUM_SVML_OP];
   static address _vector_d_math[VectorSupport::NUM_VEC_SIZES][VectorSupport::NUM_SVML_OP];
@@ -493,12 +483,6 @@ class StubRoutines: AllStatic {
 
   // Exceptions
   static address forward_exception_entry()                 { return _forward_exception_entry; }
-  // Implicit exceptions
-  static address throw_AbstractMethodError_entry()         { return _throw_AbstractMethodError_entry; }
-  static address throw_IncompatibleClassChangeError_entry(){ return _throw_IncompatibleClassChangeError_entry; }
-  static address throw_NullPointerException_at_call_entry(){ return _throw_NullPointerException_at_call_entry; }
-  static address throw_StackOverflowError_entry()          { return _throw_StackOverflowError_entry; }
-  static address throw_delayed_StackOverflowError_entry()  { return _throw_delayed_StackOverflowError_entry; }
 
   static address atomic_xchg_entry()                       { return _atomic_xchg_entry; }
   static address atomic_cmpxchg_entry()                    { return _atomic_cmpxchg_entry; }
@@ -650,9 +634,6 @@ class StubRoutines: AllStatic {
   static address cont_thaw()           { return _cont_thaw; }
   static address cont_returnBarrier()  { return _cont_returnBarrier; }
   static address cont_returnBarrierExc(){return _cont_returnBarrierExc; }
-
-  JFR_ONLY(static address jfr_write_checkpoint() { return _jfr_write_checkpoint; })
-  JFR_ONLY(static address jfr_return_lease() { return _jfr_return_lease; })
 
   static address upcall_stub_exception_handler() {
     assert(_upcall_stub_exception_handler != nullptr, "not implemented");
