@@ -3553,7 +3553,7 @@ address SharedRuntime::generate_jfr_write_checkpoint() {
   // allocate space for the code
   ResourceMark rm;
 
-  CodeBuffer code("jfr_write_checkpoint", 1024, 64);
+  CodeBuffer code(name, 1024, 64);
   OopMapSet* oop_maps = nullptr;
   GrowableArray<int> extra_args;
 
@@ -3618,7 +3618,7 @@ address SharedRuntime::generate_jfr_return_lease() {
   // allocate space for the code
   ResourceMark rm;
 
-  CodeBuffer code("jfr_return_lease", 1024, 64);
+  CodeBuffer code(name, 1024, 64);
   OopMapSet* oop_maps = nullptr;
   GrowableArray<int> extra_args;
 

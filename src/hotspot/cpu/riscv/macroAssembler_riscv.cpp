@@ -3448,7 +3448,7 @@ void MacroAssembler::reserved_stack_check() {
     // We have already removed our own frame.
     // throw_delayed_StackOverflowError will think that it's been
     // called by our caller.
-    RuntimeAddress target(StubRoutines::throw_delayed_StackOverflowError_entry());
+    RuntimeAddress target(SharedRuntime::throw_delayed_StackOverflowError_entry());
     relocate(target.rspec(), [&] {
       int32_t offset;
       movptr(t0, target.target(), offset);
