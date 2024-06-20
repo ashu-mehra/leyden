@@ -3189,13 +3189,13 @@ address SharedRuntime::generate_throw_exception(SharedRuntime::StubID id,
 
 #if INCLUDE_JFR
 
-static void jfr_prologue(address the_pc, MacroAssembler* _masm, Register thread) {
+static void jfr_prologue(address the_pc, MacroAssembler* masm, Register thread) {
   __ set_last_Java_frame(sp, rfp, the_pc, rscratch1);
   __ mov(c_rarg0, thread);
 }
 
 // The handle is dereferenced through a load barrier.
-static void jfr_epilogue(MacroAssembler* _masm) {
+static void jfr_epilogue(MacroAssembler* masm) {
   __ reset_last_Java_frame(true);
 }
 
@@ -3239,9 +3239,9 @@ address SharedRuntime::generate_jfr_write_checkpoint() {
   __ enter();
   int frame_complete = __ pc() - start;
   address the_pc = __ pc();
-  jfr_prologue(the_pc, _masm, rthread);
+  jfr_prologue(the_pc, masm, rthread);
   __ call_VM_leaf(CAST_FROM_FN_PTR(address, JfrIntrinsicSupport::write_checkpoint), 1);
-  jfr_epilogue(_masm);
+  jfr_epilogue(masm);
   __ resolve_global_jobject(r0, rscratch1, rscratch2);
   __ leave();
   __ ret(lr);
@@ -3298,9 +3298,9 @@ address SharedRuntime::generate_jfr_return_lease() {
   __ enter();
   int frame_complete = __ pc() - start;
   address the_pc = __ pc();
-  jfr_prologue(the_pc, _masm, rthread);
+  jfr_prologue(the_pc, masm, rthread);
   __ call_VM_leaf(CAST_FROM_FN_PTR(address, JfrIntrinsicSupport::return_lease), 1);
-  jfr_epilogue(_masm);
+  jfr_epilogue(masm);
 
   __ leave();
   __ ret(lr);

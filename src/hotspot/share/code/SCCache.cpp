@@ -1626,7 +1626,8 @@ bool SCCache::store_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const cha
     return false;
   }
   uint size = count * sizeof(StubAddrIndexInfo);
-  n = cache->write_bytes(archive_data.index_table(), size);
+  StubAddrIndexInfo *indexTable = archive_data.index_table();
+  n = cache->write_bytes(indexTable, size);
   if (n != size) {
     return false;
   }
@@ -3996,10 +3997,14 @@ void SCAddressTable::init_extrs() {
 #if defined(AMD64) || defined(AARCH64) || defined(RISCV64)
   SET_ADDRESS(_extrs, MacroAssembler::debug64);  // used by many eg forward_exception, call_stub
 #endif // defined(AMD64) || defined(AARCH64) || defined(RISCV64)
+#if defined(AMD64)
   SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_std()); // used by call_stub
+  SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_rz()); // used by libmFmod
+#endif
   SET_ADDRESS(_extrs, CompressedOops::ptrs_base_addr()); // used by call_stub
   SET_ADDRESS(_extrs, Thread::current); // used by call_stub
-  SET_ADDRESS(_extrs, StubRoutines::x86::addr_mxcsr_rz()); // used by libmFmod
+  SET_ADDRESS(_extrs, SharedRuntime::throw_StackOverflowError);
+  SET_ADDRESS(_extrs, SharedRuntime::throw_delayed_StackOverflowError);
 
 #ifndef PRODUCT
   SET_ADDRESS(_extrs, &SharedRuntime::_jbyte_array_copy_ctr); // used by arraycopy stub
