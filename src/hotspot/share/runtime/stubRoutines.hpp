@@ -141,12 +141,12 @@ class UnsafeMemoryAccessMark : public StackObj {
   stub(updateBytesCRC32C)                            \
   stub(float16ToFloat)                               \
   stub(floatToFloat16)                               \
-  stub(libmSin)                                     \
-  stub(libmCos)                                     \
-  stub(libmTan)                                     \
-  stub(libmExp)                                     \
-  stub(libmPow)                                     \
-  stub(libmLog)                                     \
+  stub(libmSin)                                      \
+  stub(libmCos)                                      \
+  stub(libmTan)                                      \
+  stub(libmExp)                                      \
+  stub(libmPow)                                      \
+  stub(libmLog)                                      \
   stub(libmLog10)                                    \
   stub(libmFmod)                                     \
   last_initial_stub = libmFmod_id,                   \
@@ -190,8 +190,8 @@ class UnsafeMemoryAccessMark : public StackObj {
   stub(cipherBlockChaining_decryptAESCrypt)          \
   stub(electronicCodeBook_encryptAESCrypt)           \
   stub(electronicCodeBook_decryptAESCrypt)           \
-  stub(galoisCounterMode_AESCrypt)                   \
   stub(counterMode_AESCrypt)                         \
+  stub(galoisCounterMode_AESCrypt)                   \
   stub(ghash_processBlocks)                          \
   stub(chacha20Block)                                \
   stub(updateBytesAdler32)                           \
@@ -208,6 +208,8 @@ class UnsafeMemoryAccessMark : public StackObj {
   stub(pshuffle_byte_flip_mask_sha512)               \
   stub(sha512_implCompress)                          \
   stub(sha512_implCompressMB)                        \
+  stub(sha3_implCompress)                            \
+  stub(sha3_implCompressMB)                          \
   stub(avx2_shuffle_base64)                          \
   stub(avx2_input_mask_base64)                       \
   stub(avx2_lut_base64)                              \
@@ -231,6 +233,18 @@ class UnsafeMemoryAccessMark : public StackObj {
   stub(mulAdd)                                       \
   stub(bigIntegerRightShiftWorker)                   \
   stub(bigIntegerLeftShiftWorker)                    \
+  stub(large_array_equals)                           \
+  stub(large_byte_array_inflate)                     \
+  stub(count_positives)                              \
+  stub(compare_long_string_LL)                       \
+  stub(compare_long_string_UU)                       \
+  stub(compare_long_string_LU)                       \
+  stub(compare_long_string_UL)                       \
+  stub(string_indexof_linear_ll)                     \
+  stub(string_indexof_linear_uu)                     \
+  stub(string_indexof_linear_ul)                     \
+  stub(montgomeryMultiply)                           \
+  stub(montgomerySquare)                             \
   stub(lookup_secondary_supers_table_slow_path)      \
   stub(lookup_secondary_supers_table_index_0)        \
   last_compiler_stub = lookup_secondary_supers_table_index_0_id + Klass::SECONDARY_SUPERS_TABLE_SIZE - 1, \
@@ -238,18 +252,37 @@ class UnsafeMemoryAccessMark : public StackObj {
   stub(verify_oop)                                   \
   stub(data_cache_writeback)                         \
   stub(data_cache_writeback_sync)                    \
+  stub(zero_blocks)                                  \
+  stub(copy_byte_f)                                  \
+  stub(copy_byte_b)                                  \
+  stub(copy_obj_f)                                   \
+  stub(copy_obj_b)                                   \
+  stub(copy_obj_uninit_f)                            \
+  stub(copy_obj_uninit_b)                            \
   stub(jbyte_disjoint_arraycopy)                     \
   stub(jbyte_arraycopy)                              \
+  stub(arrayof_jbyte_disjoint_arraycopy)             \
+  stub(arrayof_jbyte_arraycopy)                      \
   stub(jshort_disjoint_arraycopy)                    \
   stub(jshort_arraycopy)                             \
+  stub(arrayof_jshort_disjoint_arraycopy)            \
+  stub(arrayof_jshort_arraycopy)                     \
   stub(jint_disjoint_arraycopy)                      \
   stub(jint_arraycopy)                               \
+  stub(arrayof_jint_disjoint_arraycopy)              \
+  stub(arrayof_jint_arraycopy)                       \
   stub(jlong_disjoint_arraycopy)                     \
   stub(jlong_arraycopy)                              \
+  stub(arrayof_jlong_disjoint_arraycopy)             \
+  stub(arrayof_jlong_arraycopy)                      \
   stub(oop_disjoint_arraycopy)                       \
   stub(oop_arraycopy)                                \
   stub(oop_disjoint_arraycopy_uninit)                \
   stub(oop_arraycopy_uninit)                         \
+  stub(arrayof_oop_disjoint_arraycopy)               \
+  stub(arrayof_oop_arraycopy)                        \
+  stub(arrayof_oop_disjoint_arraycopy_uninit)        \
+  stub(arrayof_oop_arraycopy_uninit)                 \
   stub(checkcast_arraycopy)                          \
   stub(checkcast_arraycopy_uninit)                   \
   stub(unsafe_arraycopy)                             \
@@ -261,8 +294,10 @@ class UnsafeMemoryAccessMark : public StackObj {
   stub(arrayof_jshort_fill)                          \
   stub(arrayof_jint_fill)                            \
   stub(unsafe_setmemory)                             \
+  stub(spin_wait)                                    \
   stub(method_entry_barrier)                         \
   stub(vectorizedMismatch)                           \
+  stub(atomic_entry_points)                          \
   stub(upcall_stub_exception_handler)                \
   last_final_stub = upcall_stub_exception_handler_id,\
   last_entry(number_of_ids)

@@ -188,6 +188,7 @@ class aarch64 {
   static void set_completed() {
     _completed = true;
   }
+  static void init_SCAddressTable(GrowableArray<address>& external_addresses);
 
 private:
   static juint    _crc_table[];

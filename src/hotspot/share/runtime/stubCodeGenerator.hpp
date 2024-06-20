@@ -149,7 +149,9 @@ class StubCodeGenerator: public StackObj {
   static void print_statistics_on(outputStream* st);
   bool find_archive_data(int stubId);
   void load_archive_data(int stubId, const char* stub_name, address* start, address* end, address* entry_address1 = nullptr);
+  void load_archive_data(int stubId, const char* stub_name, address* start, address* end, GrowableArray<address>* entries);
   void setup_stub_archive_data(int stubId, address start, address end, address entry_address1 = nullptr, address entry_address2 = nullptr);
+  void setup_stub_archive_data(int stubId, address start, address end, GrowableArray<address>* entries);
 };
 
 // Used to locate addresses owned by a stub in the _address_array.
@@ -221,7 +223,10 @@ public:
 
   bool find_archive_data(int stubId);
   void load_archive_data(address* start, address* end, address* entry_address1) const;
+  void load_archive_data(address* start, address* end, GrowableArray<address>* entries) const;
   void store_archive_data(int stubId, address start, address end, address entry1 = nullptr, address entry2 = nullptr);
+
+  void store_archive_data(int stubId, address start, address end, GrowableArray<address>* entries);
 
   const StubArchiveData* as_const() { return (const StubArchiveData*)this; }
 };

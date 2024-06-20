@@ -5112,7 +5112,7 @@ void StubGenerator::libm_init_SCAddressTable(GrowableArray<address>& external_ad
   fmod_init_SCAddressTable(external_addresses);
 }
 
-void StubGenerator_SCAdressTable_init() {
+void StubGenerator_SCAddressTable_init() {
   ResourceMark rm;
   GrowableArray<address> external_addresses;
   StubRoutines::x86::init_SCAddressTable(external_addresses);

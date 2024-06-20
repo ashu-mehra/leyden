@@ -201,7 +201,9 @@ address StubRoutines::_lookup_secondary_supers_table_stubs[Klass::SECONDARY_SUPE
 // The second phase includes all other stubs (which may depend on universe being initialized.)
 
 extern void StubGenerator_generate(CodeBuffer* code, StubCodeGenerator::StubsKind kind, StubArchiveData* archive_data); // only interface to generators
-extern void StubGenerator_SCAdressTable_init();
+#if (defined(X86) && defined(_LP64)) || defined(AARCH64)
+extern void StubGenerator_SCAddressTable_init();
+#endif
 
 void UnsafeMemoryAccess::create_table(int max_size) {
   UnsafeMemoryAccess::_table = new UnsafeMemoryAccess[max_size];
@@ -312,7 +314,9 @@ static BufferBlob* initialize_stubs(StubCodeGenerator::StubsKind kind,
 }
 
 void StubRoutines::init_SCAddressTable() {
-  StubGenerator_SCAdressTable_init();
+#if (defined(X86) && defined(_LP64)) || defined(AARCH64)
+  StubGenerator_SCAddressTable_init();
+#endif
 }
 
 void StubRoutines::initialize_initial_stubs() {

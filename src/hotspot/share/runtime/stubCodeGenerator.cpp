@@ -150,6 +150,17 @@ void StubCodeGenerator::load_archive_data(int stubId, const char* stub_name, add
   setup_code_desc(stub_name, *start, *end, true);
 }
 
+void StubCodeGenerator::load_archive_data(int stubId, const char* stub_name, address* start, address* end, GrowableArray<address> *entries) {
+#ifdef ASSERT
+  assert(find_archive_data(stubId), "archive data does not exist");
+#endif
+  assert(_archive_data != nullptr, "archive data is not set");
+  _archive_data->as_const()->load_archive_data(start, end, entries);
+  assert(*start != nullptr, "failed to load start address of the stub %d", stubId);
+  assert(*end != nullptr, "failed to load end address of the stub %d", stubId);
+  setup_code_desc(stub_name, *start, *end, true);
+}
+
 void StubCodeGenerator::setup_stub_archive_data(int stubId, address start, address end, address entry_address1, address entry_address2) {
   if (_archive_data == nullptr) {
     return;
@@ -161,6 +172,20 @@ void StubCodeGenerator::setup_stub_archive_data(int stubId, address start, addre
   }
   if (entry_address2 != nullptr) {
     SCCache::add_stub_address(entry_address2);
+  }
+}
+ 
+void StubCodeGenerator::setup_stub_archive_data(int stubId, address start, address end, GrowableArray<address> *entries) {
+  if (_archive_data == nullptr) {
+    return;
+  }
+  _archive_data->store_archive_data(stubId, start, end, entries);
+  SCCache::add_stub_address(start);
+  if (entries != nullptr) {
+    int len = entries->length();
+    for (int i = 0; i < len; i++) {
+      SCCache::add_stub_address(entries->at(i));
+    }
   }
 }
  
@@ -258,6 +283,20 @@ void StubArchiveData::load_archive_data(address* start, address* end, address* e
   }
 }
 
+void StubArchiveData::load_archive_data(address* start, address* end, GrowableArray<address>* entries) const {
+  assert(start != nullptr, "start address cannot be null");
+  assert(end != nullptr, "end address cannot be null");
+  *start = current_stub_entry_addr(0);
+  *end = current_stub_end_addr();
+  if (entries != nullptr) {
+    assert(entries->length() == 0, "should only pass empty array for returned entries");
+    int count = _current->count();
+    for (int i = 1; i < count - 1; i++) {
+      entries->append(current_stub_entry_addr(i));
+    }
+  }
+}
+
 void StubArchiveData::store_archive_data(int stubId, address start, address end, address entry_address1, address entry_address2) {
   int index = StubRoutines::stubId_to_index(stubId);
   assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
@@ -271,6 +310,24 @@ void StubArchiveData::store_archive_data(int stubId, address start, address end,
   if (entry_address2 != nullptr) {
     assert(entry_address1 != nullptr, "entry_address1 cannot be null if entry_address2 is not null");
     _address_array.append(entry_address2);
+  }
+  _address_array.append(end);
+  int count = _address_array.length() - start_addr_index;
+  _index_table[index].init_entry(start_addr_index, count);
+}
+
+void StubArchiveData::store_archive_data(int stubId, address start, address end, GrowableArray<address>* entries) {
+  int index = StubRoutines::stubId_to_index(stubId);
+  assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
+  assert(start != nullptr, "start address cannot be null");
+  assert(end != nullptr, "end address cannot be null");
+  int start_addr_index = _address_array.length();
+  _address_array.append(start);
+  if (entries != nullptr) {
+    int len = entries->length();
+    for (int i = 0; i < len; i++) {
+      _address_array.append(entries->at(i));
+    }
   }
   _address_array.append(end);
   int count = _address_array.length() - start_addr_index;
