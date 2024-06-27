@@ -396,6 +396,31 @@ int StubRoutines::stubId_to_index(int stubId) {
   }
 }
 
+StubRoutines::StubID StubRoutines::index_to_stubId(StubCodeGenerator::StubsKind kind, int index) {
+  int base;
+  switch (kind) {
+  case StubCodeGenerator::StubsKind::Initial_stubs:
+    base = 0;
+    assert(base + index <= StubRoutines::StubID::last_initial_stub, "initial stub index is too large");
+    break;
+  case StubCodeGenerator::StubsKind::Continuation_stubs:
+    base = StubRoutines::StubID::last_initial_stub + 1;
+    assert(base + index <= StubRoutines::StubID::last_continuation_stub, "continuation stub index is too large");
+    break;
+  case StubCodeGenerator::StubsKind::Compiler_stubs:
+    base = StubRoutines::StubID::last_continuation_stub + 1;
+    assert(base + index <= StubRoutines::StubID::last_compiler_stub, "compiler stub index is too large");
+    break;
+  case StubCodeGenerator::StubsKind::Final_stubs:
+    base = StubRoutines::StubID::last_compiler_stub + 1;
+    assert(base + index <= StubRoutines::StubID::last_final_stub, "final stub index is too large");
+    break;
+  default:
+    ShouldNotReachHere();
+  }
+  return (StubRoutines::StubID)(base + index);
+}
+
 //
 // Default versions of arraycopy functions
 //

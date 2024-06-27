@@ -150,8 +150,8 @@ class StubCodeGenerator: public StackObj {
   bool find_archive_data(int stubId);
   void load_archive_data(int stubId, const char* stub_name, address* start, address* end, address* entry_address1 = nullptr);
   void load_archive_data(int stubId, const char* stub_name, address* start, address* end, GrowableArray<address>* entries);
-  void setup_stub_archive_data(int stubId, address start, address end, address entry_address1 = nullptr, address entry_address2 = nullptr);
-  void setup_stub_archive_data(int stubId, address start, address end, GrowableArray<address>* entries);
+  void setup_stub_archive_data(int stubId, const char* stub_name, address start, address end, address entry_address1 = nullptr, address entry_address2 = nullptr);
+  void setup_stub_archive_data(int stubId, const char* stub_name, address start, address end, GrowableArray<address>* entries);
 };
 
 // Used to locate addresses owned by a stub in the _address_array.
@@ -162,7 +162,6 @@ private:
   int _start_index;
   // Total number of addresses owned by this stub in the address array
   uint _naddr;
-
  public:
   StubAddrIndexInfo() : _start_index(-1), _naddr(0) {}
   int start_index() { return _start_index; }
@@ -183,6 +182,7 @@ private:
 
 class StubArchiveData : public StackObj {
 private:
+  StubCodeGenerator::StubsKind _kind;
   // Array of addresses owned by stubs. Each stub adds address to this array.
   // First address added by the stub is the "start" address of the stub.
   // Last address is the "end" address of the stub.
@@ -194,23 +194,41 @@ private:
   int _index_table_cnt;
   // Pointer to the StubAddrIndexInfo for the stub being loaded
   StubAddrIndexInfo* _current;
+  // table of names for any stubs present in the table
+  const char** _names;
+  // number of populated entries in the table
+  int _index_table_population_count;
+  // order in which populated entries have been added 
+  int *_index_table_population_order;
 
 public:
-  StubArchiveData(StubCodeGenerator::StubsKind kind) : _current(nullptr) {
+  StubArchiveData(StubCodeGenerator::StubsKind kind) : _kind(kind), _current(nullptr) {
     _index_table_cnt = StubCodeGenerator::num_stubs(kind);
     _index_table = NEW_C_HEAP_ARRAY(StubAddrIndexInfo, _index_table_cnt, mtCode);
+    _names = NEW_C_HEAP_ARRAY(const char *, _index_table_cnt, mtCode);
     for (int i = 0; i < _index_table_cnt; i++) {
       _index_table[i].default_init();
+      _names[i] = nullptr;
     }
+    _index_table_population_count = 0;
+    _index_table_population_order = NEW_C_HEAP_ARRAY(int, _index_table_cnt, mtCode);
+    
   }
 
   ~StubArchiveData() {
     FREE_C_HEAP_ARRAY(StubAddrIndexInfo, _index_table);
+    for (int i = 0; i < _index_table_cnt; i++) {
+      FREE_C_HEAP_ARRAY(char, _names[i]);
+    }
+    FREE_C_HEAP_ARRAY(const char* , _names);
+    FREE_C_HEAP_ARRAY(int, _index_table_population_order);
   }
 
+  StubCodeGenerator::StubsKind kind() { return _kind; }
   GrowableArray<address>* stubs_address_array() { return &_address_array; }
   int index_table_count() const { return _index_table_cnt; }
   StubAddrIndexInfo* index_table() { return _index_table; }
+  const char** name_table() { return _names; }
 
   address current_stub_entry_addr(int index) const {
     assert(index < _current->count()-1, "index %d should be less than %d for entry address", index, _current->count()-1);
@@ -221,12 +239,37 @@ public:
     return _address_array.at(_current->end_index());
   }
 
-  bool find_archive_data(int stubId);
-  void load_archive_data(address* start, address* end, address* entry_address1) const;
-  void load_archive_data(address* start, address* end, GrowableArray<address>* entries) const;
-  void store_archive_data(int stubId, address start, address end, address entry1 = nullptr, address entry2 = nullptr);
+  const char *current_stub_name() const {
+    int index = _current - _index_table;
+    assert((index >= 0 && index < _index_table_cnt), "current index out of range");
+    return _names[index];
+  }
 
-  void store_archive_data(int stubId, address start, address end, GrowableArray<address>* entries);
+  const char *get_stub_name(int index) const {
+    assert((index >= 0 && index < _index_table_cnt), "index out of range");
+    return _names[index];
+  }
+
+  void set_stub_name(int index, const char* name) {
+    assert((index >= 0 && index < _index_table_cnt), "index out of range");
+    assert(_names[index] == nullptr, "cannot reassign stub name");
+    _names[index] = name; 
+  }
+
+  void copy_stub_name(int index, const char* name) {
+    assert(name != nullptr, "stub name cannot be null");
+    int len = strlen(name);
+    char* new_name = NEW_C_HEAP_ARRAY(char, len + 1, mtCode);
+    strcpy(new_name, name);
+    set_stub_name(index, new_name);
+  }
+
+  bool find_archive_data(int stubId);
+  void load_archive_data(int stubId, const char* stub_name, address* start, address* end, address* entry_address1) const;
+  void load_archive_data(int stubId, const char* stub_name, address* start, address* end, GrowableArray<address>* entries) const;
+  void store_archive_data(int stubId, const char* stub_name, address start, address end, address entry1 = nullptr, address entry2 = nullptr);
+
+  void store_archive_data(int stubId, const char* stub_name, address start, address end, GrowableArray<address>* entries);
 
   const StubArchiveData* as_const() { return (const StubArchiveData*)this; }
 };
