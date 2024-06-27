@@ -323,6 +323,7 @@ class StubRoutines: AllStatic {
 #undef DECLARE_LAST_STUB_ID
 
   static int stubId_to_index(int stubId);
+  static StubRoutines::StubID index_to_stubId(StubCodeGenerator::StubsKind kind, int index);
   static int initial_stubs_cnt() { return StubID::last_initial_stub + 1; }
   static int continuation_stubs_cnt() { return StubID::last_continuation_stub - StubID::last_initial_stub; }
   static int compiler_stubs_cnt() { return StubID::last_compiler_stub - StubID::last_continuation_stub; }

@@ -71,6 +71,7 @@
 #include "runtime/threadIdentifier.hpp"
 #include "utilities/elfFile.hpp"
 #include "utilities/ostream.hpp"
+#include "utilities/quickSort.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Runtime1.hpp"
 #include "c1/c1_LIRAssembler.hpp"
@@ -1494,6 +1495,11 @@ bool SCCache::load_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const char
   return reader.compile_stubroutines_blob(buffer, name, archive_data);
 }
 
+static int index_info_compare(StubAddrIndexInfo* e1, StubAddrIndexInfo* e2) {
+  // larger start index comes last
+  return e1->start_index() - e2->start_index();
+}
+
 bool SCCReader::compile_stubroutines_blob(CodeBuffer* buffer, const char* name, StubArchiveData& archive_data) {
   uint entry_position = _entry->offset();
 
@@ -1533,6 +1539,16 @@ bool SCCReader::compile_stubroutines_blob(CodeBuffer* buffer, const char* name, 
     return false;
   }
 
+  int count = archive_data.index_table_count();
+  for (int i = 0; i < count ; i++) {
+    if (stubs_index_table[i].start_index() >= 0) {
+      log_info(scc, stubs)("index_table[%d](start, end) = (%d, %d)",
+                           i,
+                           stubs_index_table[i].start_index(),
+                           stubs_index_table[i].end_index());
+    }
+  }
+
   offset = read_position();
   int stubs_address_cnt = *(int*)addr(offset);
   offset += sizeof(int);
@@ -1542,16 +1558,37 @@ bool SCCReader::compile_stubroutines_blob(CodeBuffer* buffer, const char* name, 
     int addr_offset = *(int *)addr(offset);
     // convert offset to address
     address addr = code_start + addr_offset;
-    log_info(scc, stubs)("Adding %p to stubs_address_array", addr);
+    log_info(scc, stubs)("Adding stub address[%d] == %p to stubs_address_array", i, addr);
     stubs_address_array->append(addr);
     offset += sizeof(int);
   }
   set_read_position(offset);
+  // read all the populated stub names
+  const char** names = archive_data.name_table();
+  for (int i = 0; i < count; i++) {
+    const char* name = (const char*)addr(read_position());
+    int len = strlen(name);
+    if (len > 0) {
+      archive_data.copy_stub_name(i, name);
+      log_info(scc, stubs)("names[%d] == '%s'", i, name);
+    }
+    set_read_position(read_position() + len + 1);
+  }
 
+  // we need to publish the entry addresses in the same order they
+  // were originally published
+  StubAddrIndexInfo** ordered_entries = NEW_C_HEAP_ARRAY(StubAddrIndexInfo*, stored_index_table_cnt, mtCode);
+  for (int i = 0; i < stored_index_table_cnt; i++) {
+    ordered_entries[i] = &stubs_index_table[i];
+  }
+  QuickSort::sort(ordered_entries, stored_index_table_cnt, index_info_compare, false);
   // Add addresses to the stubs list before reading relocations
   for (int i = 0; i < stored_index_table_cnt; i++) {
-    int start_addr_index = stubs_index_table[i].start_index();
-    int address_table_count = stubs_index_table[i].count() - 1; // exclude the end addr
+    int start_addr_index = ordered_entries[i]->start_index();
+    if (start_addr_index == -1) {
+      continue;
+    }
+    int address_table_count = ordered_entries[i]->count() - 1; // exclude the end addr
     for (int j = 0; j < address_table_count; j++) {
       address addr = stubs_address_array->at(start_addr_index + j);
       SCCache::add_stub_address(addr);
@@ -1632,6 +1669,15 @@ bool SCCache::store_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const cha
     return false;
   }
 
+  for (int i = 0; i < count; i++) {
+    if (indexTable[i].start_index() >= 0) {
+      log_info(scc, stubs)("index_table[%d](start, end) = (%d, %d)",
+                           i,
+                           indexTable[i].start_index(),
+                           indexTable[i].end_index());
+    }
+  }
+
   // write address array
   GrowableArray<address>* stubs_address_array = archive_data.stubs_address_array();
   int stubs_address_cnt = stubs_address_array->length();
@@ -1642,10 +1688,27 @@ bool SCCache::store_stubroutines_blob(CodeBuffer* buffer, uint32_t id, const cha
   address code_start = buffer->insts()->start();
   for (int i = 0; i < stubs_address_cnt; i++) {
     // convert address to offset from start of the code section
-    log_info(scc, stubs)("Writing stub address %p to the cache", stubs_address_array->at(i));
+    log_info(scc, stubs)("Writing stub address[%d] == %p to the cache", i, stubs_address_array->at(i));
     int offset = stubs_address_array->at(i) - code_start;
     n = cache->write_bytes(&offset, sizeof(int));
     if (n != sizeof(int)) {
+      return false;
+    }
+  }
+
+  // write all the populated stub names
+  const char** names = archive_data.name_table();
+  for (int i = 0; i < count; i++) {
+    const char *name = names[i];
+    if (name != nullptr) {
+      log_info(scc, stubs)("names[%d] == '%s'", i, name);
+    } else {
+      // write an empty string as a marker
+      name = "";
+    }
+    uint name_size = (uint)strlen(name) + 1; // Includes '/0'
+    n = cache->write_bytes(name, name_size);
+    if (n != name_size) {
       return false;
     }
   }

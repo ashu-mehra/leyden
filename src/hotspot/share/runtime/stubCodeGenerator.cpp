@@ -144,7 +144,7 @@ void StubCodeGenerator::load_archive_data(int stubId, const char* stub_name, add
   assert(find_archive_data(stubId), "archive data does not exist");
 #endif
   assert(_archive_data != nullptr, "archive data is not set");
-  _archive_data->as_const()->load_archive_data(start, end, entry_address1);
+  _archive_data->as_const()->load_archive_data(stubId, stub_name, start, end, entry_address1);
   assert(*start != nullptr, "failed to load start address of the stub %d", stubId);
   assert(*end != nullptr, "failed to load end address of the stub %d", stubId);
   setup_code_desc(stub_name, *start, *end, true);
@@ -155,17 +155,17 @@ void StubCodeGenerator::load_archive_data(int stubId, const char* stub_name, add
   assert(find_archive_data(stubId), "archive data does not exist");
 #endif
   assert(_archive_data != nullptr, "archive data is not set");
-  _archive_data->as_const()->load_archive_data(start, end, entries);
+  _archive_data->as_const()->load_archive_data(stubId, stub_name, start, end, entries);
   assert(*start != nullptr, "failed to load start address of the stub %d", stubId);
   assert(*end != nullptr, "failed to load end address of the stub %d", stubId);
   setup_code_desc(stub_name, *start, *end, true);
 }
 
-void StubCodeGenerator::setup_stub_archive_data(int stubId, address start, address end, address entry_address1, address entry_address2) {
+void StubCodeGenerator::setup_stub_archive_data(int stubId, const char* stub_name, address start, address end, address entry_address1, address entry_address2) {
   if (_archive_data == nullptr) {
     return;
   }
-  _archive_data->store_archive_data(stubId, start, end, entry_address1, entry_address2);
+  _archive_data->store_archive_data(stubId, stub_name, start, end, entry_address1, entry_address2);
   SCCache::add_stub_address(start);
   if (entry_address1 != nullptr) {
     SCCache::add_stub_address(entry_address1);
@@ -175,11 +175,11 @@ void StubCodeGenerator::setup_stub_archive_data(int stubId, address start, addre
   }
 }
  
-void StubCodeGenerator::setup_stub_archive_data(int stubId, address start, address end, GrowableArray<address> *entries) {
+void StubCodeGenerator::setup_stub_archive_data(int stubId, const char* stub_name, address start, address end, GrowableArray<address> *entries) {
   if (_archive_data == nullptr) {
     return;
   }
-  _archive_data->store_archive_data(stubId, start, end, entries);
+  _archive_data->store_archive_data(stubId, stub_name, start, end, entries);
   SCCache::add_stub_address(start);
   if (entries != nullptr) {
     int len = entries->length();
@@ -273,9 +273,10 @@ bool StubArchiveData::find_archive_data(int stubId) {
   return true;
 }
 
-void StubArchiveData::load_archive_data(address* start, address* end, address* entry_address1) const {
+void StubArchiveData::load_archive_data(int stubId, const char *stub_name, address* start, address* end, address* entry_address1) const {
   assert(start != nullptr, "start address cannot be null");
   assert(end != nullptr, "end address cannot be null");
+  assert(strcmp(current_stub_name(), stub_name) == 0, "restored stub has wrong name");
   *start = current_stub_entry_addr(0);
   *end = current_stub_end_addr();
   if (entry_address1 != nullptr) {
@@ -283,9 +284,10 @@ void StubArchiveData::load_archive_data(address* start, address* end, address* e
   }
 }
 
-void StubArchiveData::load_archive_data(address* start, address* end, GrowableArray<address>* entries) const {
+void StubArchiveData::load_archive_data(int stubId, const char *stub_name, address* start, address* end, GrowableArray<address>* entries) const {
   assert(start != nullptr, "start address cannot be null");
   assert(end != nullptr, "end address cannot be null");
+  assert(strcmp(current_stub_name(), stub_name) == 0, "restored stub has wrong name");
   *start = current_stub_entry_addr(0);
   *end = current_stub_end_addr();
   if (entries != nullptr) {
@@ -297,11 +299,16 @@ void StubArchiveData::load_archive_data(address* start, address* end, GrowableAr
   }
 }
 
-void StubArchiveData::store_archive_data(int stubId, address start, address end, address entry_address1, address entry_address2) {
+void StubArchiveData::store_archive_data(int stubId, const char* stub_name, address start, address end, address entry_address1, address entry_address2) {
+  // fetch and range check index of stub within its kind
   int index = StubRoutines::stubId_to_index(stubId);
   assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
+  // rebase of index relative to current kind should be identity
+  assert(StubRoutines::index_to_stubId(_kind, index) == stubId, "stub id has wrong kind");
   assert(start != nullptr, "start address cannot be null");
   assert(end != nullptr, "end address cannot be null");
+  // copy name as it is sometimes allocated as a reclaimable resource
+  copy_stub_name(index, stub_name);
   int start_addr_index = _address_array.length();
   _address_array.append(start);
   if (entry_address1 != nullptr) {
@@ -313,14 +320,18 @@ void StubArchiveData::store_archive_data(int stubId, address start, address end,
   }
   _address_array.append(end);
   int count = _address_array.length() - start_addr_index;
+  // record order of additon of this entry
   _index_table[index].init_entry(start_addr_index, count);
+  _index_table_population_order[_index_table_population_count++] = index;
 }
 
-void StubArchiveData::store_archive_data(int stubId, address start, address end, GrowableArray<address>* entries) {
+void StubArchiveData::store_archive_data(int stubId, const char *stub_name, address start, address end, GrowableArray<address>* entries) {
   int index = StubRoutines::stubId_to_index(stubId);
   assert(index >= 0 && index < _index_table_cnt, "invalid index %d for table count %d", index, _index_table_cnt);
   assert(start != nullptr, "start address cannot be null");
   assert(end != nullptr, "end address cannot be null");
+  // copy name as it is sometimes allocated as a reclaimable resource
+  copy_stub_name(index, stub_name);
   int start_addr_index = _address_array.length();
   _address_array.append(start);
   if (entries != nullptr) {
@@ -332,4 +343,5 @@ void StubArchiveData::store_archive_data(int stubId, address start, address end,
   _address_array.append(end);
   int count = _address_array.length() - start_addr_index;
   _index_table[index].init_entry(start_addr_index, count);
+  _index_table_population_order[_index_table_population_count++] = index;
 }
