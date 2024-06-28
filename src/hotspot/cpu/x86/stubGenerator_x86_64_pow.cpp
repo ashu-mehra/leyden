@@ -1872,7 +1872,7 @@ address StubGenerator::generate_libmPow() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }

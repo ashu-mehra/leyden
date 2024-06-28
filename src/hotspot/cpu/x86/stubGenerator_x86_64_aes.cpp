@@ -297,7 +297,7 @@ address StubGenerator::generate_galoisCounterMode_AESCrypt() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -394,7 +394,7 @@ address StubGenerator::generate_avx2_galoisCounterMode_AESCrypt() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -473,7 +473,7 @@ address StubGenerator::generate_counterMode_VectorAESCrypt()  {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -796,7 +796,7 @@ address StubGenerator::generate_counterMode_AESCrypt_Parallel() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1085,7 +1085,7 @@ address StubGenerator::generate_cipherBlockChaining_decryptVectorAESCrypt() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1194,7 +1194,7 @@ address StubGenerator::generate_aescrypt_encryptBlock() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1304,7 +1304,7 @@ address StubGenerator::generate_aescrypt_decryptBlock() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1467,7 +1467,7 @@ address StubGenerator::generate_cipherBlockChaining_encryptAESCrypt() {
   __ jmp(L_exit);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1739,7 +1739,7 @@ __ opc(xmm_result3, src_reg);         \
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1772,7 +1772,7 @@ address StubGenerator::generate_electronicCodeBook_encryptAESCrypt() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
  }
@@ -1805,7 +1805,7 @@ address StubGenerator::generate_electronicCodeBook_decryptAESCrypt() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }

@@ -521,11 +521,11 @@ void StubGenerator::copy_bytes_backward(Register from, Register dest,
 //   disjoint_copy_avx3_masked is set to the no-overlap entry point
 //   used by generate_conjoint_[byte/int/short/long]_copy().
 //
-address StubGenerator::generate_disjoint_copy_avx3_masked(int stubId, address* entry, const char *name,
+address StubGenerator::generate_disjoint_copy_avx3_masked(int stubId, address* entry, const char *stub_name,
                                                           int shift, bool aligned, bool is_oop,
                                                           bool dest_uninitialized) {
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
   address start = __ pc();
 
   int avx3threshold = VM_Version::avx3_threshold();
@@ -749,7 +749,7 @@ address StubGenerator::generate_disjoint_copy_avx3_masked(int stubId, address* e
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -824,11 +824,11 @@ void StubGenerator::arraycopy_avx3_large(Register to, Register from, Register te
 //   c_rarg2   - element count, treated as ssize_t, can be zero
 //
 //
-address StubGenerator::generate_conjoint_copy_avx3_masked(int stubId, address* entry, const char *name, int shift,
+address StubGenerator::generate_conjoint_copy_avx3_masked(int stubId, address* entry, const char *stub_name, int shift,
                                                           address nooverlap_target, bool aligned,
                                                           bool is_oop, bool dest_uninitialized) {
   __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", name);
+  StubCodeMark mark(this, "StubRoutines", stub_name);
 
   address start = __ pc();
 
@@ -993,7 +993,7 @@ address StubGenerator::generate_conjoint_copy_avx3_masked(int stubId, address* e
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -1413,7 +1413,7 @@ __ BIND(L_exit);
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -1537,7 +1537,7 @@ address StubGenerator::generate_conjoint_byte_copy(bool aligned, address nooverl
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -1666,7 +1666,7 @@ __ BIND(L_exit);
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -1704,7 +1704,7 @@ address StubGenerator::generate_fill(int stubId, BasicType t, bool aligned, cons
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1820,7 +1820,7 @@ address StubGenerator::generate_conjoint_short_copy(bool aligned, address noover
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -1946,7 +1946,7 @@ __ BIND(L_exit);
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -2072,7 +2072,7 @@ __ BIND(L_exit);
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -2199,7 +2199,7 @@ address StubGenerator::generate_disjoint_long_oop_copy(int stubId, bool aligned,
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -2314,7 +2314,7 @@ address StubGenerator::generate_conjoint_long_oop_copy(int stubId, bool aligned,
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -2556,7 +2556,7 @@ address StubGenerator::generate_checkcast_copy(const char *stub_name, address *e
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, entry != nullptr ? *entry : nullptr);
+  setup_stub_archive_data(stubId, stub_name, start, end, entry != nullptr ? *entry : nullptr);
 
   return start;
 }
@@ -2631,7 +2631,7 @@ address StubGenerator::generate_unsafe_copy(const char *stub_name,
   __ jump(RuntimeAddress(long_copy_entry));
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2840,7 +2840,7 @@ address StubGenerator::generate_unsafe_setmemory(const char *stub_name,
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3212,7 +3212,7 @@ __ BIND(L_failed);
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
