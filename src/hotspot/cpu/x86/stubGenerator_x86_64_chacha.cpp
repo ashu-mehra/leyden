@@ -309,7 +309,7 @@ address StubGenerator::generate_chacha20Block_avx() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -493,7 +493,7 @@ address StubGenerator::generate_chacha20Block_avx512() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }

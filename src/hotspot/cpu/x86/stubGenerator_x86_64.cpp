@@ -407,7 +407,7 @@ address StubGenerator::generate_call_stub(address& return_address) {
   __ jmp(exit);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, return_address);
+  setup_stub_archive_data(stubId, stub_name, start, end, return_address);
 
   return start;
 }
@@ -477,7 +477,7 @@ address StubGenerator::generate_catch_exception() {
   __ jump(RuntimeAddress(StubRoutines::_call_stub_return_address));
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -559,7 +559,7 @@ address StubGenerator::generate_forward_exception() {
   __ jmp(rbx);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -587,7 +587,7 @@ address StubGenerator::generate_orderaccess_fence() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -616,7 +616,7 @@ address StubGenerator::generate_get_previous_sp() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -667,7 +667,7 @@ address StubGenerator::generate_verify_mxcsr() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -719,7 +719,7 @@ address StubGenerator::generate_f2i_fixup() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -770,7 +770,7 @@ address StubGenerator::generate_f2l_fixup() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -831,7 +831,7 @@ address StubGenerator::generate_d2i_fixup() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -892,7 +892,7 @@ address StubGenerator::generate_d2l_fixup() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -920,7 +920,7 @@ address StubGenerator::generate_count_leading_zeros_lut(const char *stub_name) {
   __ emit_data64(0x0000000000000000, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -949,7 +949,7 @@ address StubGenerator::generate_popcount_avx_lut(const char *stub_name) {
   __ emit_data64(0x0403030203020201, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1024,7 +1024,7 @@ address StubGenerator::generate_iota_indices(const char *stub_name) {
   __ emit_data64(0x401c000000000000, relocInfo::none); // 7.0d
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1053,7 +1053,7 @@ address StubGenerator::generate_vector_reverse_bit_lut(const char *stub_name) {
   __ emit_data64(0x0F070B030D050901, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1082,7 +1082,7 @@ address StubGenerator::generate_vector_reverse_byte_perm_mask_long(const char *s
   __ emit_data64(0x08090A0B0C0D0E0F, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1111,7 +1111,7 @@ address StubGenerator::generate_vector_reverse_byte_perm_mask_int(const char *st
   __ emit_data64(0x0C0D0E0F08090A0B, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1140,7 +1140,7 @@ address StubGenerator::generate_vector_reverse_byte_perm_mask_short(const char *
   __ emit_data64(0x0E0F0C0D0A0B0809, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1165,7 +1165,7 @@ address StubGenerator::generate_vector_byte_shuffle_mask(const char *stub_name) 
   __ emit_data64(0xF0F0F0F0F0F0F0F0, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1187,7 +1187,7 @@ address StubGenerator::generate_fp_mask(int stubId, const char *stub_name, int64
   __ emit_data64( mask, relocInfo::none );
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1245,7 +1245,7 @@ address StubGenerator::generate_compress_perm_table(const char *stub_name, int32
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1301,7 +1301,7 @@ address StubGenerator::generate_expand_perm_table(const char *stub_name, int32_t
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1328,7 +1328,7 @@ address StubGenerator::generate_vector_mask(int stubId, const char *stub_name, i
   __ emit_data64(mask, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1357,7 +1357,7 @@ address StubGenerator::generate_vector_byte_perm_mask(const char *stub_name) {
   __ emit_data64(0x0000000000000006, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1418,7 +1418,7 @@ address StubGenerator::generate_vector_custom_i32(int stubId, const char *stub_n
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1530,7 +1530,7 @@ address StubGenerator::generate_verify_oop() {
   __ hlt();
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1670,7 +1670,7 @@ address StubGenerator::generate_data_cache_writeback() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1707,7 +1707,7 @@ address StubGenerator::generate_data_cache_writeback_sync() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1757,7 +1757,7 @@ address StubGenerator::generate_md5_implCompress(bool multi_block, const char *s
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1782,7 +1782,7 @@ address StubGenerator::generate_upper_word_mask() {
   __ emit_data64(0xFFFFFFFF00000000, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1805,7 +1805,7 @@ address StubGenerator::generate_shuffle_byte_flip_mask() {
   __ emit_data64(0x0001020304050607, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1854,7 +1854,7 @@ address StubGenerator::generate_sha1_implCompress(bool multi_block, const char *
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -1893,7 +1893,7 @@ address StubGenerator::generate_pshuffle_byte_flip_mask() {
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, start+32, start+64);
+  setup_stub_archive_data(stubId, stub_name, start, end, start+32, start+64);
 
   return start;
 }
@@ -1926,7 +1926,7 @@ address StubGenerator::generate_pshuffle_byte_flip_mask_sha512() {
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end, start+32);
+  setup_stub_archive_data(stubId, stub_name, start, end, start+32);
 
   return start;
 }
@@ -1982,7 +1982,7 @@ address StubGenerator::generate_sha256_implCompress(bool multi_block, const char
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2030,7 +2030,7 @@ address StubGenerator::generate_sha512_implCompress(bool multi_block, const char
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2062,7 +2062,7 @@ address StubGenerator::base64_shuffle_addr() {
   __ emit_data64(0x2e2f2d2e2b2c2a2b, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2088,7 +2088,7 @@ address StubGenerator::base64_avx2_shuffle_addr() {
   __ emit_data64(0x0a0b090a07080607, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2114,7 +2114,7 @@ address StubGenerator::base64_avx2_input_mask_addr() {
   __ emit_data64(0x8000000080000000, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2146,7 +2146,7 @@ address StubGenerator::base64_avx2_lut_addr() {
   __ emit_data64(0x000020effcfcfcfc, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2187,7 +2187,7 @@ address StubGenerator::base64_encoding_table_addr() {
   __ emit_data64(0x5f2d393837363534, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2586,7 +2586,7 @@ address StubGenerator::generate_base64_encodeBlock()
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2619,7 +2619,7 @@ address StubGenerator::base64_vbmi_lookup_lo_addr() {
   __ emit_data64(0x8080808080803d3c, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2651,7 +2651,7 @@ address StubGenerator::base64_vbmi_lookup_hi_addr() {
   __ emit_data64(0x8080808080333231, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2682,7 +2682,7 @@ address StubGenerator::base64_vbmi_lookup_lo_url_addr() {
   __ emit_data64(0x8080808080803d3c, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2714,7 +2714,7 @@ address StubGenerator::base64_vbmi_lookup_hi_url_addr() {
   __ emit_data64(0x8080808080333231, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2746,7 +2746,7 @@ address StubGenerator::base64_vbmi_pack_vec_addr() {
   __ emit_data64(0x0000000000000000, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2778,7 +2778,7 @@ address StubGenerator::base64_vbmi_join_0_1_addr() {
   __ emit_data64(0x565051524c4d4e48, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2810,7 +2810,7 @@ address StubGenerator::base64_vbmi_join_1_2_addr() {
   __ emit_data64(0x696a646566606162, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2842,7 +2842,7 @@ address StubGenerator::base64_vbmi_join_2_3_addr() {
   __ emit_data64(0x7c7d7e78797a7475, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2889,7 +2889,7 @@ address StubGenerator::base64_AVX2_decode_tables_addr() {
   __ emit_data(0x00011000, relocInfo::none, 0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -2942,7 +2942,7 @@ address StubGenerator::base64_AVX2_decode_LUT_tables_addr() {
   __ emit_data64(0x1010101010101010, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3029,7 +3029,7 @@ address StubGenerator::base64_decoding_table_addr() {
   __ emit_data64(0xffffffffffffffff, relocInfo::none);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3568,7 +3568,7 @@ address StubGenerator::generate_base64_decodeBlock() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3636,7 +3636,7 @@ address StubGenerator::generate_updateBytesCRC32() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3729,7 +3729,7 @@ address StubGenerator::generate_updateBytesCRC32C(bool is_pclmulqdq_supported) {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3800,7 +3800,7 @@ address StubGenerator::generate_multiplyToLen() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3865,7 +3865,7 @@ address StubGenerator::generate_vectorizedMismatch() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -3923,7 +3923,7 @@ address StubGenerator::generate_squareToLen() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4012,7 +4012,7 @@ address StubGenerator::generate_method_entry_barrier() {
   __ jmp(Address(rsp, -1 * wordSize)); // jmp target should be callers verified_entry_point
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4079,7 +4079,7 @@ address StubGenerator::generate_mulAdd() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4214,7 +4214,7 @@ address StubGenerator::generate_bigIntegerRightShift() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4351,7 +4351,7 @@ address StubGenerator::generate_bigIntegerLeftShift() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4414,7 +4414,7 @@ address StubGenerator::generate_float16ToFloat() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4451,7 +4451,7 @@ address StubGenerator::generate_floatToFloat16() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4585,7 +4585,7 @@ address StubGenerator::generate_cont_thaw(int stubId, const char* stub_name, Con
   }
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4630,7 +4630,7 @@ address StubGenerator::generate_upcall_stub_exception_handler() {
   __ should_not_reach_here();
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4662,7 +4662,7 @@ address StubGenerator::generate_lookup_secondary_supers_table_stub(u1 super_klas
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
@@ -4704,7 +4704,7 @@ address StubGenerator::generate_lookup_secondary_supers_table_slow_path_stub() {
   __ ret(0);
 
   address end = __ pc();
-  setup_stub_archive_data(stubId, start, end);
+  setup_stub_archive_data(stubId, stub_name, start, end);
 
   return start;
 }
