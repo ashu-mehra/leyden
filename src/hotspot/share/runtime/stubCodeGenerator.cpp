@@ -322,7 +322,6 @@ void StubArchiveData::store_archive_data(int stubId, const char* stub_name, addr
   int count = _address_array.length() - start_addr_index;
   // record order of additon of this entry
   _index_table[index].init_entry(start_addr_index, count);
-  _index_table_population_order[_index_table_population_count++] = index;
 }
 
 void StubArchiveData::store_archive_data(int stubId, const char *stub_name, address start, address end, GrowableArray<address>* entries) {
@@ -343,5 +342,4 @@ void StubArchiveData::store_archive_data(int stubId, const char *stub_name, addr
   _address_array.append(end);
   int count = _address_array.length() - start_addr_index;
   _index_table[index].init_entry(start_addr_index, count);
-  _index_table_population_order[_index_table_population_count++] = index;
 }
