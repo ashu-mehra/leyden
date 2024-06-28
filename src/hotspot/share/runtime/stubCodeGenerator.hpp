@@ -196,10 +196,6 @@ private:
   StubAddrIndexInfo* _current;
   // table of names for any stubs present in the table
   const char** _names;
-  // number of populated entries in the table
-  int _index_table_population_count;
-  // order in which populated entries have been added 
-  int *_index_table_population_order;
 
 public:
   StubArchiveData(StubCodeGenerator::StubsKind kind) : _kind(kind), _current(nullptr) {
@@ -210,9 +206,6 @@ public:
       _index_table[i].default_init();
       _names[i] = nullptr;
     }
-    _index_table_population_count = 0;
-    _index_table_population_order = NEW_C_HEAP_ARRAY(int, _index_table_cnt, mtCode);
-    
   }
 
   ~StubArchiveData() {
@@ -221,7 +214,6 @@ public:
       FREE_C_HEAP_ARRAY(char, _names[i]);
     }
     FREE_C_HEAP_ARRAY(const char* , _names);
-    FREE_C_HEAP_ARRAY(int, _index_table_population_order);
   }
 
   StubCodeGenerator::StubsKind kind() { return _kind; }
