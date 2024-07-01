@@ -3478,11 +3478,13 @@ void PhaseOutput::install_stub(const char* stub_name) {
       assert(rs != nullptr && rs->is_runtime_stub(), "sanity check");
 
       C->set_stub_entry_point(rs->entry_point());
-      // try to save the stub in the cache
-      OptoRuntime::StubID stub_id = (OptoRuntime::StubID)C->stub_id();
-      GrowableArray<int> extra_args;
-      extra_args.append(frame_size);
-      SCCache::store_opto_blob(buffer, stub_id, stub_name, oop_maps, &extra_args);
+      if (StoreStubs) {
+        // try to save the stub in the cache
+        OptoRuntime::StubID stub_id = (OptoRuntime::StubID)C->stub_id();
+        GrowableArray<int> extra_args;
+        extra_args.append(frame_size);
+        SCCache::store_opto_blob(buffer, stub_id, stub_name, oop_maps, &extra_args);
+      }
     }
   }
 }
