@@ -966,7 +966,7 @@ Compile::Compile( ciEnv* ci_env,
     OopMapSet* oop_maps = nullptr;
     GrowableArray<int> extra_args;
     OptoRuntime::StubID stub_id = (OptoRuntime::StubID)_stub_id;
-    if (SCCache::load_opto_blob(&buffer, stub_id, stub_name, oop_maps, &extra_args)) {
+    if (LoadStubs && SCCache::load_opto_blob(&buffer, stub_id, stub_name, oop_maps, &extra_args)) {
       assert(oop_maps != nullptr, "expected oop maps");
       assert(extra_args.length() == 1, "expected 1 extra argument from C2 stub load");
       int frame_size_in_words = extra_args.at(0);

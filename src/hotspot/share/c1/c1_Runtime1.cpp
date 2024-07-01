@@ -215,7 +215,7 @@ CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const ch
     // used by the compiler
     CodeBuffer code(buffer_blob);
 
-    if (stub_id >= 0 && SCCache::load_c1_blob(&code, (Runtime1::StubID)stub_id, name, oop_maps, &extra_args)) {
+    if (LoadStubs && stub_id >= 0 && SCCache::load_c1_blob(&code, (Runtime1::StubID)stub_id, name, oop_maps, &extra_args)) {
       assert(oop_maps != nullptr || !expect_oop_map, "expected oop maps");
       assert(extra_args.length() == 2, "expected 2 extra arguments");
       CodeBlob* blob = RuntimeStub::new_runtime_stub(name,
@@ -260,7 +260,7 @@ CodeBlob* Runtime1::generate_blob(BufferBlob* buffer_blob, int stub_id, const ch
                                                  oop_maps,
                                                  must_gc_arguments);
   assert(blob != nullptr, "blob must exist");
-  if (stub_id >= 0) {
+  if (StoreStubs && stub_id >= 0) {
     extra_args.append(frame_size);
     extra_args.append(must_gc_arguments ? 1 : 0);
     SCCache::store_c1_blob(&code, (Runtime1::StubID)stub_id, name, oop_maps, &extra_args);
