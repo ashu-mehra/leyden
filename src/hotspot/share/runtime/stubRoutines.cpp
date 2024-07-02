@@ -249,10 +249,12 @@ static BufferBlob* initialize_stubs(StubCodeGenerator::StubsKind kind,
   }
   LogTarget(Info, stubs) lt;
   CodeBuffer buffer(stubs_code, code_size);
-  if (SCCache::is_on() && (StoreStubs || LoadStubs)) {
+  if (SCCache::is_on()) {
     int stubs_group_id = SharedRuntime::encode_stubroutines_id(kind);
     StubArchiveData archive_data(kind);
 
+    // register exernals whether or not we are laoding or storing stubs
+    // becayse nmethods may need ot refer to them
     if (kind == StubCodeGenerator::StubsKind::Continuation_stubs) {
       SCCache::init_table_for_continuation_stubs();
     } else if (kind == StubCodeGenerator::StubsKind::Final_stubs) {

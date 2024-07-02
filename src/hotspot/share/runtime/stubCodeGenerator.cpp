@@ -162,10 +162,13 @@ void StubCodeGenerator::load_archive_data(int stubId, const char* stub_name, add
 }
 
 void StubCodeGenerator::setup_stub_archive_data(int stubId, const char* stub_name, address start, address end, address entry_address1, address entry_address2) {
-  if (_archive_data == nullptr) {
+  if (_archive_data != nullptr) {
+    _archive_data->store_archive_data(stubId, stub_name, start, end, entry_address1, entry_address2);
+  }
+  if (!SCCache::is_on()) {
     return;
   }
-  _archive_data->store_archive_data(stubId, stub_name, start, end, entry_address1, entry_address2);
+  // we need to publish the stub addresses whether or not they have been saved
   SCCache::add_stub_address(start);
   if (entry_address1 != nullptr) {
     SCCache::add_stub_address(entry_address1);
@@ -176,10 +179,13 @@ void StubCodeGenerator::setup_stub_archive_data(int stubId, const char* stub_nam
 }
  
 void StubCodeGenerator::setup_stub_archive_data(int stubId, const char* stub_name, address start, address end, GrowableArray<address> *entries) {
-  if (_archive_data == nullptr) {
+  if (_archive_data != nullptr) {
+    _archive_data->store_archive_data(stubId, stub_name, start, end, entries);
+  }
+  if (!SCCache::is_on()) {
     return;
   }
-  _archive_data->store_archive_data(stubId, stub_name, start, end, entries);
+  // we need to publish the stub addresses whether or not they have been saved
   SCCache::add_stub_address(start);
   if (entries != nullptr) {
     int len = entries->length();
