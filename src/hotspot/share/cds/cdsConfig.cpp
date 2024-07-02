@@ -414,6 +414,7 @@ bool CDSConfig::check_vm_args_consistency(bool patch_mod_javabase, bool mode_fla
         HeapShared::disable_writing();
         stop_dumping_full_module_graph();
         FLAG_SET_ERGO(ArchivePackages, false);
+        FLAG_SET_ERGO(StoreStubs, false);
 
         FLAG_SET_ERGO_IF_DEFAULT(RecordTraining, true);
       }
@@ -474,6 +475,15 @@ bool CDSConfig::check_vm_args_consistency(bool patch_mod_javabase, bool mode_fla
     FLAG_SET_ERGO(ArchiveMethodReferences, false);
     FLAG_SET_ERGO(ArchivePackages, false);
     FLAG_SET_ERGO(ArchiveReflectionData, false);
+  }
+
+  if (!StoreCachedCode && StoreStubs) {
+    warning("StoreStubs will be ignored without StoreCachedCode");
+    StoreStubs = false;
+  }
+  if (!LoadCachedCode && LoadStubs) {
+    warning("LoadStubs will be ignored without LoadCachedCode");
+    LoadStubs = false;
   }
 
   if (is_dumping_static_archive()) {
