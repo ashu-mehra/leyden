@@ -71,6 +71,7 @@
 #include "runtime/stackWatermarkSet.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/threadCritical.hpp"
+#include "runtime/timerTrace.hpp"
 #include "runtime/vframe.inline.hpp"
 #include "runtime/vframeArray.hpp"
 #include "runtime/vm_version.hpp"
@@ -297,6 +298,8 @@ void Runtime1::initialize(BufferBlob* blob) {
   // platform-dependent initialization
   initialize_pd();
   // generate stubs
+  TraceTime timer("C1 stub generation", TRACETIME_LOG(Info, startuptime));
+
   for (int id = 0; id <= forward_exception_id; id++) generate_blob_for(blob, (StubID)id);
   // record current blob addresses for use by later blobs
   SCCache::init_early_c1_table();

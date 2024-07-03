@@ -70,6 +70,7 @@
 #include "runtime/stackWatermarkSet.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/synchronizer.hpp"
+#include "runtime/timerTrace.hpp"
 #include "runtime/vframe.inline.hpp"
 #include "runtime/vframeArray.hpp"
 #include "runtime/vm_version.hpp"
@@ -130,6 +131,7 @@ void SharedRuntime::generate_initial_stubs() {
 
 //----------------------------generate_stubs-----------------------------------
 void SharedRuntime::generate_stubs() {
+  TraceTime timer("SharedRuntime stub generation", TRACETIME_LOG(Info, startuptime));
   _wrong_method_blob                   = generate_resolve_blob(SharedRuntime::StubID::wrong_method_id, CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method),          "wrong_method_stub");
   _wrong_method_abstract_blob          = generate_resolve_blob(SharedRuntime::StubID::wrong_method_abstract_id, CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method_abstract), "wrong_method_abstract_stub");
   _ic_miss_blob                        = generate_resolve_blob(SharedRuntime::StubID::ic_miss_id, CAST_FROM_FN_PTR(address, SharedRuntime::handle_wrong_method_ic_miss),  "ic_miss_stub");

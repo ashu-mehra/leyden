@@ -75,6 +75,7 @@
 #include "runtime/synchronizer.hpp"
 #include "runtime/threadCritical.hpp"
 #include "runtime/threadWXSetters.inline.hpp"
+#include "runtime/timerTrace.hpp"
 #include "runtime/vframe.hpp"
 #include "runtime/vframeArray.hpp"
 #include "runtime/vframe_hp.hpp"
@@ -145,6 +146,8 @@ static bool check_compiled_frame(JavaThread* thread) {
 
 bool OptoRuntime::generate(ciEnv* env) {
   init_counters();
+
+  TraceTime timer("Opto stub generation", TRACETIME_LOG(Info, startuptime));
 
   generate_exception_blob();
 
