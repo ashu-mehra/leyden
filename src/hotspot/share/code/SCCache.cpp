@@ -94,21 +94,42 @@
 #define O_BINARY 0     // otherwise do nothing.
 #endif
 
+// address table ids for generated routines, external addresses and C
+// string addresses are partitioned into positive integer ranges
+// defined by the following positive base and max values
+// i.e. [_extrs_base, _extrs_base + _extrs_max -1],
+//      [_stubs_base, _stubs_base + _stubs_max -1],
+//      ...
+//      [_c_str_base, _c_str_base + _c_str_max -1],
+
+
 #define _extrs_max 1000
 #define _stubs_max 500
-#define _blobs_max 120
-#define _shared_blobs_max 40
+#define _all_blobs_max 120
+#define _blobs_max 40
 #define _C2_blobs_max 30
-#define _C1_blobs_max (_blobs_max - _shared_blobs_max - _C2_blobs_max)
+#define _C1_blobs_max (_all_blobs_max - _blobs_max - _C2_blobs_max)
 #define _all_max 2000
+// n.b. MAX_STR_COUNT is defined below
+#define _c_str_max MAX_STR_COUNT
 
-#define SCCACHE_SET_ADDRESS(type, addr)                   \
-  {                                                       \
-    SCCache* cache = SCCache::cache();                    \
-    assert(cache != nullptr, "sanity check");             \
-    SCAddressTable *table = cache->_table;                \
-    table->type##_addr[table->type##_length++] = (address) (addr);      \
-    assert(table->type##_length <= type##_max, "increase sizse");  \
+#define _extrs_base 0
+#define _stubs_base (_extrs_base + _extrs_max)
+#define _blobs_base (_stubs_base + _stubs_max)
+#define _C1_blobs_base (_blobs_base + _blobs_max)
+#define _C2_blobs_base (_C1_blobs_base + _C1_blobs_max)
+#if (_C2_blobs_base >= _all_max)
+#error SCAddress table ranges need adjusting 
+#endif
+#define _c_str_base _all_max
+
+#define SCCACHE_SET_ADDRESS(type, addr)                                \
+  {                                                                    \
+    SCCache* cache = SCCache::cache();                                 \
+    assert(cache != nullptr, "sanity check");                          \
+    SCAddressTable *table = cache->_table;                             \
+    table->type##_addr[table->type##_length++] = (address) (addr);     \
+    assert(table->type##_length <= type##_max, "increase size");       \
   }
 
 #define SET_ADDRESS(type, addr)                           \
@@ -4048,7 +4069,6 @@ void SCAddressTable::init_extrs() {
   _blobs_length = 0;       // for shared blobs
   _C1_blobs_length = 0;
   _C2_blobs_length = 0;
-  _final_blobs_length = 0; // Depends on numnber of C1 blobs
 
   // Externals used by initial stubs
   SET_ADDRESS(_extrs, SharedRuntime::exception_handler_for_return_address); // used by forward_exception
@@ -4268,16 +4288,15 @@ static bool initializing = false;
 void SCAddressTable::init() {
   if (_complete || initializing) return; // Done already
   initializing = true;
-  _blobs_addr = NEW_C_HEAP_ARRAY(address, _blobs_max, mtCode);
 
-  // Divide _blobs_addr array to chunks because they could be initialized in parrallel
-  _C2_blobs_addr = _blobs_addr + _shared_blobs_max;// C2 blobs addresses stored after shared blobs
-  _C1_blobs_addr = _C2_blobs_addr + _C2_blobs_max; // C1 blobs addresses stored after C2 blobs
+  _blobs_addr = NEW_C_HEAP_ARRAY(address, _blobs_max, mtCode);
+  _C1_blobs_addr = NEW_C_HEAP_ARRAY(address, _C1_blobs_max, mtCode);
+  _C2_blobs_addr = NEW_C_HEAP_ARRAY(address, _C2_blobs_max, mtCode);
+
 
   _blobs_length = 0;       // for shared blobs
   _C1_blobs_length = 0;
   _C2_blobs_length = 0;
-  _final_blobs_length = 0; // Depends on numnber of C1 blobs
 
   // Stubs
   SET_ADDRESS(_stubs, StubRoutines::method_entry_barrier());
@@ -4472,8 +4491,7 @@ void SCAddressTable::init() {
 
   JFR_ONLY(SET_ADDRESS(_blobs, SharedRuntime::jfr_write_checkpoint());)
 
-  assert(_blobs_length <= _shared_blobs_max, "increase _shared_blobs_max to %d", _blobs_length);
-  _final_blobs_length = _blobs_length;
+  assert(_blobs_length <= _blobs_max, "increase _blobs_max to %d", _blobs_length);
   _complete = true;
   log_info(scc,init)("Stubs recorded");
 }
@@ -4507,7 +4525,6 @@ void SCAddressTable::init_opto() {
 #endif
 
   assert(_C2_blobs_length <= _C2_blobs_max, "increase _C2_blobs_max to %d", _C2_blobs_length);
-  _final_blobs_length = MAX2(_final_blobs_length, (_shared_blobs_max + _C2_blobs_length));
   _opto_complete = true;
   log_info(scc,init)("OptoRuntime Blobs recorded");
 }
@@ -4530,7 +4547,6 @@ void SCAddressTable::init_early_c1() {
   }
 #endif // COMPILER1
   assert(_C1_blobs_length <= _C1_blobs_max, "increase _C1_blobs_max to %d", _C1_blobs_length);
-  _final_blobs_length = MAX2(_final_blobs_length, (_shared_blobs_max + _C2_blobs_max + _C1_blobs_length));
   _early_c1_complete = true;
 }
 
@@ -4573,7 +4589,6 @@ void SCAddressTable::init_c1() {
 #endif // COMPILER1
 
   assert(_C1_blobs_length <= _C1_blobs_max, "increase _C1_blobs_max to %d", _C1_blobs_length);
-  _final_blobs_length = MAX2(_final_blobs_length, (_shared_blobs_max + _C2_blobs_max + _C1_blobs_length));
   _c1_complete = true;
   log_info(scc,init)("Runtime1 Blobs recorded");
 }
@@ -4584,12 +4599,6 @@ void SCAddressTable::set_stubs_complete() {
 }
 
 #undef SET_ADDRESS
-#undef _extrs_max
-#undef _stubs_max
-#undef _blobs_max
-#undef _shared_blobs_max
-#undef _C1_blobs_max
-#undef _C2_blobs_max
 
 SCAddressTable::~SCAddressTable() {
   if (_extrs_addr != nullptr) {
@@ -4748,32 +4757,43 @@ int search_address(address addr, address* table, uint length) {
 
 address SCAddressTable::address_for_id(int idx) {
   if (!_extrs_complete) {
-    fatal("SCA table is not complete");
+    fatal("SCA extrs table is not complete");
   }
+  // special case -1 used for self-reference
   if (idx == -1) {
     return (address)-1;
   }
+  // indexes in range [0, _c_str_base + c_str_max -1] need to be
+  // decoded via the relevant range array
+
   uint id = (uint)idx;
-  if (id >= _all_max && idx < (_all_max + _C_strings_count)) {
-    return address_for_C_string(idx - _all_max);
-  }
-  if (idx < 0 || id == (_extrs_length + _stubs_length + _final_blobs_length)) {
-    fatal("Incorrect id %d for SCA table", id);
-  }
-  if (idx > (_all_max + _C_strings_count)) {
+  // special case for symbols based relative to os::init 
+  if (id > (_c_str_base + _c_str_max)) {
     return (address)os::init + idx;
   }
-  if (id < _extrs_length) {
-    return _extrs_addr[id];
+  if (idx < 0) {
+    fatal("Incorrect id %d for SCA table", id);
   }
-  id -= _extrs_length;
-  if (id < _stubs_length) {
-    return _stubs_addr[id];
+  // no need to compare unsigned id against 0
+  if (/* id >= _extrs_base && */ id < _extrs_length) {
+    return _extrs_addr[id - _extrs_base];
   }
-  id -= _stubs_length;
-  if (id < _final_blobs_length) {
-    return _blobs_addr[id];
+  if (id >= _stubs_base && id < _stubs_base + _stubs_length) {
+    return _stubs_addr[id - _stubs_base];
   }
+  if (id >= _blobs_base && id < _blobs_base + _blobs_length) {
+    return _blobs_addr[id - _blobs_base];
+  }
+  if (id >= _C1_blobs_base && id < _C1_blobs_base + _C1_blobs_length) {
+    return _C1_blobs_addr[id - _C1_blobs_base];
+  }
+  if (id >= _C2_blobs_base && id < _C2_blobs_base + _C2_blobs_length) {
+    return _C2_blobs_addr[id - _C2_blobs_base];
+  }
+  if (id >= _c_str_base && id < (_c_str_base + (uint)_C_strings_count)) {
+    return address_for_C_string(id - _c_str_base);
+  }
+  fatal("Incorrect id %d for SCA table", id);
   return nullptr;
 }
 
@@ -4788,22 +4808,23 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
   // Seach for C string
   id = id_for_C_string(addr);
   if (id >= 0) {
-    return id + _all_max;
+    return id + _c_str_base;
   }
 
   if (!_stubs_complete) {
-    // Search in runtime functions
+    // Search in external runtime addresses
     id = search_address(addr, _extrs_addr, _extrs_length);
     if (id >= 0) {
-      return id;
+      return _extrs_base + id;
     }
     // Search in stubs
     id = search_address(addr, _stubs_addr, _stubs_length);
     if (id >= 0) {
-      return id + _extrs_length;
+      return _stubs_base + id;
     }
     fatal("Address " INTPTR_FORMAT " is missing in SCA table", p2i(addr));
   } else {
+    int id_base = -1;
     if (StubRoutines::contains(addr)) {
       // Search in stubs
       id = search_address(addr, _stubs_addr, _stubs_length);
@@ -4815,22 +4836,32 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
 	const char* sub_name = (desc != nullptr) ? desc->name() : "<unknown>";
 	fatal("Address " INTPTR_FORMAT " for Stub:%s is missing in SCA table", p2i(addr), sub_name);
       } else {
-	id += _extrs_length;
+	id_base = _stubs_base;
       }
     } else {
       CodeBlob* cb = CodeCache::find_blob(addr);
+      id_base = _blobs_base;
       if (cb != nullptr) {
 	if (!_complete) {
-	  fatal("SCA table is not complete (missing stubs)");
+	  fatal("SCA table is not complete (missing blobs)");
 	}
-	// Search in code blobs
-	id = search_address(addr, _blobs_addr, _final_blobs_length);
+	// Search in shared blobs
+	id = search_address(addr, _blobs_addr, _blobs_length);
+        if (id == -1) {
+          id_base = _C1_blobs_base;
+          // search C1 blobs
+          id = search_address(addr, _C1_blobs_addr, _C1_blobs_length);
+        }
+        if (id == -1) {
+          id_base = _C2_blobs_base;
+          // search C2 blobs
+          id = search_address(addr, _C2_blobs_addr, _C2_blobs_length);
+        }
 	if (id < 0) {
 	  fatal("Address " INTPTR_FORMAT " for Blob:%s is missing in SCA table", p2i(addr), cb->name());
-	} else {
-	  id += _extrs_length + _stubs_length;
-	}
+        }
       } else {
+        id_base = _extrs_base;
 	// Search in runtime functions
 	id = search_address(addr, _extrs_addr, _extrs_length);
 	if (id < 0) {
@@ -4851,7 +4882,7 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
 	      }
 	      log_info(scc)("%d (L%d): Address " INTPTR_FORMAT " (offset %d) for runtime target '%s' is missing in SCA table",
 			    compile_id, comp_level, p2i(addr), dist, (const char*)addr);
-	      assert(dist > (uint)(_all_max + MAX_STR_COUNT), "change encoding of distance");
+	      assert(dist > (uint)(_c_str_base + _c_str_max), "change encoding of distance");
 	      return dist;
 	    }
 	    fatal("Address " INTPTR_FORMAT " for runtime target '%s+%d' is missing in SCA table", p2i(addr), func_name, offset);
@@ -4867,6 +4898,19 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
 	}
       }
     }
+    return id_base + id;
   }
-  return id;
 }
+
+#undef _extrs_max
+#undef _stubs_max
+#undef _all_blobs_max
+#undef _blobs_max
+#undef _C1_blobs_max
+#undef _C2_blobs_max
+#undef _extrs_base
+#undef _stubs_base
+#undef _blobs_base
+#undef _C1_blobs_base
+#undef _C2_blobs_base
+#undef _c_str_base
