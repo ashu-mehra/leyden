@@ -160,6 +160,8 @@ void SCCache::init2() {
       exit_vm_on_load_failure();
     }
   }
+  // reset grain size in this thread now GC has been initialized
+  JavaThread::current()->init_grain_size();
   if (!verify_vm_config()) {
     close();
     exit_vm_on_load_failure();

@@ -85,9 +85,14 @@ class JavaThread: public Thread {
   friend class Continuation;
   friend class Threads;
   friend class ServiceThread; // for deferred OopHandle release access
+  friend class SCCache; // to init grain size in main therad
  private:
   bool           _on_thread_list;                // Is set when this JavaThread is added to the Threads list
-
+#if INCLUDE_CDS && INCLUDE_G1GC
+  int8_t        _log_grain_size; // region granularity needed by some gc barriers
+  void init_grain_size();
+#endif
+  
   // All references to Java objects managed via OopHandles. These
   // have to be released by the ServiceThread after the JavaThread has
   // terminated - see add_oop_handles_for_release().
@@ -845,6 +850,10 @@ private:
   static ByteSize is_in_VTMS_transition_offset()     { return byte_offset_of(JavaThread, _is_in_VTMS_transition); }
   static ByteSize is_in_tmp_VTMS_transition_offset() { return byte_offset_of(JavaThread, _is_in_tmp_VTMS_transition); }
   static ByteSize is_disable_suspend_offset()        { return byte_offset_of(JavaThread, _is_disable_suspend); }
+#endif
+
+#if INCLUDE_CDS
+  static ByteSize grain_size_offset() { return byte_offset_of(JavaThread, _log_grain_size); }
 #endif
 
   // Returns the jni environment for this thread

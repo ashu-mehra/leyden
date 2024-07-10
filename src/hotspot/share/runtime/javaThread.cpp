@@ -506,7 +506,6 @@ JavaThread::JavaThread() :
   _class_being_initialized(nullptr),
 
   _SleepEvent(ParkEvent::Allocate(this)),
-
   _lock_stack(this) {
   set_jni_functions(jni_functions());
 
@@ -517,7 +516,17 @@ JavaThread::JavaThread() :
   }
 #endif // INCLUDE_JVMCI
 
-  // Setup safepoint state info for this thread
+#if INCLUDE_CDS && INCLUDE_G1GC
+  // Java threads need this set in the runtime to make AOT code work
+
+  // n.b. this is called from the JavaTherad consructor. However, it
+  // also needs to be called explicitly during SCCache initialization
+  // in the main thread because that thread is created before GC
+  // initialization.
+  init_grain_size();
+#endif
+
+    // Setup safepoint state info for this thread
   ThreadSafepointState::create(this);
 
   SafepointMechanism::initialize_header(this);
@@ -534,6 +543,9 @@ JavaThread::JavaThread(bool is_attaching_via_jni) : JavaThread() {
   }
 }
 
+void JavaThread::init_grain_size() {
+  _log_grain_size = G1HeapRegion::LogOfHRGrainBytes;
+}
 
 // interrupt support
 

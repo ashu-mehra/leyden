@@ -454,8 +454,20 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
     // Should be able to do an unsigned compare of region_size instead of
     // and extra shift. Do we have an unsigned compare??
     // Node* region_size = __ ConI(1 << G1HeapRegion::LogOfHRGrainBytes);
+#if INCLUDE_CDS
+    Node* xor_res = __ XorX( cast,  __ CastPX(__ ctrl(), val));
+    if (StoreCachedCode)  {
+      Node* tls = __ thread(); // ThreadLocalStorage
+      const int grain_size_offset = in_bytes(JavaThread::grain_size_offset());
+      Node* grain_size_adr = __ AddP(__ top(), tls, __ ConX(grain_size_offset));
+      Node* grain_size  = __ load(__ ctrl(), grain_size_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
+      xor_res = __ URShiftX( xor_res, grain_size);
+    } else {
+      xor_res = __ URShiftX ( xor_res, __ ConI(checked_cast<jint>(G1HeapRegion::LogOfHRGrainBytes)));
+    }
+#else
     Node* xor_res =  __ URShiftX ( __ XorX( cast,  __ CastPX(__ ctrl(), val)), __ ConI(checked_cast<jint>(G1HeapRegion::LogOfHRGrainBytes)));
-
+#endif
     // if (xor_res == 0) same region so skip
     __ if_then(xor_res, BoolTest::ne, zeroX, likely); {
 

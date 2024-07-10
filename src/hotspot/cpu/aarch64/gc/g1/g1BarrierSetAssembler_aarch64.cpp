@@ -24,6 +24,9 @@
 
 #include "precompiled.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#if INCLUDE_CDS
+#include "code/SCCache.hpp"
+#endif
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1BarrierSetAssembler.hpp"
 #include "gc/g1/g1BarrierSetRuntime.hpp"
@@ -206,10 +209,26 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   // Does store cross heap regions?
 
+#if INCLUDE_CDS
+  // AOT code needs to load the barrier shift from the current thread
+  // otherwise we can compile it as an immediate operand
+
+  if (StoreCachedCode) {
+    // TODO use a more precise check i.e. that we are compiling an AOT
+    // method or generating runtime code that may be saved and
+    // restored (would that only be the interpreter?)
+    __ eor(tmp1, store_addr, new_val);
+    __ ldrb(tmp2, Address(rthread, JavaThread::grain_size_offset()));
+    __ lsrv(tmp1, tmp1, tmp2);
+    __ cbz(tmp1, done);
+  } else {
+#endif
   __ eor(tmp1, store_addr, new_val);
   __ lsr(tmp1, tmp1, G1HeapRegion::LogOfHRGrainBytes);
   __ cbz(tmp1, done);
-
+#if INCLUDE_CDS
+  }
+#endif
   // crosses regions, storing null?
 
   __ cbz(new_val, done);
