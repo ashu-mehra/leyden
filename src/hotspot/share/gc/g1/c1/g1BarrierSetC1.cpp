@@ -155,25 +155,29 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
   LIR_Opr xor_shift_res = gen->new_pointer_register();
 #if INCLUDE_CDS
   LIR_Opr thrd = gen->getThreadPointer();
-  LIR_Opr grain_shift = gen->new_register(T_INT);
   LIR_Address* grain_shift_address =
     new LIR_Address(thrd,
                     in_bytes(JavaThread::grain_size_offset()),
                     T_BYTE);
-#endif
+#endif /* INCLUDE_CDS */
   if (two_operand_lir_form) {
     __ move(addr, xor_res);
     __ logical_xor(xor_res, new_val, xor_res);
 #if INCLUDE_CDS
     if (StoreCachedCode) {
-      __ move(grain_shift_address, grain_shift);
+#if defined(X86)
+      LIR_Opr shift_count_opr = gen->shiftCountOpr();
+#else
+      LIR_Opr shift_cout_opr = gen->new_register(T_INT);
+#endif /* X86 */
+      __ move(grain_shift_address, shift_count_opr); 
       __ move(xor_res, xor_shift_res);
       __ unsigned_shift_right(xor_shift_res,
-                              grain_shift,
+                              shift_count_opr,
                               xor_shift_res,
                               LIR_Opr::illegalOpr());
     } else {
-#endif
+#endif /* INCLUDE_CDS */
     __ move(xor_res, xor_shift_res);
     __ unsigned_shift_right(xor_shift_res,
                             LIR_OprFact::intConst(checked_cast<jint>(G1HeapRegion::LogOfHRGrainBytes)),
@@ -181,25 +185,31 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
                             LIR_Opr::illegalOpr());
 #if INCLUDE_CDS
   }
-#endif
+#endif /* INCLUDE_CDS */
   } else {
     __ logical_xor(addr, new_val, xor_res);
 #if INCLUDE_CDS
     if (StoreCachedCode) {
-      __ move(grain_shift_address, grain_shift);
+#if defined(X86)
+      LIR_Opr shift_count_opr = gen->shiftCountOpr();
+#else
+      LIR_Opr shift_cout_opr = gen->new_register(T_INT);
+#endif /* X86 */
+      __ move(grain_shift_address, shift_count_opr);
+     
       __ unsigned_shift_right(xor_res,
-                              grain_shift,
+                              shift_count_opr,
                               xor_shift_res,
                               LIR_Opr::illegalOpr());
     } else {
-#endif
+#endif /* INCLUDE_CDS */
     __ unsigned_shift_right(xor_res,
                             LIR_OprFact::intConst(checked_cast<jint>(G1HeapRegion::LogOfHRGrainBytes)),
                             xor_shift_res,
                             LIR_Opr::illegalOpr());
 #if INCLUDE_CDS
     }
-#endif
+#endif /* INCLUDE_CDS */
   }
 
   __ cmp(lir_cond_notEqual, xor_shift_res, LIR_OprFact::intptrConst(NULL_WORD));
