@@ -24,6 +24,9 @@
 
 #include "precompiled.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#if INCLUDE_CDS
+#include "code/SCCache.hpp"
+#endif
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1BarrierSetAssembler.hpp"
 #include "gc/g1/g1BarrierSetRuntime.hpp"
@@ -34,6 +37,7 @@
 #include "interpreter/interp_masm.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/sharedRuntime.hpp"
+#include "runtime/stubRoutines.hpp"
 #ifdef COMPILER1
 #include "c1/c1_LIRAssembler.hpp"
 #include "c1/c1_MacroAssembler.hpp"
@@ -206,10 +210,27 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   // Does store cross heap regions?
 
+#if INCLUDE_CDS
+  // AOT code needs to load the barrier grain shift from the aot
+  // runtime constants area in the code cache otherwise we can compile
+  // it as an immediate operand
+
+  if (StoreCachedCode) {
+    address aotrc = StubRoutines::aot_runtime_constants_base();
+    uint offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
+    __ eor(tmp1, store_addr, new_val);
+    __ lea(tmp2, ExternalAddress(aotrc));
+    __ ldrb(tmp2, Address(tmp2, offset));
+    __ lsrv(tmp1, tmp1, tmp2);
+    __ cbz(tmp1, done);
+  } else {
+#endif
   __ eor(tmp1, store_addr, new_val);
   __ lsr(tmp1, tmp1, G1HeapRegion::LogOfHRGrainBytes);
   __ cbz(tmp1, done);
-
+#if INCLUDE_CDS
+  }
+#endif
   // crosses regions, storing null?
 
   __ cbz(new_val, done);
@@ -218,7 +239,22 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   const Register card_addr = tmp1;
 
+#if INCLUDE_CDS
+  // AOT code needs to load the barrier card shift from the aot
+  // runtime constants area in the code cache otherwise we can compile
+  // it as an immediate operand
+  if (StoreCachedCode) {
+    address aotrc = StubRoutines::aot_runtime_constants_base();
+    uint offset = in_bytes(AOTRuntimeConstants::card_shift_offset());
+    __ lea(tmp2, ExternalAddress(aotrc));
+    __ ldrb(tmp2, Address(tmp2, offset));
+    __ lsrv(card_addr, store_addr, tmp2);
+  } else {
+#endif
   __ lsr(card_addr, store_addr, CardTable::card_shift());
+#if INCLUDE_CDS
+  }
+#endif
 
   // get the address of the card
   __ load_byte_map_base(tmp2);
