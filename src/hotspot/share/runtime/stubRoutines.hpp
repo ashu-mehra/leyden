@@ -33,6 +33,7 @@
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/threadWXSetters.inline.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/sizes.hpp"
 
 // StubRoutines provides entry points to assembly routines used by
 // compiled code and the run-time system. Platform-specific entry
@@ -133,6 +134,10 @@ class StubRoutines: AllStatic {
   static jint    _verify_oop_count;
   static address _verify_oop_subroutine_entry;
 
+#if INCLUDE_CDS
+  // address of a generated AOTRuntimeConstants instance
+  static address _aot_runtime_constants_base;
+#endif // include_CDS
   static address _call_stub_return_address;                // the return PC, when returning to a call stub
   static address _call_stub_entry;
   static address _forward_exception_entry;
@@ -327,6 +332,7 @@ class StubRoutines: AllStatic {
 
   static CallStub call_stub()                              { return CAST_TO_FN_PTR(CallStub, _call_stub_entry); }
 
+  static address aot_runtime_constants_base()              { return _aot_runtime_constants_base; }
   // Exceptions
   static address forward_exception_entry()                 { return _forward_exception_entry; }
   // Implicit exceptions
@@ -526,5 +532,30 @@ class StubRoutines: AllStatic {
   static void arrayof_oop_copy       (HeapWord* src, HeapWord* dest, size_t count);
   static void arrayof_oop_copy_uninit(HeapWord* src, HeapWord* dest, size_t count);
 };
+
+#if INCLUDE_CDS
+// forward declare friend class
+class SCCache;
+// code cache internal runtime constants area used by AOT code
+class AOTRuntimeConstants {
+ friend class SCCache;
+  uint _grain_shift;
+  uint _card_shift;
+  void set_grain_shift(uint s) { _grain_shift = s; }
+  void set_card_shift(uint s) { _card_shift = s; }
+  void initialize_from_runtime();
+  static AOTRuntimeConstants* aot_runtime_constants_at(address address) {
+    AOTRuntimeConstants* c = (AOTRuntimeConstants*) address;
+    return c;
+  }
+public:
+  static AOTRuntimeConstants* aot_runtime_constants() {
+    return aot_runtime_constants_at(StubRoutines::_aot_runtime_constants_base);
+  }
+  static ByteSize grain_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _grain_shift); }
+  static ByteSize card_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _card_shift);
+  }
+};
+#endif // INCLUDE_CDS
 
 #endif // SHARE_RUNTIME_STUBROUTINES_HPP

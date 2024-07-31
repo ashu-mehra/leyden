@@ -161,6 +161,9 @@ void SCCache::init2() {
       exit_vm_on_load_failure();
     }
   }
+  // initialize aot runtime constants as appropriate to this runtime
+  AOTRuntimeConstants* aotc = AOTRuntimeConstants::aot_runtime_constants();
+  aotc->initialize_from_runtime();
   if (!verify_vm_config()) {
     close();
     exit_vm_on_load_failure();
@@ -3601,6 +3604,7 @@ void SCAddressTable::init() {
 #endif
 
   // Stubs
+  SET_ADDRESS(_stubs, StubRoutines::aot_runtime_constants_base());
   SET_ADDRESS(_stubs, StubRoutines::method_entry_barrier());
   SET_ADDRESS(_stubs, StubRoutines::forward_exception_entry());
 /*

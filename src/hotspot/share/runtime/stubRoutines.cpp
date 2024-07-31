@@ -59,6 +59,7 @@ BufferBlob* StubRoutines::_continuation_stubs_code              = nullptr;
 address StubRoutines::_call_stub_return_address                 = nullptr;
 address StubRoutines::_call_stub_entry                          = nullptr;
 
+address StubRoutines::_aot_runtime_constants_base               = nullptr;
 address StubRoutines::_catch_exception_entry                    = nullptr;
 address StubRoutines::_forward_exception_entry                  = nullptr;
 address StubRoutines::_throw_AbstractMethodError_entry          = nullptr;
@@ -235,6 +236,16 @@ address UnsafeMemoryAccess::page_error_continue_pc(address pc) {
   return nullptr;
 }
 
+#if INCLUDE_CDS
+void AOTRuntimeConstants::initialize_from_runtime() {
+  BarrierSet* bs = BarrierSet::barrier_set();
+  if (bs->is_a(BarrierSet::CardTableBarrierSet)) {
+    CardTableBarrierSet* ctbs = ((CardTableBarrierSet*)bs);
+    set_grain_shift(ctbs->grain_shift());
+    set_card_shift(ctbs->card_shift());
+  }
+}
+#endif
 
 static BufferBlob* initialize_stubs(StubCodeGenerator::StubsKind kind,
                                     int code_size, int max_aligned_stubs,

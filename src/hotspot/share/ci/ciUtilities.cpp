@@ -28,6 +28,7 @@
 #include "gc/shared/cardTable.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/universe.hpp"
+#include "runtime/stubRoutines.hpp"
 
 // ciUtilities
 //
@@ -57,5 +58,16 @@ bool is_card_table_address(address adr) {
       return adr == ci_card_table_address_as<address>();
     }
   }
+  return false;
+}
+
+bool is_aotrc_address(address adr) {
+#if INCLUDE_CDS
+  if (Universe::is_fully_initialized()) {
+    address base = (address)AOTRuntimeConstants::aot_runtime_constants();
+    address hi = base + sizeof(AOTRuntimeConstants);
+    return (base <= adr && adr < hi);
+  }
+#endif
   return false;
 }
