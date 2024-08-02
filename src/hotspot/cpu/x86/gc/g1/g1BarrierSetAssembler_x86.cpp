@@ -285,7 +285,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   // Does store cross heap regions?
 
-#if 0
+#if INCLUDE_CDS
   // AOT code needs to load the barrier shift from the current thread
   // otherwise we can compile it as an immediate operand
 
@@ -295,19 +295,25 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
     // restored (would that only be the interpreter?)
     __ movptr(tmp, store_addr);
     __ xorptr(tmp, new_val);
-    __ movptr(tmp2, Address(r15_thread, JavaThread::vthread_offset()));
-    __ shrptr(tmp, G1HeapRegion::LogOfHRGrainBytes);
-    __ ldrb(tmp2, Address(rthread, JavaThread::grain_size_offset()));
+    if (VM_Version::supports_bmi2()) {
+      __ movptr(tmp2, Address(r15_thread, JavaThread::vthread_offset()));
+      __ shrxptr(tmp, tmp, tmp2);
+    } else {
+      __ push(rcx);
+      __ movptr(rcx, Address(r15_thread, JavaThread::vthread_offset()));
+      __ shrptr(tmp);
+      __ pop(rcx);
+    }
     __ jcc(Assembler::equal, done);
   } else {
-#endif
-  __ movptr(tmp, store_addr);
-  __ xorptr(tmp, new_val);
-  __ shrptr(tmp, G1HeapRegion::LogOfHRGrainBytes);
-  __ jcc(Assembler::equal, done);
-#if 0 //INCLUDE_CDS
+#endif // INCLUDE_CDS
+    __ movptr(tmp, store_addr);
+    __ xorptr(tmp, new_val);
+    __ shrptr(tmp, G1HeapRegion::LogOfHRGrainBytes);
+    __ jcc(Assembler::equal, done);
+#if INCLUDE_CDS
   }
-#endif
+#endif // INCLUDE_CDS
   // crosses regions, storing null?
 
   __ cmpptr(new_val, NULL_WORD);
