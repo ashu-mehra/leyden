@@ -2934,38 +2934,68 @@ void LIR_Assembler::unwind_op(LIR_Opr exceptionOop) {
 
 
 void LIR_Assembler::shift_op(LIR_Code code, LIR_Opr left, LIR_Opr count, LIR_Opr dest, LIR_Opr tmp) {
-
-  // optimized version for linear scan:
-  // * count must be already in ECX (guaranteed by LinearScan)
-  // * left and dest must be equal
-  // * tmp must be unused
-  assert(count->as_register() == SHIFT_count, "count must be in ECX");
-  assert(left == dest, "left and dest must be equal");
+  // tmp must be unused
   assert(tmp->is_illegal(), "wasting a register if tmp is allocated");
 
   if (left->is_single_cpu()) {
     Register value = left->as_register();
-    assert(value != SHIFT_count, "left cannot be ECX");
-
-    switch (code) {
-      case lir_shl:  __ shll(value); break;
-      case lir_shr:  __ sarl(value); break;
-      case lir_ushr: __ shrl(value); break;
-      default: ShouldNotReachHere();
+    if (three_operand_shift_form()) {
+      Register dst = dest->as_register();
+      Register src2 = count->as_register();
+      switch(code) {
+	case lir_shl:  __ shlxl(dst, value, src2); break;
+	case lir_shr:  __ sarxl(dst, value, src2); break;
+	case lir_ushr: __ shrxl(dst, value, src2); break;
+	default: ShouldNotReachHere();
+      }
+    } else {
+      // optimized version for linear scan:
+      // * count must be already in ECX (guaranteed by LinearScan)
+      // * left and dest must be equal
+      assert(count->as_register() == SHIFT_count, "count must be in ECX");
+      assert(left == dest, "left and dest must be equal");
+      assert(value != SHIFT_count, "left cannot be ECX");
+      switch (code) {
+	case lir_shl:  __ shll(value); break;
+	case lir_shr:  __ sarl(value); break;
+	case lir_ushr: __ shrl(value); break;
+	default: ShouldNotReachHere();
+      }
     }
   } else if (left->is_double_cpu()) {
     Register lo = left->as_register_lo();
     Register hi = left->as_register_hi();
-    assert(lo != SHIFT_count && hi != SHIFT_count, "left cannot be ECX");
 #ifdef _LP64
-    switch (code) {
-      case lir_shl:  __ shlptr(lo);        break;
-      case lir_shr:  __ sarptr(lo);        break;
-      case lir_ushr: __ shrptr(lo);        break;
-      default: ShouldNotReachHere();
+    if (three_operand_shift_form()) {
+      Register dst = dest->as_register_lo();
+      Register src2 = count->as_register();
+      switch (code) {
+	case lir_shl:  __ shlxq(dst, lo, src2); break;
+	case lir_shr:  __ sarxq(dst, lo, src2); break;
+	case lir_ushr: __ shrxq(dst, lo, src2); break;
+	default: ShouldNotReachHere();
+      }
+    } else {
+      // optimized version for linear scan:
+      // * count must be already in ECX (guaranteed by LinearScan)
+      // * left and dest must be equal
+      assert(count->as_register() == SHIFT_count, "count must be in ECX");
+      assert(left == dest, "left and dest must be equal");
+      assert(lo != SHIFT_count && hi != SHIFT_count, "left cannot be ECX");
+      switch (code) {
+	case lir_shl:  __ shlptr(lo);        break;
+	case lir_shr:  __ sarptr(lo);        break;
+	case lir_ushr: __ shrptr(lo);        break;
+	default: ShouldNotReachHere();
+      }
     }
 #else
-
+    // optimized version for linear scan:
+    // * count must be already in ECX (guaranteed by LinearScan)
+    // * left and dest must be equal
+    assert(count->as_register() == SHIFT_count, "count must be in ECX");
+    assert(left == dest, "left and dest must be equal");
+    assert(lo != SHIFT_count && hi != SHIFT_count, "left cannot be ECX");
     switch (code) {
       case lir_shl:  __ lshl(hi, lo);        break;
       case lir_shr:  __ lshr(hi, lo, true);  break;

@@ -203,7 +203,9 @@ void LIR_Op2::verify() const {
       code() == lir_shl ||
       ((code() == lir_shr || code() == lir_ushr) && (result_opr()->is_double_cpu() || in_opr1()->type() == T_OBJECT));
 #endif
-
+#if defined(AMD64)
+    threeOperandForm = LIR_Assembler::three_operand_shift_form();
+#endif // defined(AMD64)
     switch (code()) {
     case lir_add:
     case lir_sub:

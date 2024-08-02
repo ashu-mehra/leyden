@@ -23,6 +23,9 @@
  */
 
 #include "precompiled.hpp"
+#if defined(X86)
+#include "c1/c1_LIRAssembler.hpp"
+#endif // X86
 #include "c1/c1_LIRGenerator.hpp"
 #include "c1/c1_CodeStubs.hpp"
 #include "gc/g1/c1/g1BarrierSetC1.hpp"
@@ -159,17 +162,22 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
     new LIR_Address(thrd,
                     in_bytes(JavaThread::grain_size_offset()),
                     T_BYTE);
+  LIR_Opr shift_count_opr;
+#if defined(X86)
+  if (LIR_Assembler::three_operand_shift_form()) {
+    shift_count_opr = gen->new_register(T_INT);
+  } else {
+    shift_count_opr = gen->shiftCountOpr();
+  }
+#else
+  shift_count_opr = gen->new_register(T_INT);
+#endif /* X86 */
 #endif /* INCLUDE_CDS */
   if (two_operand_lir_form) {
     __ move(addr, xor_res);
     __ logical_xor(xor_res, new_val, xor_res);
 #if INCLUDE_CDS
     if (StoreCachedCode) {
-#if defined(X86)
-      LIR_Opr shift_count_opr = gen->shiftCountOpr();
-#else
-      LIR_Opr shift_cout_opr = gen->new_register(T_INT);
-#endif /* X86 */
       __ move(grain_shift_address, shift_count_opr); 
       __ move(xor_res, xor_shift_res);
       __ unsigned_shift_right(xor_shift_res,
@@ -184,19 +192,13 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
                             xor_shift_res,
                             LIR_Opr::illegalOpr());
 #if INCLUDE_CDS
-  }
+    }
 #endif /* INCLUDE_CDS */
   } else {
     __ logical_xor(addr, new_val, xor_res);
 #if INCLUDE_CDS
     if (StoreCachedCode) {
-#if defined(X86)
-      LIR_Opr shift_count_opr = gen->shiftCountOpr();
-#else
-      LIR_Opr shift_cout_opr = gen->new_register(T_INT);
-#endif /* X86 */
       __ move(grain_shift_address, shift_count_opr);
-     
       __ unsigned_shift_right(xor_res,
                               shift_count_opr,
                               xor_shift_res,

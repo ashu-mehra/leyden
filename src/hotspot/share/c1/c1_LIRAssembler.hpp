@@ -273,6 +273,18 @@ class LIR_Assembler: public CompilationResourceObj {
   static int deopt_handler_size() {
     return _deopt_handler_size;
   }
+
+  static bool three_operand_shift_form() {
+#if defined(X86)
+#if defined(AMD64)
+    return VM_Version::supports_bmi2();
+#else // AMD64
+    return false;
+#endif // AMD64
+#else
+    return !two_operand_lir_form;
+#endif // X86
+  }
 };
 
 #endif // SHARE_C1_C1_LIRASSEMBLER_HPP
