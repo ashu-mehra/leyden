@@ -33,6 +33,7 @@
 #include "gc/g1/g1ThreadLocalData.hpp"
 #include "interpreter/interp_masm.hpp"
 #include "runtime/sharedRuntime.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/macros.hpp"
 #ifdef COMPILER1
@@ -285,11 +286,38 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   // Does store cross heap regions?
 
+#if INCLUDE_CDS
+  // AOT code needs to load the barrier grain shift from the aot
+  // runtime constants area in the code cache otherwise we can compile
+  // it as an immediate operand
+
+  if (StoreCachedCode) {
+    address aotrc = StubRoutines::aot_runtime_constants_base();
+    uint offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
+    __ movptr(tmp, store_addr);
+    __ xorptr(tmp, new_val);
+    //__ push(rscratch1); TODO: do we need to spill rscratch1 here?
+    __ lea(rscratch1, ExternalAddress(aotrc));
+    if (VM_Version::supports_bmi2()) {
+      __ movq(rscratch1, Address(rscratch1, offset));
+      __ shrxptr(tmp, tmp, rscratch1);
+    } else {
+      __ push(rcx);
+      __ movq(rcx, Address(rscratch1, offset));
+      __ shrptr(tmp);
+      __ pop(rcx);
+    }
+    //__ pop(rscratch1);
+    __ jcc(Assembler::equal, done);
+  } else {
+#endif // INCLUDE_CDS
   __ movptr(tmp, store_addr);
   __ xorptr(tmp, new_val);
   __ shrptr(tmp, G1HeapRegion::LogOfHRGrainBytes);
   __ jcc(Assembler::equal, done);
-
+#if INCLUDE_CDS
+  }
+#endif // INCLUDE_CDS
   // crosses regions, storing null?
 
   __ cmpptr(new_val, NULL_WORD);
@@ -298,10 +326,36 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   // storing region crossing non-null, is card already dirty?
 
   const Register card_addr = tmp;
-  const Register cardtable = tmp2;
 
   __ movptr(card_addr, store_addr);
-  __ shrptr(card_addr, CardTable::card_shift());
+#if INCLUDE_CDS
+  // AOT code needs to load the barrier card shift from the aot
+  // runtime constants area in the code cache otherwise we can compile
+  // it as an immediate operand
+  if (StoreCachedCode) {
+    address aotrc = StubRoutines::aot_runtime_constants_base();
+    uint offset = in_bytes(AOTRuntimeConstants::card_shift_offset());
+    __ push(rscratch1);
+    __ lea(rscratch1, ExternalAddress(aotrc));
+    if (VM_Version::supports_bmi2()) {
+      __ movq(rscratch1, Address(rscratch1, offset));
+      __ shrxptr(card_addr, card_addr, rscratch1);
+    } else {
+      __ push(rcx);
+      __ movq(rcx, Address(rscratch1, offset));
+      __ shrptr(card_addr);
+      __ pop(rcx);
+    }
+    __ pop(rscratch1);
+  } else {
+#endif // INCLUDE_CDS
+    __ shrptr(card_addr, CardTable::card_shift());
+#if INCLUDE_CDS
+  }
+#endif // INCLUDE_CDS
+
+  const Register cardtable = tmp2;
+
   // Do not use ExternalAddress to load 'byte_map_base', since 'byte_map_base' is NOT
   // a valid address and therefore is not properly handled by the relocation code.
   if (SCCache::is_on_for_write()) {
