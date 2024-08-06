@@ -855,6 +855,13 @@ public:
   void shrptr(Register dst, int32_t shift);
   void shrptr(Register dst) { LP64_ONLY(shrq(dst)) NOT_LP64(shrl(dst)); }
 
+  void shrxptr(Register dst, Register value, Register shift) {
+    LP64_ONLY(shrxq(dst, value, shift)) NOT_LP64(shrxl(dst, value, shift));
+  }
+  void shrxptr(Register dst, Address value, Register shift) {
+    LP64_ONLY(shrxq(dst, value, shift)) NOT_LP64(shrxl(dst, value, shift));
+  }
+
   void sarptr(Register dst) { LP64_ONLY(sarq(dst)) NOT_LP64(sarl(dst)); }
   void sarptr(Register dst, int32_t src) { LP64_ONLY(sarq(dst, src)) NOT_LP64(sarl(dst, src)); }
 
@@ -2154,6 +2161,7 @@ public:
 #ifdef _LP64
   void save_legacy_gprs();
   void restore_legacy_gprs();
+  void load_aotrc_address(address a, Register reg);
 #endif
 };
 
