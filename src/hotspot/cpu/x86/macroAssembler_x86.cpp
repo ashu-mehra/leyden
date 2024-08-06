@@ -10426,4 +10426,26 @@ void MacroAssembler::restore_legacy_gprs() {
   movq(rax, Address(rsp, 15 * wordSize));
   addq(rsp, 16 * wordSize);
 }
+
+void MacroAssembler::load_aotrc_address(address a, Register reg) {
+#if INCLUDE_CDS
+  if (SCCache::is_on_for_write()) {
+    // SCA needs to be able to relocate aot runtime constants accesses
+    // so we have to load the base address and then add in the offset
+    AOTRuntimeConstants* aotrc_base = AOTRuntimeConstants::aot_runtime_constants();
+    address base = reinterpret_cast<address>(aotrc_base);
+    int offset = (a - base);
+    assert(offset >= 0 && (uint)offset < sizeof(AOTRuntimeConstants), "address out of range for data area");
+    lea(reg, ExternalAddress(reinterpret_cast<address>(aotrc_base)));
+    if (offset != 0) {
+      addq(reg, offset);
+    }
+  } else {
+    mov64(reg, (uint64_t)a);
+  }
+#else
+  ShouldNotReachHere();
+#endif
+}
+
 #endif
