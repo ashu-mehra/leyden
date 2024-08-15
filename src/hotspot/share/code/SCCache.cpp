@@ -3611,8 +3611,12 @@ void SCAddressTable::init() {
   SET_ADDRESS(_extrs, LIR_Assembler::double_signflip_pool);
 #endif
 
+  // addresses of fields in AOT runtime constants area
+  address* p = AOTRuntimeConstants::field_addresses_list();
+  while (*p != nullptr) {
+    SET_ADDRESS(_extrs, *p++);
+  }
   // Stubs
-  SET_ADDRESS(_stubs, StubRoutines::aot_runtime_constants_base());
   SET_ADDRESS(_stubs, StubRoutines::method_entry_barrier());
   SET_ADDRESS(_stubs, StubRoutines::forward_exception_entry());
 /*

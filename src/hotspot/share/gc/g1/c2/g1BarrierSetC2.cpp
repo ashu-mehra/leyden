@@ -445,7 +445,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
 #if INCLUDE_CDS
   if (StoreCachedCode) {
     // load the card shift from the AOT Runtime Constants area
-    Node* aotrc_base =  __ makecon(TypeRawPtr::make(StubRoutines::aot_runtime_constants_base()));
+    Node* aotrc_base =  __ makecon(TypeRawPtr::make((address)AOTRuntimeConstants::aot_runtime_constants()));
     const int card_shift_offset = in_bytes(AOTRuntimeConstants::card_shift_offset());
     Node* card_shift_adr = __ AddP(__ top(), aotrc_base, __ ConX(card_shift_offset));
     card_shift  = __ load(__ ctrl(), card_shift_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
@@ -473,7 +473,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
     Node* xor_res = __ XorX( cast,  __ CastPX(__ ctrl(), val));
     if (StoreCachedCode)  {
       // load the grain shift from the AOT Runtime Constants area
-      Node* aotrc_base =  __ makecon(TypeRawPtr::make(StubRoutines::aot_runtime_constants_base()));
+      Node* aotrc_base =  __ makecon(TypeRawPtr::make((address)AOTRuntimeConstants::aot_runtime_constants()));
       const int grain_shift_offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
       Node* grain_shift_adr = __ AddP(__ top(), aotrc_base, __ ConX(grain_shift_offset));
       Node* grain_shift  = __ load(__ ctrl(), grain_shift_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);

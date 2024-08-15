@@ -51,8 +51,6 @@ class StubGenerator: public StubCodeGenerator {
 
   address generate_catch_exception();
 
-  address generate_aot_runtime_constants();
-
   // Continuation point for runtime calls returning with a pending
   // exception.  The pending exception check happened in the runtime
   // or native call stub.  The pending exception in Thread is

@@ -5475,17 +5475,15 @@ void MacroAssembler::load_byte_map_base(Register reg) {
 
 void MacroAssembler::load_aotrc_address(address a, Register reg) {
 #if INCLUDE_CDS
+#ifndef PRODUCT
   AOTRuntimeConstants* aotrc_base = AOTRuntimeConstants::aot_runtime_constants();
   address base = reinterpret_cast<address>(aotrc_base);
   int offset = (a - base);
   assert(offset >= 0 && (uint)offset < sizeof(AOTRuntimeConstants), "address out of range for data area");
+#endif
   if (SCCache::is_on_for_write()) {
-    // SCA needs to be able to relocate aot runtime constants accesses
-    // so we have to load the base address and then add in the offset
-    lea(reg, ExternalAddress(reinterpret_cast<address>(aotrc_base)));
-    if (offset != 0) {
-      add(reg, reg, offset);
-    }
+    // all aotrc field addresses should be registered in the SCC address table
+    lea(reg, ExternalAddress(a));
   } else {
     mov(reg, (uint64_t)a);
   }

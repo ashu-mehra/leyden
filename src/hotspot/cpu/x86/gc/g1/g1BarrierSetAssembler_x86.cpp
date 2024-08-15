@@ -292,7 +292,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   // it as an immediate operand
 
   if (StoreCachedCode) {
-    address aotrc = StubRoutines::aot_runtime_constants_base();
+    address aotrc = (address)AOTRuntimeConstants::aot_runtime_constants();
     uint offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
     __ movptr(tmp, store_addr);
     __ xorptr(tmp, new_val);
@@ -333,7 +333,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   // runtime constants area in the code cache otherwise we can compile
   // it as an immediate operand
   if (StoreCachedCode) {
-    address aotrc = StubRoutines::aot_runtime_constants_base();
+    address aotrc = (address)AOTRuntimeConstants::aot_runtime_constants();
     uint offset = in_bytes(AOTRuntimeConstants::card_shift_offset());
     __ push(rscratch1);
     __ lea(rscratch1, ExternalAddress(aotrc));

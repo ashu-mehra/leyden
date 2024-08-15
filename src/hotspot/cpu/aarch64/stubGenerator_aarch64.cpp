@@ -460,18 +460,6 @@ class StubGenerator: public StubCodeGenerator {
     return start;
   }
 
-  address generate_aot_runtime_constants() {
-    __ align(CodeEntryAlignment);
-    StubCodeMark mark(this, "StubRoutines", "aot ");
-    address start = __ pc();
-    address limit = start + sizeof(AOTRuntimeConstants);
-    do {
-      __ emit_data64(0, relocInfo::none);
-    } while (__ pc() < limit);
-
-    return start;
-  }
-
 // Continuation point for runtime calls returning with a pending
   // exception.  The pending exception check happened in the runtime
   // or native call stub.  The pending exception in Thread is
@@ -8389,10 +8377,6 @@ class StubGenerator: public StubCodeGenerator {
     // defined and the contents will have been updated to the latest
     // values by a dedicated AOT load time relocation
 
-#if INCLUDE_CDS
-    StubRoutines::_aot_runtime_constants_base = generate_aot_runtime_constants();
-#endif // INCLUDE_CDS
-    
     StubRoutines::_forward_exception_entry = generate_forward_exception();
 
     StubRoutines::_call_stub_entry =

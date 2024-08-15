@@ -157,7 +157,7 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
 #if INCLUDE_CDS
   // we may need to load the grain shift from the AOT Runtime
   // Constants Area
-  LIR_Opr aotrc_base = LIR_OprFact::intptrConst(StubRoutines::aot_runtime_constants_base());
+  LIR_Opr aotrc_base = LIR_OprFact::intptrConst((address)AOTRuntimeConstants::aot_runtime_constants());
   LIR_Opr aotrc_reg = gen->new_pointer_register();
   LIR_Address* grain_shift_addr = new LIR_Address(aotrc_reg, in_bytes(AOTRuntimeConstants::grain_shift_offset()), T_INT);
 #ifdef X86
