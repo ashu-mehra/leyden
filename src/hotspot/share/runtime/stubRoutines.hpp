@@ -134,10 +134,6 @@ class StubRoutines: AllStatic {
   static jint    _verify_oop_count;
   static address _verify_oop_subroutine_entry;
 
-#if INCLUDE_CDS
-  // address of a generated AOTRuntimeConstants instance
-  static address _aot_runtime_constants_base;
-#endif // include_CDS
   static address _call_stub_return_address;                // the return PC, when returning to a call stub
   static address _call_stub_entry;
   static address _forward_exception_entry;
@@ -332,8 +328,6 @@ class StubRoutines: AllStatic {
 
   static CallStub call_stub()                              { return CAST_TO_FN_PTR(CallStub, _call_stub_entry); }
 
-  static address aot_runtime_constants_base()              { return _aot_runtime_constants_base; }
-  // Exceptions
   static address forward_exception_entry()                 { return _forward_exception_entry; }
   // Implicit exceptions
   static address throw_AbstractMethodError_entry()         { return _throw_AbstractMethodError_entry; }
@@ -548,12 +542,31 @@ class AOTRuntimeConstants {
     AOTRuntimeConstants* c = (AOTRuntimeConstants*) address;
     return c;
   }
+  // private constructor for unique singleton
+  AOTRuntimeConstants() { }
 public:
   static AOTRuntimeConstants* aot_runtime_constants() {
-    return aot_runtime_constants_at(StubRoutines::_aot_runtime_constants_base);
+    // return the unique singleton instance
+    static AOTRuntimeConstants _aot_runtime_constants;
+    return &_aot_runtime_constants;
   }
   static ByteSize grain_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _grain_shift); }
   static ByteSize card_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _card_shift);
+  }
+ private:
+  // list all addressable fields of the singleton terminated with nullptr
+  static address* create_field_address_list() {
+    address aotrc = (address) aot_runtime_constants();
+    static address list[3];
+    list[0] = aotrc + in_bytes(grain_shift_offset());
+    list[1] = aotrc + in_bytes(card_shift_offset());
+    list[2] = nullptr;
+    return list;
+  }
+ public:
+  static address* field_addresses_list() {
+    static address* _field_addresses_list = create_field_address_list();
+    return _field_addresses_list;
   }
 };
 #endif // INCLUDE_CDS
