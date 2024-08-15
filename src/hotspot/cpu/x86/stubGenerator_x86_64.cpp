@@ -458,18 +458,6 @@ address StubGenerator::generate_catch_exception() {
   return start;
 }
 
-address StubGenerator::generate_aot_runtime_constants() {
-  __ align(CodeEntryAlignment);
-  StubCodeMark mark(this, "StubRoutines", "aot runtime constant");
-  address start = __ pc();
-  address limit = start + sizeof(AOTRuntimeConstants);
-  do {
-    __ emit_data64(0, relocInfo::none);
-  } while (__ pc() < limit);
-
-  return start;
-}
-
 // Continuation point for runtime calls returning with a pending
 // exception.  The pending exception check happened in the runtime
 // or native call stub.  The pending exception in Thread is
@@ -4082,10 +4070,6 @@ void StubGenerator::generate_initial_stubs() {
   if (UnsafeMemoryAccess::_table == nullptr) {
     UnsafeMemoryAccess::create_table(16 + 4); // 16 for copyMemory; 4 for setMemory
   }
-
-#if INCLUDE_CDS
-    StubRoutines::_aot_runtime_constants_base = generate_aot_runtime_constants();
-#endif // INCLUDE_CDS
 
   // entry points that exist in all platforms Note: This is code
   // that could be shared among different platforms - however the

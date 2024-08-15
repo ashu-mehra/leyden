@@ -1915,9 +1915,6 @@ encode %{
     __ post_call_nop();
   %}
 
-  enc_class enc_mov_aotrc_address(iRegP dst, immAOTRuntimeConstantsAddress src) %{
-    __ load_aotrc_address((address)$src$$constant, $dst$$Register);
-  %}
 %}
 
 
@@ -4443,7 +4440,9 @@ instruct loadAOTRCAddress(rRegP dst, immAOTRuntimeConstantsAddress con)
 
   format %{ "leaq  $dst, $con\t# AOT Runtime Constants Address" %}
 
-  ins_encode(enc_mov_aotrc_address(dst, con));
+  ins_encode %{
+    __ load_aotrc_address((address)$con$$constant, $dst$$Register);
+  %}
 
   ins_pipe(ialu_reg_fat);
 %}

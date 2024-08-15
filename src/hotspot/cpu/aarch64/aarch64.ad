@@ -3418,14 +3418,6 @@ encode %{
     __ mov(dst_reg, (uint64_t)1);
   %}
 
-  enc_class aarch64_enc_mov_byte_map_base(iRegP dst, immByteMapBase src) %{
-    __ load_byte_map_base($dst$$Register);
-  %}
-
-  enc_class aarch64_enc_mov_aotrc_address(iRegP dst, immAOTRuntimeConstantsAddress src) %{
-    __ load_aotrc_address((address)$src$$constant, $dst$$Register);
-  %}
-
   enc_class aarch64_enc_mov_n(iRegN dst, immN src) %{
     Register dst_reg = as_Register($dst$$reg);
     address con = (address)$src$$constant;
@@ -6757,7 +6749,9 @@ instruct loadByteMapBase(iRegPNoSp dst, immByteMapBase con)
   ins_cost(INSN_COST);
   format %{ "adr  $dst, $con\t# Byte Map Base" %}
 
-  ins_encode(aarch64_enc_mov_byte_map_base(dst, con));
+  ins_encode %{
+    __ load_byte_map_base($dst$$Register);
+  %}
 
   ins_pipe(ialu_imm);
 %}
@@ -6769,7 +6763,9 @@ instruct loadAOTRCAddress(iRegPNoSp dst, immAOTRuntimeConstantsAddress con)
   ins_cost(INSN_COST);
   format %{ "adr  $dst, $con\t# AOT Runtime Constants Address" %}
 
-  ins_encode(aarch64_enc_mov_aotrc_address(dst, con));
+  ins_encode %{
+    __ load_aotrc_address((address)$con$$constant, $dst$$Register);
+  %}
 
   ins_pipe(ialu_imm);
 %}
