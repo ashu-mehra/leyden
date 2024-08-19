@@ -421,6 +421,7 @@ reg_class int_rdi_reg(RDI);
 source_hpp %{
 #include "peephole_x86_64.hpp"
 #include <ci/ciUtilities.hpp>
+#include <code/SCCache.hpp>
 %}
 
 // Register masks
@@ -3079,7 +3080,7 @@ operand indPosIndexScaleOffset(any_RegP reg, immL32 off, rRegI idx, immI2 scale)
 // Note: x86 architecture doesn't support "scale * index + offset" without a base
 // we can't free r12 even with CompressedOops::base() == nullptr.
 operand indCompressedOopOffset(rRegN reg, immL32 off) %{
-  predicate(UseCompressedOops && (CompressedOops::shift() == Address::times_8));
+  predicate(UseCompressedOops && (CompressedOops::shift() == Address::times_8) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(AddP (DecodeN reg) off);
 
@@ -3096,7 +3097,7 @@ operand indCompressedOopOffset(rRegN reg, immL32 off) %{
 // Indirect Memory Operand
 operand indirectNarrow(rRegN reg)
 %{
-  predicate(CompressedOops::shift() == 0);
+  predicate((CompressedOops::shift() == 0) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(DecodeN reg);
 
@@ -3112,7 +3113,7 @@ operand indirectNarrow(rRegN reg)
 // Indirect Memory Plus Short Offset Operand
 operand indOffset8Narrow(rRegN reg, immL8 off)
 %{
-  predicate(CompressedOops::shift() == 0);
+  predicate((CompressedOops::shift() == 0) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(AddP (DecodeN reg) off);
 
@@ -3128,7 +3129,7 @@ operand indOffset8Narrow(rRegN reg, immL8 off)
 // Indirect Memory Plus Long Offset Operand
 operand indOffset32Narrow(rRegN reg, immL32 off)
 %{
-  predicate(CompressedOops::shift() == 0);
+  predicate((CompressedOops::shift() == 0) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(AddP (DecodeN reg) off);
 
@@ -3144,7 +3145,7 @@ operand indOffset32Narrow(rRegN reg, immL32 off)
 // Indirect Memory Plus Index Register Plus Offset Operand
 operand indIndexOffsetNarrow(rRegN reg, rRegL lreg, immL32 off)
 %{
-  predicate(CompressedOops::shift() == 0);
+  predicate((CompressedOops::shift() == 0) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(AddP (AddP (DecodeN reg) lreg) off);
 
@@ -3161,7 +3162,7 @@ operand indIndexOffsetNarrow(rRegN reg, rRegL lreg, immL32 off)
 // Indirect Memory Plus Index Register Plus Offset Operand
 operand indIndexNarrow(rRegN reg, rRegL lreg)
 %{
-  predicate(CompressedOops::shift() == 0);
+  predicate((CompressedOops::shift() == 0) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(AddP (DecodeN reg) lreg);
 
@@ -3178,7 +3179,7 @@ operand indIndexNarrow(rRegN reg, rRegL lreg)
 // Indirect Memory Times Scale Plus Index Register
 operand indIndexScaleNarrow(rRegN reg, rRegL lreg, immI2 scale)
 %{
-  predicate(CompressedOops::shift() == 0);
+  predicate((CompressedOops::shift() == 0) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(AddP (DecodeN reg) (LShiftL lreg scale));
 
@@ -3195,7 +3196,7 @@ operand indIndexScaleNarrow(rRegN reg, rRegL lreg, immI2 scale)
 // Indirect Memory Times Scale Plus Index Register Plus Offset Operand
 operand indIndexScaleOffsetNarrow(rRegN reg, immL32 off, rRegL lreg, immI2 scale)
 %{
-  predicate(CompressedOops::shift() == 0);
+  predicate((CompressedOops::shift() == 0) && !SCCache::is_on_for_write());
   constraint(ALLOC_IN_RC(ptr_reg));
   match(AddP (AddP (DecodeN reg) (LShiftL lreg scale)) off);
 
@@ -3213,7 +3214,7 @@ operand indIndexScaleOffsetNarrow(rRegN reg, immL32 off, rRegL lreg, immI2 scale
 operand indPosIndexOffsetNarrow(rRegN reg, immL32 off, rRegI idx)
 %{
   constraint(ALLOC_IN_RC(ptr_reg));
-  predicate(CompressedOops::shift() == 0 && n->in(2)->in(3)->as_Type()->type()->is_long()->_lo >= 0);
+  predicate(CompressedOops::shift() == 0 && n->in(2)->in(3)->as_Type()->type()->is_long()->_lo >= 0 && !SCCache::is_on_for_write());
   match(AddP (AddP (DecodeN reg) (ConvI2L idx)) off);
 
   op_cost(10);
@@ -3230,7 +3231,7 @@ operand indPosIndexOffsetNarrow(rRegN reg, immL32 off, rRegI idx)
 operand indPosIndexScaleOffsetNarrow(rRegN reg, immL32 off, rRegI idx, immI2 scale)
 %{
   constraint(ALLOC_IN_RC(ptr_reg));
-  predicate(CompressedOops::shift() == 0 && n->in(2)->in(3)->in(1)->as_Type()->type()->is_long()->_lo >= 0);
+  predicate(CompressedOops::shift() == 0 && n->in(2)->in(3)->in(1)->as_Type()->type()->is_long()->_lo >= 0 && !SCCache::is_on_for_write());
   match(AddP (AddP (DecodeN reg) (LShiftL (ConvI2L idx) scale)) off);
 
   op_cost(10);

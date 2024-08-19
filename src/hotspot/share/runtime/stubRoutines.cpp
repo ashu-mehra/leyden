@@ -243,6 +243,10 @@ void AOTRuntimeConstants::initialize_from_runtime() {
     set_grain_shift(ctbs->grain_shift());
     set_card_shift(ctbs->card_shift());
   }
+  if (UseCompressedOops) {
+    set_coops_base(CompressedOops::base());
+    set_coops_shift(CompressedOops::shift());
+  }
 }
 #endif
 

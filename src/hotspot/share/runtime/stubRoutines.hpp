@@ -535,8 +535,13 @@ class AOTRuntimeConstants {
  friend class SCCache;
   uint _grain_shift;
   uint _card_shift;
+  address _coops_base;
+  uint _coops_shift;
+ 
   void set_grain_shift(uint s) { _grain_shift = s; }
   void set_card_shift(uint s) { _card_shift = s; }
+  void set_coops_base(address b) { _coops_base = b; }
+  void set_coops_shift(uint s) { _coops_shift = s;}
   void initialize_from_runtime();
   static AOTRuntimeConstants* aot_runtime_constants_at(address address) {
     AOTRuntimeConstants* c = (AOTRuntimeConstants*) address;
@@ -550,17 +555,24 @@ public:
     static AOTRuntimeConstants _aot_runtime_constants;
     return &_aot_runtime_constants;
   }
+
+  static address coops_base_addr() { return (address)&aot_runtime_constants()->_coops_base; }
+  static address coops_shift_addr() { return (address)&aot_runtime_constants()->_coops_shift; }
+
   static ByteSize grain_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _grain_shift); }
-  static ByteSize card_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _card_shift);
-  }
+  static ByteSize card_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _card_shift); }
+  static ByteSize coops_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _coops_shift); }
+  static ByteSize coops_base_offset() { return byte_offset_of(AOTRuntimeConstants, _coops_base); }
  private:
   // list all addressable fields of the singleton terminated with nullptr
   static address* create_field_address_list() {
     address aotrc = (address) aot_runtime_constants();
-    static address list[3];
+    static address list[5];
     list[0] = aotrc + in_bytes(grain_shift_offset());
     list[1] = aotrc + in_bytes(card_shift_offset());
-    list[2] = nullptr;
+    list[3] = aotrc + in_bytes(coops_base_offset());
+    list[2] = aotrc + in_bytes(coops_shift_offset());
+    list[4] = nullptr;
     return list;
   }
  public:
