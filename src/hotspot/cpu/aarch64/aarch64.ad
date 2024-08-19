@@ -4531,7 +4531,7 @@ operand immByteMapBase()
 // AOT Runtime Constants Address
 operand immAOTRuntimeConstantsAddress()
 %{
-  // Get base of card map
+  // Check if the address is in the range of AOT Runtime Constants
   predicate(is_aotrc_address((address)(n->get_ptr())));
   match(ConP);
 

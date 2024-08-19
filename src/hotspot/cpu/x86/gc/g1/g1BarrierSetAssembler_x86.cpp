@@ -296,7 +296,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
     uint offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
     __ movptr(tmp, store_addr);
     __ xorptr(tmp, new_val);
-    //__ push(rscratch1); TODO: do we need to spill rscratch1 here?
+    __ push(rscratch1);
     __ lea(rscratch1, ExternalAddress(aotrc));
     if (VM_Version::supports_bmi2()) {
       __ movq(rscratch1, Address(rscratch1, offset));
@@ -307,7 +307,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
       __ shrptr(tmp);
       __ pop(rcx);
     }
-    //__ pop(rscratch1);
+    __ pop(rscratch1);
     __ jcc(Assembler::equal, done);
   } else {
 #endif // INCLUDE_CDS
