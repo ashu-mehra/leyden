@@ -440,6 +440,7 @@ bool CDSConfig::check_vm_args_consistency(bool patch_mod_javabase, bool mode_fla
   check_flag_aliases();
 
   if (CacheDataStore != nullptr) {
+#if 0
     // Leyden temp work-around:
     //
     // By default, when using CacheDataStore, use the HeapBasedNarrowOop mode so that
@@ -453,6 +454,7 @@ bool CDSConfig::check_vm_args_consistency(bool patch_mod_javabase, bool mode_fla
     // However, this is risky and there's a chance that the production run will be slower
     // because it is unable to load the AOT code cache.
     FLAG_SET_ERGO_IF_DEFAULT(UseCompatibleCompressedOops, true);
+#endif
 
     // Leyden temp: make sure the user knows if CDS archive somehow fails to load.
     if (UseSharedSpaces && !xshare_auto_cmd_line) {
