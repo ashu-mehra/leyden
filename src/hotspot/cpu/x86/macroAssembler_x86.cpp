@@ -10431,10 +10431,7 @@ void MacroAssembler::restore_legacy_gprs() {
 void MacroAssembler::load_aotrc_address(address a, Register reg) {
 #if INCLUDE_CDS
 #ifndef PRODUCT
-  AOTRuntimeConstants* aotrc_base = AOTRuntimeConstants::aot_runtime_constants();
-  address base = reinterpret_cast<address>(aotrc_base);
-  int offset = (a - base);
-  assert(offset >= 0 && (uint)offset < sizeof(AOTRuntimeConstants), "address out of range for data area");
+  assert(AOTRuntimeConstants::is_aotrc_address(a), "address out of range for data area");
 #endif
   if (SCCache::is_on_for_write()) {
     // all aotrc field addresses should be registered in the SCC address table

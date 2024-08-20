@@ -527,48 +527,4 @@ class StubRoutines: AllStatic {
   static void arrayof_oop_copy_uninit(HeapWord* src, HeapWord* dest, size_t count);
 };
 
-#if INCLUDE_CDS
-// forward declare friend class
-class SCCache;
-// code cache internal runtime constants area used by AOT code
-class AOTRuntimeConstants {
- friend class SCCache;
-  uint _grain_shift;
-  uint _card_shift;
-  void set_grain_shift(uint s) { _grain_shift = s; }
-  void set_card_shift(uint s) { _card_shift = s; }
-  void initialize_from_runtime();
-  static AOTRuntimeConstants* aot_runtime_constants_at(address address) {
-    AOTRuntimeConstants* c = (AOTRuntimeConstants*) address;
-    return c;
-  }
-  // private constructor for unique singleton
-  AOTRuntimeConstants() { }
-public:
-  static AOTRuntimeConstants* aot_runtime_constants() {
-    // return the unique singleton instance
-    static AOTRuntimeConstants _aot_runtime_constants;
-    return &_aot_runtime_constants;
-  }
-  static ByteSize grain_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _grain_shift); }
-  static ByteSize card_shift_offset() { return byte_offset_of(AOTRuntimeConstants, _card_shift);
-  }
- private:
-  // list all addressable fields of the singleton terminated with nullptr
-  static address* create_field_address_list() {
-    address aotrc = (address) aot_runtime_constants();
-    static address list[3];
-    list[0] = aotrc + in_bytes(grain_shift_offset());
-    list[1] = aotrc + in_bytes(card_shift_offset());
-    list[2] = nullptr;
-    return list;
-  }
- public:
-  static address* field_addresses_list() {
-    static address* _field_addresses_list = create_field_address_list();
-    return _field_addresses_list;
-  }
-};
-#endif // INCLUDE_CDS
-
 #endif // SHARE_RUNTIME_STUBROUTINES_HPP

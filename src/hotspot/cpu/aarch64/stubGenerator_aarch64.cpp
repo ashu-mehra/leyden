@@ -8370,13 +8370,6 @@ class StubGenerator: public StubCodeGenerator {
     // much more complicated generator structure. See also comment in
     // stubRoutines.hpp.
 
-    // When saving AOT code generate and populate a data area internal
-    // to the code cache where AOT code can access runtime constants
-    // that might change between the assembly run and the production
-    // run. When loading AOT code that data area will already be
-    // defined and the contents will have been updated to the latest
-    // values by a dedicated AOT load time relocation
-
     StubRoutines::_forward_exception_entry = generate_forward_exception();
 
     StubRoutines::_call_stub_entry =

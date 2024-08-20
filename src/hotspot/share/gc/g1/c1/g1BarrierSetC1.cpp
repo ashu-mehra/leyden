@@ -25,12 +25,14 @@
 #include "precompiled.hpp"
 #include "c1/c1_LIRGenerator.hpp"
 #include "c1/c1_CodeStubs.hpp"
+#if INCLUDE_CDS
+#include "code/SCCache.hpp"
+#endif
 #include "gc/g1/c1/g1BarrierSetC1.hpp"
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1BarrierSetAssembler.hpp"
 #include "gc/g1/g1HeapRegion.hpp"
 #include "gc/g1/g1ThreadLocalData.hpp"
-#include "runtime/stubRoutines.hpp"
 #include "utilities/macros.hpp"
 
 #ifdef ASSERT
@@ -155,11 +157,11 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
   LIR_Opr xor_res = gen->new_pointer_register();
   LIR_Opr xor_shift_res = gen->new_pointer_register();
 #if INCLUDE_CDS
-  // we may need to load the grain shift from the AOT Runtime
+  // we need to load the grain shift from the AOT Runtime
   // Constants Area
-  LIR_Opr aotrc_base = LIR_OprFact::intptrConst((address)AOTRuntimeConstants::aot_runtime_constants());
-  LIR_Opr aotrc_reg = gen->new_pointer_register();
-  LIR_Address* grain_shift_addr = new LIR_Address(aotrc_reg, in_bytes(AOTRuntimeConstants::grain_shift_offset()), T_INT);
+  LIR_Opr grain_shift_addr = LIR_OprFact::intptrConst(AOTRuntimeConstants::grain_shift_address());
+  LIR_Opr grain_shift_reg = gen->new_pointer_register();
+  LIR_Address* grain_shift_indirect = new LIR_Address(grain_shift_reg, 0, T_INT);
 #ifdef X86
   LIR_Opr grain_shift = gen->shiftCountOpr();
 #else // X86
@@ -171,9 +173,9 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
     __ logical_xor(xor_res, new_val, xor_res);
 #if INCLUDE_CDS
     if (StoreCachedCode) {
-      __ move(aotrc_base, aotrc_reg);
+      __ move(grain_shift_addr, grain_shift_reg);
       __ move(xor_res, xor_shift_res);
-      __ move(grain_shift_addr, grain_shift);
+      __ move(grain_shift_indirect, grain_shift);
       __ unsigned_shift_right(xor_shift_res,
                               grain_shift,
                               xor_shift_res,
@@ -192,8 +194,8 @@ void G1BarrierSetC1::post_barrier(LIRAccess& access, LIR_Opr addr, LIR_Opr new_v
     __ logical_xor(addr, new_val, xor_res);
 #if INCLUDE_CDS
     if (StoreCachedCode) {
-      __ move(aotrc_base, aotrc_reg);
-      __ move(grain_shift_addr, grain_shift);
+      __ move(grain_shift_addr, grain_shift_reg);
+      __ move(grain_shift_indirect, grain_shift);
       __ unsigned_shift_right(xor_res,
                               grain_shift,
                               xor_shift_res,

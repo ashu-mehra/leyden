@@ -24,6 +24,9 @@
 
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#if INCLUDE_CDS
+#include "code/SCCache.hpp"
+#endif
 #include "gc/g1/c2/g1BarrierSetC2.hpp"
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1BarrierSetRuntime.hpp"
@@ -38,7 +41,6 @@
 #include "opto/macro.hpp"
 #include "opto/rootnode.hpp"
 #include "opto/type.hpp"
-#include "runtime/stubRoutines.hpp"
 #include "utilities/macros.hpp"
 
 const TypeFunc *G1BarrierSetC2::write_ref_field_pre_entry_Type() {
@@ -445,9 +447,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
 #if INCLUDE_CDS
   if (StoreCachedCode) {
     // load the card shift from the AOT Runtime Constants area
-    Node* aotrc_base =  __ makecon(TypeRawPtr::make((address)AOTRuntimeConstants::aot_runtime_constants()));
-    const int card_shift_offset = in_bytes(AOTRuntimeConstants::card_shift_offset());
-    Node* card_shift_adr = __ AddP(__ top(), aotrc_base, __ ConX(card_shift_offset));
+    Node* card_shift_adr =  __ makecon(TypeRawPtr::make(AOTRuntimeConstants::card_shift_address()));
     card_shift  = __ load(__ ctrl(), card_shift_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
   } else {
 #endif
@@ -473,9 +473,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
     Node* xor_res = __ XorX( cast,  __ CastPX(__ ctrl(), val));
     if (StoreCachedCode)  {
       // load the grain shift from the AOT Runtime Constants area
-      Node* aotrc_base =  __ makecon(TypeRawPtr::make((address)AOTRuntimeConstants::aot_runtime_constants()));
-      const int grain_shift_offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
-      Node* grain_shift_adr = __ AddP(__ top(), aotrc_base, __ ConX(grain_shift_offset));
+      Node* grain_shift_adr =  __ makecon(TypeRawPtr::make(AOTRuntimeConstants::grain_shift_address()));
       Node* grain_shift  = __ load(__ ctrl(), grain_shift_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
       xor_res = __ URShiftX( xor_res, grain_shift);
     } else {

@@ -235,17 +235,6 @@ address UnsafeMemoryAccess::page_error_continue_pc(address pc) {
   return nullptr;
 }
 
-#if INCLUDE_CDS
-void AOTRuntimeConstants::initialize_from_runtime() {
-  BarrierSet* bs = BarrierSet::barrier_set();
-  if (bs->is_a(BarrierSet::CardTableBarrierSet)) {
-    CardTableBarrierSet* ctbs = ((CardTableBarrierSet*)bs);
-    set_grain_shift(ctbs->grain_shift());
-    set_card_shift(ctbs->card_shift());
-  }
-}
-#endif
-
 static BufferBlob* initialize_stubs(StubCodeGenerator::StubsKind kind,
                                     int code_size, int max_aligned_stubs,
                                     const char* timer_msg,

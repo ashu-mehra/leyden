@@ -24,11 +24,13 @@
 
 #include "precompiled.hpp"
 #include "ci/ciUtilities.hpp"
+#if INCLUDE_CDS
+#include "code/SCCache.hpp"
+#endif
 #include "gc/shared/cardTableBarrierSet.hpp"
 #include "gc/shared/cardTable.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/universe.hpp"
-#include "runtime/stubRoutines.hpp"
 
 // ciUtilities
 //
@@ -64,9 +66,7 @@ bool is_card_table_address(address adr) {
 bool is_aotrc_address(address adr) {
 #if INCLUDE_CDS
   if (Universe::is_fully_initialized()) {
-    address base = (address)AOTRuntimeConstants::aot_runtime_constants();
-    address hi = base + sizeof(AOTRuntimeConstants);
-    return (base <= adr && adr < hi);
+    return AOTRuntimeConstants::is_aotrc_address(adr);
   }
 #endif
   return false;

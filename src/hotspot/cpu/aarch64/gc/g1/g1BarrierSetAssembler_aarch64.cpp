@@ -37,7 +37,6 @@
 #include "interpreter/interp_masm.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/sharedRuntime.hpp"
-#include "runtime/stubRoutines.hpp"
 #ifdef COMPILER1
 #include "c1/c1_LIRAssembler.hpp"
 #include "c1/c1_MacroAssembler.hpp"
@@ -216,11 +215,10 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   // it as an immediate operand
 
   if (StoreCachedCode) {
-    address aotrc = (address)AOTRuntimeConstants::aot_runtime_constants();
-    uint offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
+    address grain_shift_address = (address)AOTRuntimeConstants::grain_shift_address();
     __ eor(tmp1, store_addr, new_val);
-    __ lea(tmp2, ExternalAddress(aotrc));
-    __ ldrb(tmp2, Address(tmp2, offset));
+    __ lea(tmp2, ExternalAddress(grain_shift_address));
+    __ ldrb(tmp2, tmp2);
     __ lsrv(tmp1, tmp1, tmp2);
     __ cbz(tmp1, done);
   } else {
@@ -244,10 +242,9 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   // runtime constants area in the code cache otherwise we can compile
   // it as an immediate operand
   if (StoreCachedCode) {
-    address aotrc = (address)AOTRuntimeConstants::aot_runtime_constants();
-    uint offset = in_bytes(AOTRuntimeConstants::card_shift_offset());
-    __ lea(tmp2, ExternalAddress(aotrc));
-    __ ldrb(tmp2, Address(tmp2, offset));
+    address card_shift_address = (address)AOTRuntimeConstants::card_shift_address();
+    __ lea(tmp2, ExternalAddress(card_shift_address));
+    __ ldrb(tmp2, tmp2);
     __ lsrv(card_addr, store_addr, tmp2);
   } else {
 #endif

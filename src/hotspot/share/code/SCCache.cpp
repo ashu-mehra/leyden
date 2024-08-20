@@ -162,8 +162,8 @@ void SCCache::init2() {
     }
   }
   // initialize aot runtime constants as appropriate to this runtime
-  AOTRuntimeConstants* aotc = AOTRuntimeConstants::aot_runtime_constants();
-  aotc->initialize_from_runtime();
+  AOTRuntimeConstants::initialize_from_runtime();
+
   if (!verify_vm_config()) {
     close();
     exit_vm_on_load_failure();
@@ -4141,3 +4141,20 @@ int SCAddressTable::id_for_address(address addr, RelocIterator reloc, CodeBuffer
   }
   return id;
 }
+
+void AOTRuntimeConstants::initialize_from_runtime() {
+  BarrierSet* bs = BarrierSet::barrier_set();
+  if (bs->is_a(BarrierSet::CardTableBarrierSet)) {
+    CardTableBarrierSet* ctbs = ((CardTableBarrierSet*)bs);
+    _aot_runtime_constants._grain_shift = ctbs->grain_shift();
+    _aot_runtime_constants._card_shift = ctbs->card_shift();
+  }
+}
+
+AOTRuntimeConstants AOTRuntimeConstants::_aot_runtime_constants;
+
+address AOTRuntimeConstants::_field_addresses_list[] = {
+  grain_shift_address(),
+  card_shift_address(),
+  nullptr
+};

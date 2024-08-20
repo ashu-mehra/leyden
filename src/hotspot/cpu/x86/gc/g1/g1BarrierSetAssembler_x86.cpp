@@ -24,7 +24,9 @@
 
 #include "precompiled.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#if INCLUDE_CDS
 #include "code/SCCache.hpp"
+#endif
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1BarrierSetAssembler.hpp"
 #include "gc/g1/g1BarrierSetRuntime.hpp"
@@ -33,7 +35,6 @@
 #include "gc/g1/g1ThreadLocalData.hpp"
 #include "interpreter/interp_masm.hpp"
 #include "runtime/sharedRuntime.hpp"
-#include "runtime/stubRoutines.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/macros.hpp"
 #ifdef COMPILER1
@@ -292,21 +293,15 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   // it as an immediate operand
 
   if (StoreCachedCode) {
-    address aotrc = (address)AOTRuntimeConstants::aot_runtime_constants();
-    uint offset = in_bytes(AOTRuntimeConstants::grain_shift_offset());
+    address grain_shift_addr = AOTRuntimeConstants::grain_shift_address();
     __ movptr(tmp, store_addr);
     __ xorptr(tmp, new_val);
     __ push(rscratch1);
-    __ lea(rscratch1, ExternalAddress(aotrc));
-    if (VM_Version::supports_bmi2()) {
-      __ movq(rscratch1, Address(rscratch1, offset));
-      __ shrxptr(tmp, tmp, rscratch1);
-    } else {
-      __ push(rcx);
-      __ movq(rcx, Address(rscratch1, offset));
-      __ shrptr(tmp);
-      __ pop(rcx);
-    }
+    __ push(rcx);
+    __ lea(rscratch1, ExternalAddress(grain_shift_addr));
+    __ movq(rcx, Address(rscratch1, 0));
+    __ shrptr(tmp);
+    __ pop(rcx);
     __ pop(rscratch1);
     __ jcc(Assembler::equal, done);
   } else {
@@ -333,19 +328,13 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   // runtime constants area in the code cache otherwise we can compile
   // it as an immediate operand
   if (StoreCachedCode) {
-    address aotrc = (address)AOTRuntimeConstants::aot_runtime_constants();
-    uint offset = in_bytes(AOTRuntimeConstants::card_shift_offset());
+    address card_shift_addr = AOTRuntimeConstants::card_shift_address();
     __ push(rscratch1);
-    __ lea(rscratch1, ExternalAddress(aotrc));
-    if (VM_Version::supports_bmi2()) {
-      __ movq(rscratch1, Address(rscratch1, offset));
-      __ shrxptr(card_addr, card_addr, rscratch1);
-    } else {
-      __ push(rcx);
-      __ movq(rcx, Address(rscratch1, offset));
-      __ shrptr(card_addr);
-      __ pop(rcx);
-    }
+    __ push(rcx);
+    __ lea(rscratch1, ExternalAddress(card_shift_addr));
+    __ movq(rcx, Address(rscratch1, 0));
+    __ shrptr(card_addr);
+    __ pop(rcx);
     __ pop(rscratch1);
   } else {
 #endif // INCLUDE_CDS
