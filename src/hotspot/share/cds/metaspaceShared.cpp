@@ -751,6 +751,20 @@ void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
   if (CDSConfig::is_dumping_final_static_archive()) {
     FinalImageRecipes::apply_recipes(CHECK);
   }
+
+#if INCLUDE_CDS_JAVA_HEAP
+  if (CDSConfig::is_dumping_invokedynamic()) {
+    // This makes sure that the MethodType and MethodTypeForm tables won't be updated
+    // concurrently when we are saving their contents into a side table.
+    assert(CDSConfig::allow_only_single_java_thread(), "Required");
+
+    JavaValue result(T_VOID);
+    JavaCalls::call_static(&result, vmClasses::MethodType_klass(),
+                           vmSymbols::createArchivedObjects(),
+                           vmSymbols::void_method_signature(),
+                           CHECK);
+  }
+#endif
 }
 
 void MetaspaceShared::prepare_for_dumping() {
@@ -893,20 +907,6 @@ void MetaspaceShared::preload_and_dump_impl(StaticArchiveBuilder& builder, TRAPS
                                        ClassListParser::_parse_lambda_forms_invokers_only, CHECK);
     }
   }
-
-#if INCLUDE_CDS_JAVA_HEAP
-  if (CDSConfig::is_dumping_invokedynamic()) {
-    // This makes sure that the MethodType and MethodTypeForm tables won't be updated
-    // concurrently when we are saving their contents into a side table.
-    assert(CDSConfig::allow_only_single_java_thread(), "Required");
-
-    JavaValue result(T_VOID);
-    JavaCalls::call_static(&result, vmClasses::MethodType_klass(),
-                           vmSymbols::createArchivedObjects(),
-                           vmSymbols::void_method_signature(),
-                           CHECK);
-  }
-#endif
 
   // Rewrite and link classes
   log_info(cds)("Rewriting and linking classes ...");
