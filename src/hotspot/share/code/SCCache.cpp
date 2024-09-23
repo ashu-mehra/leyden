@@ -4155,7 +4155,33 @@ void SCAddressTable::init_extrs() {
   SET_ADDRESS(_extrs, Runtime1::throw_array_store_exception);
   SET_ADDRESS(_extrs, Runtime1::throw_class_cast_exception);
   SET_ADDRESS(_extrs, Runtime1::throw_incompatible_class_change_error);
-#endif
+
+#ifndef PRODUCT
+  SET_ADDRESS(_extrs, &Runtime1::_generic_arraycopystub_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_arraycopy_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_arraycopy_checkcast_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_arraycopy_checkcast_attempt_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_new_type_array_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_new_object_array_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_new_instance_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_new_multi_array_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_monitorenter_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_monitorexit_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_patch_code_slowcase_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_throw_range_check_exception_count);
+  SET_ADDRESS(_extrs, &Runtime1::_throw_index_exception_count);
+  SET_ADDRESS(_extrs, &Runtime1::_throw_div0_exception_count);
+  SET_ADDRESS(_extrs, &Runtime1::_throw_null_pointer_exception_count);
+  SET_ADDRESS(_extrs, &Runtime1::_throw_class_cast_exception_count);
+  SET_ADDRESS(_extrs, &Runtime1::_throw_incompatible_class_change_error_count);
+  SET_ADDRESS(_extrs, &Runtime1::_throw_count);
+  SET_ADDRESS(_extrs, &Runtime1::_byte_arraycopy_stub_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_short_arraycopy_stub_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_int_arraycopy_stub_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_long_arraycopy_stub_cnt);
+  SET_ADDRESS(_extrs, &Runtime1::_oop_arraycopy_stub_cnt);
+#endif // PRODUCT
+#endif // COMPILER1
 
   SET_ADDRESS(_extrs, CompressedOops::ptrs_base_addr());
   SET_ADDRESS(_extrs, G1BarrierSetRuntime::write_ref_field_post_entry);

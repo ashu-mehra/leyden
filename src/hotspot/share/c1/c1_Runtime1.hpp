@@ -117,6 +117,11 @@ class Runtime1: public AllStatic {
   static uint _throw_class_cast_exception_count;
   static uint _throw_incompatible_class_change_error_count;
   static uint _throw_count;
+  static uint _byte_arraycopy_stub_cnt;
+  static uint _short_arraycopy_stub_cnt;
+  static uint _int_arraycopy_stub_cnt;
+  static uint _long_arraycopy_stub_cnt;
+  static uint _oop_arraycopy_stub_cnt;
 #endif
 
  private:

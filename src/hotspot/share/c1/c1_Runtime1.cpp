@@ -140,24 +140,24 @@ uint Runtime1::_throw_class_cast_exception_count = 0;
 uint Runtime1::_throw_incompatible_class_change_error_count = 0;
 uint Runtime1::_throw_count = 0;
 
-static uint _byte_arraycopy_stub_cnt = 0;
-static uint _short_arraycopy_stub_cnt = 0;
-static uint _int_arraycopy_stub_cnt = 0;
-static uint _long_arraycopy_stub_cnt = 0;
-static uint _oop_arraycopy_stub_cnt = 0;
+uint Runtime1::_byte_arraycopy_stub_cnt = 0;
+uint Runtime1::_short_arraycopy_stub_cnt = 0;
+uint Runtime1::_int_arraycopy_stub_cnt = 0;
+uint Runtime1::_long_arraycopy_stub_cnt = 0;
+uint Runtime1::_oop_arraycopy_stub_cnt = 0;
 
 address Runtime1::arraycopy_count_address(BasicType type) {
   switch (type) {
   case T_BOOLEAN:
-  case T_BYTE:   return (address)&_byte_arraycopy_stub_cnt;
+  case T_BYTE:   return (address)&Runtime1::_byte_arraycopy_stub_cnt;
   case T_CHAR:
-  case T_SHORT:  return (address)&_short_arraycopy_stub_cnt;
+  case T_SHORT:  return (address)&Runtime1::_short_arraycopy_stub_cnt;
   case T_FLOAT:
-  case T_INT:    return (address)&_int_arraycopy_stub_cnt;
+  case T_INT:    return (address)&Runtime1::_int_arraycopy_stub_cnt;
   case T_DOUBLE:
-  case T_LONG:   return (address)&_long_arraycopy_stub_cnt;
+  case T_LONG:   return (address)&Runtime1::_long_arraycopy_stub_cnt;
   case T_ARRAY:
-  case T_OBJECT: return (address)&_oop_arraycopy_stub_cnt;
+  case T_OBJECT: return (address)&Runtime1::_oop_arraycopy_stub_cnt;
   default:
     ShouldNotReachHere();
     return nullptr;
