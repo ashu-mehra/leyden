@@ -27,6 +27,7 @@
 
 #include "oops/oopsHierarchy.hpp"
 #include "utilities/exceptions.hpp"
+#include "runtime/sharedRuntime.hpp"
 
 class InstanceKlass;
 class Klass;
@@ -69,9 +70,12 @@ class FinalImageRecipes {
 
   static GrowableArray<TmpDynamicProxyClassInfo>* _tmp_dynamic_proxy_classes;
 
+  Array<AdapterFingerPrint>* _adapter_fingerprints;
+  size_t _adapters_code_size;
+
   FinalImageRecipes() : _indy_klasses(nullptr), _indy_cp_indices(nullptr),
                         _reflect_klasses(nullptr), _reflect_flags(nullptr),
-                        _dynamic_proxy_classes(nullptr) {}
+                        _dynamic_proxy_classes(nullptr), _adapter_fingerprints(nullptr) {}
 
   void* operator new(size_t size) throw();
 
@@ -82,6 +86,7 @@ class FinalImageRecipes {
   void apply_recipes_for_dynamic_proxies(TRAPS);
   void apply_recipes_for_invokedynamic(TRAPS);
   void apply_recipes_for_reflection_data(JavaThread* current);
+  void apply_recipes_for_adapter_fingerprints(JavaThread* current);
 
 public:
   static void serialize(SerializeClosure* soc, bool is_static_archive);
@@ -89,6 +94,7 @@ public:
   // Called when dumping preimage
   static void add_dynamic_proxy_class(oop loader, const char* proxy_name, objArrayOop interfaces, int access_flags);
   static void add_reflection_data_flags(InstanceKlass* ik, TRAPS);
+  void record_adapter_fingerprints();
   static void record_recipes();
 
   // Called when dumping final image

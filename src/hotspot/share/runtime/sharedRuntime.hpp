@@ -736,6 +736,96 @@ public:
   }
 };
 
+class AdapterFingerPrint : public CHeapObj<mtCode> {
+ private:
+  enum {
+    _basic_type_bits = 4,
+    _basic_type_mask = right_n_bits(_basic_type_bits),
+    _basic_types_per_int = BitsPerInt / _basic_type_bits,
+    _compact_int_count = 3
+  };
+  // TO DO:  Consider integrating this with a more global scheme for compressing signatures.
+  // For now, 4 bits per components (plus T_VOID gaps after double/long) is not excessive.
+
+  union value {
+    int  _compact[_compact_int_count];
+    int* _fingerprint;
+    value() {}
+  } _value;
+  int _length; // A negative length indicates the fingerprint is in the compact form,
+               // Otherwise _value._fingerprint is the array.
+
+  static int adapter_encoding(BasicType in);
+
+ public:
+
+  // no args c'tor is used only to satisfy requirements of creating a GrowableArray
+  AdapterFingerPrint() {}
+  AdapterFingerPrint(int length, int* data) : _length(length) {
+    if (_length <= _compact_int_count) {
+      _value._compact[0] = data[0];
+      _value._compact[1] = data[1];
+      _value._compact[2] = data[2];
+    } else {
+      _value._fingerprint = data; 
+    }
+  }
+
+  AdapterFingerPrint(int total_args_passed, BasicType* sig_bt);
+  ~AdapterFingerPrint() {
+    if (_length > 0) {
+      FREE_C_HEAP_ARRAY(int, _value._fingerprint);
+    }
+  }
+
+  int value(int index) {
+    if (_length < 0) {
+      return _value._compact[index];
+    }
+    return _value._fingerprint[index];
+  }
+  int length() {
+    if (_length < 0) return -_length;
+    return _length;
+  }
+
+  bool is_compact() {
+    return _length <= 0;
+  }
+
+  unsigned int compute_hash() {
+    int hash = 0;
+    for (int i = 0; i < length(); i++) {
+      int v = value(i);
+      hash = (hash << 8) ^ v ^ (hash >> 5);
+    }
+    return (unsigned int)hash;
+  }
+
+  const char* as_string() {
+    stringStream st;
+    st.print("0x");
+    for (int i = 0; i < length(); i++) {
+      st.print("%x", value(i));
+    }
+    return st.as_string();
+  }
+
+
+#ifndef PRODUCT
+  // Reconstitutes the basic type arguments from the fingerprint,
+  // producing strings like LIJDF
+  const char* as_basic_args_string();
+#endif // PRODUCT
+
+  BasicType* as_basic_type(int& length);
+  bool equals(AdapterFingerPrint* other);
+  static bool equals(AdapterFingerPrint* const& fp1, AdapterFingerPrint* const& fp2);
+
+  static unsigned int compute_hash(AdapterFingerPrint* const& fp) {
+    return fp->compute_hash();
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Implementation of AdapterHandlerLibrary
@@ -823,9 +913,18 @@ class AdapterHandlerEntry : public CHeapObj<mtCode> {
   void print_adapter_on(outputStream* st) const;
 };
 
+// A simple wrapper class around the calling convention information
+// that allows sharing of adapters for the same calling convention.
+// A hashtable mapping from AdapterFingerPrints to AdapterHandlerEntries
+using AdapterHandlerTable = ResourceHashtable<AdapterFingerPrint*, AdapterHandlerEntry*, 293,
+                  AnyObj::C_HEAP, mtCode,
+                  AdapterFingerPrint::compute_hash,
+                  AdapterFingerPrint::equals>;
+
 class AdapterHandlerLibrary: public AllStatic {
   friend class SharedRuntime;
  private:
+  static AdapterHandlerTable* _adapter_handler_table;
   static BufferBlob* _buffer; // the temporary code buffer in CodeCache
   static AdapterHandlerEntry* _abstract_method_handler;
   static AdapterHandlerEntry* _no_arg_handler;
@@ -833,16 +932,24 @@ class AdapterHandlerLibrary: public AllStatic {
   static AdapterHandlerEntry* _obj_arg_handler;
   static AdapterHandlerEntry* _obj_int_arg_handler;
   static AdapterHandlerEntry* _obj_obj_arg_handler;
+  static GrowableArray<int> _fingerprints;
+
+  static size_t _adapters_code_size;
 
   static BufferBlob* buffer_blob();
   static void initialize();
+  static AdapterHandlerEntry* create_adapter_from_fingerprint(AdapterBlob*& new_adapter, AdapterFingerPrint* cached_fingerprint, bool allocate_code_blob);
   static AdapterHandlerEntry* create_adapter(AdapterBlob*& new_adapter,
                                              int total_args_passed,
                                              BasicType* sig_bt,
-                                             bool allocate_code_blob);
+                                             bool allocate_code_blob,
+                                             AdapterFingerPrint* cached_fingerprint = nullptr);
   static AdapterHandlerEntry* get_simple_adapter(const methodHandle& method);
+  static AdapterHandlerEntry* lookup(int total_args_passed, BasicType* sig_bt);
+  static AdapterHandlerEntry* lookup(AdapterFingerPrint* fp);
  public:
 
+  static AdapterHandlerTable* adapter_handler_table() { return _adapter_handler_table; }
   static AdapterHandlerEntry* new_entry(AdapterFingerPrint* fingerprint,
                                         address i2c_entry,
                                         address c2i_entry,
@@ -850,6 +957,7 @@ class AdapterHandlerLibrary: public AllStatic {
                                         address c2i_no_clinit_check_entry = nullptr);
   static void create_native_wrapper(const methodHandle& method);
   static AdapterHandlerEntry* get_adapter(const methodHandle& method);
+  static AdapterHandlerEntry* get_adapter(AdapterFingerPrint* fp);
 
   static void print_handler(const CodeBlob* b) { print_handler_on(tty, b); }
   static void print_handler_on(outputStream* st, const CodeBlob* b);
@@ -857,6 +965,27 @@ class AdapterHandlerLibrary: public AllStatic {
 #ifndef PRODUCT
   static void print_statistics_on(outputStream* st);
 #endif // PRODUCT
+  static size_t get_adapters_code_size() { return _adapters_code_size; }
+  static int add_fingerprint(AdapterFingerPrint* fp);
+};
+
+class AdapterArchiveData {
+ private:
+  static AdapterArchiveData _aad;
+  GrowableArray<int> _fingerprints;
+  GrowableArray<address> _entry_points; // each adapter has 4 entry points
+
+  AdapterArchiveData() {}
+
+ public:
+  static AdapterArchiveData* get_instance() { return &_aad; }
+
+  void add_entry_points(AdapterHandlerEntry *entry) {
+    _entry_points.add(entry->get_i2c_entry());
+    _entry_points.add(entry->get_c2i_entry());
+    _entry_points.add(entry->get_c2i_unverified_entry());
+    _entry_points.add(entry->get_c2i_no_clinit_check_entry());
+  }
 };
 
 #endif // SHARE_RUNTIME_SHAREDRUNTIME_HPP

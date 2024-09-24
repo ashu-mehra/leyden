@@ -1210,8 +1210,9 @@ void Method::unlink_code() {
 // Called by class data sharing to remove any entry points (which are not shared)
 void Method::unlink_method() {
   assert(CDSConfig::is_dumping_archive(), "sanity");
+  uint index = AdapterHandlerLibrary::add_fingerprint(_adapter->fingerprint());
   _code = nullptr;
-  _adapter = nullptr;
+  _adapter = (AdapterHandlerEntry *)index;
   _i2i_entry = nullptr;
   _from_compiled_entry = nullptr;
   _from_interpreted_entry = nullptr;

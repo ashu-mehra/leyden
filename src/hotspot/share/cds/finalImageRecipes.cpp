@@ -46,6 +46,19 @@ void* FinalImageRecipes::operator new(size_t size) throw() {
   return ArchiveBuilder::current()->ro_region_alloc(size);
 }
 
+void FinalImageRecipes::record_adapter_fingerprints() {
+  GrowableArray<AdapterFingerPrint> fingerprints;
+  auto fp_collector = [&] (AdapterFingerPrint* fp, AdapterHandlerEntry* entry) {
+    fingerprints.append(*fp);
+  };
+  AdapterHandlerLibrary::adapter_handler_table()->iterate_all(fp_collector);
+  _adapter_fingerprints = ArchiveUtils::archive_array(&fingerprints);
+  ArchivePtrMarker::mark_pointer(&_adapter_fingerprints);
+  log_info(cds)("Stored %d adapter fingerprints in the preimage", _adapter_fingerprints->length());
+  _adapters_code_size = AdapterHandlerLibrary::get_adapters_code_size();
+  log_info(cds)("Adapters code size in the preimage=%d bytes", _adapters_code_size);
+}
+
 void FinalImageRecipes::record_recipes_impl() {
   assert(CDSConfig::is_dumping_preimage_static_archive(), "must be");
   ResourceMark rm;
@@ -139,6 +152,8 @@ void FinalImageRecipes::record_recipes_impl() {
       ArchiveBuilder::alloc_stats()->record_dynamic_proxy_class();
     }
   }
+
+  record_adapter_fingerprints();
 }
 
 void FinalImageRecipes::apply_recipes_for_invokedynamic(TRAPS) {
@@ -238,6 +253,20 @@ void FinalImageRecipes::apply_recipes_for_dynamic_proxies(TRAPS) {
   }
 }
 
+void FinalImageRecipes::apply_recipes_for_adapter_fingerprints(JavaThread* current) {
+  ResourceMark rm;
+  log_info(cds)("Applying receipes for adapter fingerprints");
+  for (int index = 0; index < _adapter_fingerprints->length(); index++) {
+    AdapterFingerPrint* fp = _adapter_fingerprints->adr_at(index);
+    AdapterHandlerEntry* entry = AdapterHandlerLibrary::get_adapter(fp);
+    if (entry == nullptr) {
+      log_warning(cds)("Failed to generate AdapterHandlerEntry for fingerprint %s", DEBUG_ONLY(fp->as_basic_args_string()) NOT_DEBUG(fp->as_string()));
+    } else {
+      log_info(cds)("Generated AdapterHandlerEntry for fingerprint %s", DEBUG_ONLY(fp->as_basic_args_string()) NOT_DEBUG(fp->as_string()));
+    }
+  }
+}
+
 void FinalImageRecipes::record_recipes() {
   _final_image_recipes = new FinalImageRecipes();
   _final_image_recipes->record_recipes_impl();
@@ -250,6 +279,7 @@ void FinalImageRecipes::apply_recipes(TRAPS) {
     _final_image_recipes->apply_recipes_for_invokedynamic(CHECK);
     _final_image_recipes->apply_recipes_for_reflection_data(THREAD);
     _final_image_recipes->apply_recipes_for_dynamic_proxies(CHECK);
+    _final_image_recipes->apply_recipes_for_adapter_fingerprints(CHECK);
   }
 
   // Set it to null as we don't need to write this table into the final image.

@@ -2223,218 +2223,209 @@ static int _hits;    // number of successful lookups
 static int _compact; // number of equals calls with compact signature
 #endif
 
-// A simple wrapper class around the calling convention information
-// that allows sharing of adapters for the same calling convention.
-class AdapterFingerPrint : public CHeapObj<mtCode> {
- private:
-  enum {
-    _basic_type_bits = 4,
-    _basic_type_mask = right_n_bits(_basic_type_bits),
-    _basic_types_per_int = BitsPerInt / _basic_type_bits,
-    _compact_int_count = 3
-  };
-  // TO DO:  Consider integrating this with a more global scheme for compressing signatures.
-  // For now, 4 bits per components (plus T_VOID gaps after double/long) is not excessive.
+AdapterFingerPrint::AdapterFingerPrint(int total_args_passed, BasicType* sig_bt) {
+  // The fingerprint is based on the BasicType signature encoded
+  // into an array of ints with eight entries per int.
+  int* ptr;
+  int len = (total_args_passed + (_basic_types_per_int-1)) / _basic_types_per_int;
+  if (len <= _compact_int_count) {
+    assert(_compact_int_count == 3, "else change next line");
+    _value._compact[0] = _value._compact[1] = _value._compact[2] = 0;
+    // Storing the signature encoded as signed chars hits about 98%
+    // of the time.
+    _length = -len;
+    ptr = _value._compact;
+  } else {
+    _length = len;
+    _value._fingerprint = NEW_C_HEAP_ARRAY(int, _length, mtCode);
+    ptr = _value._fingerprint;
+  }
 
-  union {
-    int  _compact[_compact_int_count];
-    int* _fingerprint;
-  } _value;
-  int _length; // A negative length indicates the fingerprint is in the compact form,
-               // Otherwise _value._fingerprint is the array.
+  // Now pack the BasicTypes with 8 per int
+  int sig_index = 0;
+  for (int index = 0; index < len; index++) {
+    int value = 0;
+    for (int byte = 0; sig_index < total_args_passed && byte < _basic_types_per_int; byte++) {
+      int bt = adapter_encoding(sig_bt[sig_index++]);
+      assert((bt & _basic_type_mask) == bt, "must fit in 4 bits");
+      value = (value << _basic_type_bits) | bt;
+    }
+    ptr[index] = value;
+  }
+}
 
-  // Remap BasicTypes that are handled equivalently by the adapters.
-  // These are correct for the current system but someday it might be
-  // necessary to make this mapping platform dependent.
-  static int adapter_encoding(BasicType in) {
-    switch (in) {
-      case T_BOOLEAN:
-      case T_BYTE:
-      case T_SHORT:
-      case T_CHAR:
-        // There are all promoted to T_INT in the calling convention
-        return T_INT;
+// Remap BasicTypes that are handled equivalently by the adapters.
+// These are correct for the current system but someday it might be
+// necessary to make this mapping platform dependent.
+int AdapterFingerPrint::adapter_encoding(BasicType in) {
+  switch (in) {
+    case T_BOOLEAN:
+    case T_BYTE:
+    case T_SHORT:
+    case T_CHAR:
+      // There are all promoted to T_INT in the calling convention
+      return T_INT;
 
-      case T_OBJECT:
-      case T_ARRAY:
-        // In other words, we assume that any register good enough for
-        // an int or long is good enough for a managed pointer.
+    case T_OBJECT:
+    case T_ARRAY:
+      // In other words, we assume that any register good enough for
+      // an int or long is good enough for a managed pointer.
 #ifdef _LP64
-        return T_LONG;
+      return T_LONG;
 #else
-        return T_INT;
+      return T_INT;
 #endif
 
-      case T_INT:
-      case T_LONG:
-      case T_FLOAT:
-      case T_DOUBLE:
-      case T_VOID:
-        return in;
+    case T_INT:
+    case T_LONG:
+    case T_FLOAT:
+    case T_DOUBLE:
+    case T_VOID:
+      return in;
 
-      default:
-        ShouldNotReachHere();
-        return T_CONFLICT;
-    }
+    default:
+      ShouldNotReachHere();
+      return T_CONFLICT;
   }
+}
 
- public:
-  AdapterFingerPrint(int total_args_passed, BasicType* sig_bt) {
-    // The fingerprint is based on the BasicType signature encoded
-    // into an array of ints with eight entries per int.
-    int* ptr;
-    int len = (total_args_passed + (_basic_types_per_int-1)) / _basic_types_per_int;
-    if (len <= _compact_int_count) {
-      assert(_compact_int_count == 3, "else change next line");
-      _value._compact[0] = _value._compact[1] = _value._compact[2] = 0;
-      // Storing the signature encoded as signed chars hits about 98%
-      // of the time.
-      _length = -len;
-      ptr = _value._compact;
-    } else {
-      _length = len;
-      _value._fingerprint = NEW_C_HEAP_ARRAY(int, _length, mtCode);
-      ptr = _value._fingerprint;
-    }
-
-    // Now pack the BasicTypes with 8 per int
-    int sig_index = 0;
-    for (int index = 0; index < len; index++) {
-      int value = 0;
-      for (int byte = 0; sig_index < total_args_passed && byte < _basic_types_per_int; byte++) {
-        int bt = adapter_encoding(sig_bt[sig_index++]);
-        assert((bt & _basic_type_mask) == bt, "must fit in 4 bits");
-        value = (value << _basic_type_bits) | bt;
+BasicType* AdapterFingerPrint::as_basic_type(int& nargs) {
+  nargs = 0;
+  for (int i = 0; i < length(); i++) {
+    unsigned val = (unsigned)value(i);
+    // args are packed so that first/lower arguments are in the highest
+    // bits of each int value, so iterate from highest to the lowest
+    for (int j = 32 - _basic_type_bits; j >= 0; j -= _basic_type_bits) {
+      unsigned v = (val >> j) & _basic_type_mask;
+      if (v == 0) {
+	assert(i == length() - 1, "Only expect zeroes in the last word");
+      } else {
+        nargs += 1;
       }
-      ptr[index] = value;
     }
   }
 
-  ~AdapterFingerPrint() {
-    if (_length > 0) {
-      FREE_C_HEAP_ARRAY(int, _value._fingerprint);
+  BasicType* sig_bt = NEW_RESOURCE_ARRAY(BasicType, nargs);
+  int index = 0;
+  bool long_prev = false;
+  for (int i = 0; i < length(); i++) {
+    unsigned val = (unsigned)value(i);
+    // args are packed so that first/lower arguments are in the highest
+    // bits of each int value, so iterate from highest to the lowest
+    for (int j = 32 - _basic_type_bits; j >= 0; j -= _basic_type_bits) {
+      unsigned v = (val >> j) & _basic_type_mask;
+      if (v == 0) continue;
+      if (long_prev) {
+        long_prev = false;
+        if (v == T_VOID) {
+          sig_bt[index++] = T_LONG;
+        } else {
+          sig_bt[index++] = T_OBJECT; // it could be T_ARRAY; it shouldn't matter
+        }
+      }
+      if (v == T_LONG) {
+        long_prev = true;
+        continue;
+      }
+      sig_bt[index++] = (BasicType)v;
     }
   }
-
-  int value(int index) {
-    if (_length < 0) {
-      return _value._compact[index];
-    }
-    return _value._fingerprint[index];
+  if (long_prev) {
+    sig_bt[index++] = T_OBJECT;
   }
-  int length() {
-    if (_length < 0) return -_length;
-    return _length;
-  }
-
-  bool is_compact() {
-    return _length <= 0;
-  }
-
-  unsigned int compute_hash() {
-    int hash = 0;
-    for (int i = 0; i < length(); i++) {
-      int v = value(i);
-      hash = (hash << 8) ^ v ^ (hash >> 5);
-    }
-    return (unsigned int)hash;
-  }
-
-  const char* as_string() {
-    stringStream st;
-    st.print("0x");
-    for (int i = 0; i < length(); i++) {
-      st.print("%x", value(i));
-    }
-    return st.as_string();
-  }
+  return sig_bt;
+}
 
 #ifndef PRODUCT
-  // Reconstitutes the basic type arguments from the fingerprint,
-  // producing strings like LIJDF
-  const char* as_basic_args_string() {
-    stringStream st;
-    bool long_prev = false;
-    for (int i = 0; i < length(); i++) {
-      unsigned val = (unsigned)value(i);
-      // args are packed so that first/lower arguments are in the highest
-      // bits of each int value, so iterate from highest to the lowest
-      for (int j = 32 - _basic_type_bits; j >= 0; j -= _basic_type_bits) {
-        unsigned v = (val >> j) & _basic_type_mask;
-        if (v == 0) {
-          assert(i == length() - 1, "Only expect zeroes in the last word");
-          continue;
-        }
-        if (long_prev) {
-          long_prev = false;
-          if (v == T_VOID) {
-            st.print("J");
-          } else {
-            st.print("L");
-          }
-        }
-        switch (v) {
-          case T_INT:    st.print("I");    break;
-          case T_LONG:   long_prev = true; break;
-          case T_FLOAT:  st.print("F");    break;
-          case T_DOUBLE: st.print("D");    break;
-          case T_VOID:   break;
-          default: ShouldNotReachHere();
-        }
+// Reconstitutes the basic type arguments from the fingerprint,
+// producing strings like LIJDF
+const char* AdapterFingerPrint::as_basic_args_string() {
+  stringStream st;
+  bool long_prev = false;
+  for (int i = 0; i < length(); i++) {
+    unsigned val = (unsigned)value(i);
+    // args are packed so that first/lower arguments are in the highest
+    // bits of each int value, so iterate from highest to the lowest
+    for (int j = 32 - _basic_type_bits; j >= 0; j -= _basic_type_bits) {
+      unsigned v = (val >> j) & _basic_type_mask;
+      if (v == 0) {
+	assert(i == length() - 1, "Only expect zeroes in the last word");
+	continue;
+      }
+      if (long_prev) {
+	long_prev = false;
+	if (v == T_VOID) {
+	  st.print("J");
+	} else {
+	  st.print("L");
+	}
+      }
+      switch (v) {
+	case T_INT:    st.print("I");    break;
+	case T_LONG:   long_prev = true; break;
+	case T_FLOAT:  st.print("F");    break;
+	case T_DOUBLE: st.print("D");    break;
+	case T_VOID:   break;
+	default: ShouldNotReachHere();
       }
     }
-    if (long_prev) {
-      st.print("L");
-    }
-    return st.as_string();
   }
+  if (long_prev) {
+    st.print("L");
+  }
+  return st.as_string();
+}
 #endif // !product
 
-  bool equals(AdapterFingerPrint* other) {
-    if (other->_length != _length) {
-      return false;
-    }
-    if (_length < 0) {
-      assert(_compact_int_count == 3, "else change next line");
-      return _value._compact[0] == other->_value._compact[0] &&
-             _value._compact[1] == other->_value._compact[1] &&
-             _value._compact[2] == other->_value._compact[2];
-    } else {
-      for (int i = 0; i < _length; i++) {
-        if (_value._fingerprint[i] != other->_value._fingerprint[i]) {
-          return false;
-        }
+bool AdapterFingerPrint::equals(AdapterFingerPrint* other) {
+  if (other->_length != _length) {
+    return false;
+  }
+  if (_length < 0) {
+    assert(_compact_int_count == 3, "else change next line");
+    return _value._compact[0] == other->_value._compact[0] &&
+	   _value._compact[1] == other->_value._compact[1] &&
+	   _value._compact[2] == other->_value._compact[2];
+  } else {
+    for (int i = 0; i < _length; i++) {
+      if (_value._fingerprint[i] != other->_value._fingerprint[i]) {
+	return false;
       }
     }
-    return true;
   }
+  return true;
+}
 
-  static bool equals(AdapterFingerPrint* const& fp1, AdapterFingerPrint* const& fp2) {
-    NOT_PRODUCT(_equals++);
-    return fp1->equals(fp2);
-  }
+bool AdapterFingerPrint::equals(AdapterFingerPrint* const& fp1, AdapterFingerPrint* const& fp2) {
+  NOT_PRODUCT(_equals++);
+  return fp1->equals(fp2);
+}
 
-  static unsigned int compute_hash(AdapterFingerPrint* const& fp) {
-    return fp->compute_hash();
-  }
-};
-
-// A hashtable mapping from AdapterFingerPrints to AdapterHandlerEntries
-using AdapterHandlerTable = ResourceHashtable<AdapterFingerPrint*, AdapterHandlerEntry*, 293,
-                  AnyObj::C_HEAP, mtCode,
-                  AdapterFingerPrint::compute_hash,
-                  AdapterFingerPrint::equals>;
-static AdapterHandlerTable* _adapter_handler_table;
 
 // Find a entry with the same fingerprint if it exists
-static AdapterHandlerEntry* lookup(int total_args_passed, BasicType* sig_bt) {
+AdapterHandlerEntry* AdapterHandlerLibrary::lookup(int total_args_passed, BasicType* sig_bt) {
   NOT_PRODUCT(_lookups++);
   assert_lock_strong(AdapterHandlerLibrary_lock);
   AdapterFingerPrint fp(total_args_passed, sig_bt);
-  AdapterHandlerEntry** entry = _adapter_handler_table->get(&fp);
+  AdapterHandlerEntry** entry = AdapterHandlerLibrary::adapter_handler_table()->get(&fp);
   if (entry != nullptr) {
 #ifndef PRODUCT
     if (fp.is_compact()) _compact++;
+    _hits++;
+#endif
+    return *entry;
+  }
+  return nullptr;
+}
+
+// Find a entry with the same fingerprint if it exists
+AdapterHandlerEntry* AdapterHandlerLibrary::lookup(AdapterFingerPrint* fp) {
+  NOT_PRODUCT(_lookups++);
+  assert_lock_strong(AdapterHandlerLibrary_lock);
+  AdapterHandlerEntry** entry = _adapter_handler_table->get(fp);
+  if (entry != nullptr) {
+#ifndef PRODUCT
+    if (fp->is_compact()) _compact++;
     _hits++;
 #endif
     return *entry;
@@ -2458,14 +2449,18 @@ void AdapterHandlerLibrary::print_statistics_on(outputStream* st) {
 
 // ---------------------------------------------------------------------------
 // Implementation of AdapterHandlerLibrary
+AdapterHandlerTable* AdapterHandlerLibrary::_adapter_handler_table = nullptr;
 AdapterHandlerEntry* AdapterHandlerLibrary::_abstract_method_handler = nullptr;
 AdapterHandlerEntry* AdapterHandlerLibrary::_no_arg_handler = nullptr;
 AdapterHandlerEntry* AdapterHandlerLibrary::_int_arg_handler = nullptr;
 AdapterHandlerEntry* AdapterHandlerLibrary::_obj_arg_handler = nullptr;
 AdapterHandlerEntry* AdapterHandlerLibrary::_obj_int_arg_handler = nullptr;
 AdapterHandlerEntry* AdapterHandlerLibrary::_obj_obj_arg_handler = nullptr;
+
 const int AdapterHandlerLibrary_size = 16*K;
 BufferBlob* AdapterHandlerLibrary::_buffer = nullptr;
+size_t AdapterHandlerLibrary::_adapters_code_size = 0;
+GrowableArray<int> AdapterHandlerLibrary::_fingerprints;
 
 BufferBlob* AdapterHandlerLibrary::buffer_blob() {
   return _buffer;
@@ -2684,10 +2679,84 @@ AdapterHandlerEntry* AdapterHandlerLibrary::get_adapter(const methodHandle& meth
   return entry;
 }
 
+AdapterHandlerEntry* AdapterHandlerLibrary::get_adapter(AdapterFingerPrint* fp) {
+  ResourceMark rm;
+  AdapterBlob* new_adapter = nullptr;
+  AdapterHandlerEntry* entry = nullptr;
+
+  assert(fp != nullptr, "sanity check");
+
+  {
+    MutexLocker mu(AdapterHandlerLibrary_lock);
+    entry = lookup(fp);
+    if (entry != nullptr) {
+#ifdef ASSERT
+      if (VerifyAdapterSharing) {
+	AdapterBlob* comparison_blob = nullptr;
+	AdapterHandlerEntry* comparison_entry = create_adapter_from_fingerprint(comparison_blob, fp, false);
+	assert(comparison_blob == nullptr, "no blob should be created when creating an adapter for comparison");
+	assert(comparison_entry->compare_code(entry), "code must match");
+	// Release the one just created and return the original
+	delete comparison_entry;
+      }
+#endif
+      return entry;
+    }
+    entry = create_adapter_from_fingerprint(new_adapter, fp, true);
+  }
+  // Outside of the lock
+  if (new_adapter != nullptr) {
+    post_adapter_creation(new_adapter, entry);
+  }
+  return entry;
+}
+
+AdapterHandlerLibrary::create_adapters(Array<int>* fingerprints, int fp_count, size_t code_size) {
+  BufferBlob* aot_gen_buffer = BufferBlob::create("AOTGeneratedAdapters", code_size);
+  CodeBuffer code_buffer(buf);
+
+  AdapterArchiveData archive_data(fingerprints);
+
+  while (index < fingerprints->length()) {
+//  for (int index = 0; index < fingerprints->length(); index++) { 
+    int fp_length = fingerprints->at(index);
+    assert(fp_length != 0, "sanity check");
+    index += 1;
+    AdapterFingerPrint fingerprint(fp_length, fingerprints->adr_at(index));
+    index += fp_length;
+    int nargs = 0;
+    BasicType* sig_bt = fingerprint.as_basic_type(nargs);
+
+    VMRegPair stack_regs[16];
+    VMRegPair* regs = (total_args_passed <= 16) ? stack_regs : NEW_RESOURCE_ARRAY(VMRegPair, total_args_passed);
+
+    // Get a description of the compiled java calling convention and the largest used (VMReg) stack slot usage
+    int comp_args_on_stack = SharedRuntime::java_calling_convention(sig_bt, regs, total_args_passed);
+    MacroAssembler _masm(&code_buffer);
+    AdapterHandlerEntry* entry = SharedRuntime::generate_i2c2i_adapters(&_masm,
+						  nargs,
+						  comp_args_on_stack,
+						  sig_bt,
+						  regs,
+						  &fingerprint);
+    archive_data.add_entry_points(entry);
+  }
+}
+
+AdapterHandlerEntry* AdapterHandlerLibrary::create_adapter_from_fingerprint(AdapterBlob*& new_adapter,
+                                                                            AdapterFingerPrint* cached_fingerprint,
+                                                                           bool allocate_code_blob) {
+  assert(cached_fingerprint != nullptr, "sanity check");
+  int nargs = 0;
+  BasicType* sig_bt = cached_fingerprint->as_basic_type(nargs);
+  return create_adapter(new_adapter, nargs, sig_bt, allocate_code_blob, cached_fingerprint);
+}
+
 AdapterHandlerEntry* AdapterHandlerLibrary::create_adapter(AdapterBlob*& new_adapter,
                                                            int total_args_passed,
                                                            BasicType* sig_bt,
-                                                           bool allocate_code_blob) {
+                                                           bool allocate_code_blob,
+                                                           AdapterFingerPrint* cached_fingerprint) {
   if (log_is_enabled(Info, perf, class, link)) {
     ClassLoader::perf_method_adapters_count()->inc();
   }
@@ -2709,8 +2778,8 @@ AdapterHandlerEntry* AdapterHandlerLibrary::create_adapter(AdapterBlob*& new_ada
   buffer.insts()->initialize_shared_locs((relocInfo*)buffer_locs,
                                           sizeof(buffer_locs)/sizeof(relocInfo));
 
-  // Make a C heap allocated version of the fingerprint to store in the adapter
-  AdapterFingerPrint* fingerprint = new AdapterFingerPrint(total_args_passed, sig_bt);
+  // Make a C heap allocated version of the fingerprint to store in the adapter if the fingerprint is not passed
+  AdapterFingerPrint* fingerprint = cached_fingerprint != nullptr ? cached_fingerprint : new AdapterFingerPrint(total_args_passed, sig_bt);
   MacroAssembler _masm(&buffer);
   AdapterHandlerEntry* entry = SharedRuntime::generate_i2c2i_adapters(&_masm,
                                                 total_args_passed,
@@ -2762,8 +2831,18 @@ AdapterHandlerEntry* AdapterHandlerLibrary::create_adapter(AdapterBlob*& new_ada
   if (contains_all_checks || !VerifyAdapterCalls) {
     assert_lock_strong(AdapterHandlerLibrary_lock);
     _adapter_handler_table->put(fingerprint, entry);
+    _adapters_size += buffer.insts_size();
   }
   return entry;
+}
+
+uint AdapterHandlerLibrary::add_fingerprint(AdapterFingerPrint* fp) {
+  uint index = _fingerprints->length();
+  _fingerprints.append(fp->length());
+  for (int i = 0; i < fp->length(); i++) {
+    _fingerprints.append(fp->value(i));
+  }
+  return index;
 }
 
 address AdapterHandlerEntry::base_address() {
