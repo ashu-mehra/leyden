@@ -1991,7 +1991,6 @@ bool SCCReader::read_relocations(CodeBuffer* buffer, CodeBuffer* orig_buffer,
 
 bool SCCReader::read_code(CodeBuffer* buffer, CodeBuffer* orig_buffer, uint code_offset) {
   assert(code_offset == align_up(code_offset, DATA_ALIGNMENT), "%d not aligned to %d", code_offset, DATA_ALIGNMENT);
-  assert(buffer->blob() != nullptr, "sanity");
   SCCodeSection* scc_cs = (SCCodeSection*)addr(code_offset);
   for (int i = 0; i < (int)CodeBuffer::SECT_LIMIT; i++) {
     CodeSection* cs = buffer->code_section(i);
@@ -4173,7 +4172,11 @@ SCAddressTable::~SCAddressTable() {
   }
 }
 
+#ifdef PRODUCT
 #define MAX_STR_COUNT 200
+#else
+#define MAX_STR_COUNT 500
+#endif
 static const char* _C_strings[MAX_STR_COUNT] = {nullptr};
 static int _C_strings_count = 0;
 static int _C_strings_s[MAX_STR_COUNT] = {0};
