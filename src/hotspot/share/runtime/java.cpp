@@ -341,12 +341,13 @@ void print_statistics() {
   if (CITime) {
     CompileBroker::print_times();
   }
-
+  if (PrintSharedRuntimeStats) {
+    SharedRuntime::print_statistics();
+  }
 #ifdef COMPILER1
   if ((PrintC1Statistics || LogVMOutput || LogCompilation) && UseCompiler) {
     FlagSetting fs(DisplayVMOutput, DisplayVMOutput && PrintC1Statistics);
     Runtime1::print_statistics_on(tty);
-    SharedRuntime::print_statistics();
   }
 #endif /* COMPILER1 */
 
@@ -355,9 +356,6 @@ void print_statistics() {
     FlagSetting fs(DisplayVMOutput, DisplayVMOutput && PrintOptoStatistics);
     Compile::print_statistics();
     Deoptimization::print_statistics();
-#ifndef COMPILER1
-    SharedRuntime::print_statistics();
-#endif //COMPILER1
   }
 
   if (PrintLockStatistics) {
@@ -374,7 +372,6 @@ void print_statistics() {
   if ((TraceDeoptimization || LogVMOutput || LogCompilation) && UseCompiler) {
     FlagSetting fs(DisplayVMOutput, DisplayVMOutput && TraceDeoptimization);
     Deoptimization::print_statistics();
-    SharedRuntime::print_statistics();
   }
 #endif // COMPILER1
 #endif // INCLUDE_JVMCI

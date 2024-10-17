@@ -2027,6 +2027,9 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   product(bool, StressSecondarySupers, false, DIAGNOSTIC,                   \
           "Use a terrible hash function in order to generate many collisions.") \
+                                                                            \
+  product(bool, PrintSharedRuntimeStats, false, DIAGNOSTIC,                 \
+          "Print SharedRuntime statistics.")                                \
 
 
 // end of RUNTIME_FLAGS
