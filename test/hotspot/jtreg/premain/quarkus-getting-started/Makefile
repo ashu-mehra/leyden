@@ -32,7 +32,7 @@
 DEMO_NAME       = quarkus-getting-started
 DEMO_SRC        = getting-started/src/main/java/Main.java
 DEMO_JAR        = getting-started/target/getting-started-1.0.0-SNAPSHOT-runner.jar
-DEMO_CMDLINE    = -DautoQuit=true -Dquarkus.http.port=0 -jar ${DEMO_JAR}
+DEMO_CMDLINE    = -XX:+ArchiveAdapters -DautoQuit=true -Dquarkus.http.port=0 -jar ${DEMO_JAR}
 # This is for uploading into Artifactory, usually to a path like
 #    https://xxxx.com/artifactory/yyyy/io/quarkus/quarkus-getting-started/1.0.0b/quarkus-getting-started-1.0.0b.zip
 DEMO_ARTIFACT   = quarkus-getting-started-1.0.0b.zip
