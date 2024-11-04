@@ -780,6 +780,7 @@ class AdapterHandlerLibrary: public AllStatic {
                                                     BasicType* sig_bt);
   static AdapterHandlerEntry* get_simple_adapter(const methodHandle& method);
   static bool lookup_aot_cache(AdapterHandlerEntry* handler, CodeBuffer* buffer);
+  static bool lookup_aot_cache_v1(AdapterHandlerEntry* handler, AdapterBlob*& code_blob);
   static AdapterHandlerEntry* create_adapter(AdapterBlob*& new_adapter,
                                              AdapterFingerPrint* fingerprint,
                                              int total_args_passed,
@@ -816,6 +817,7 @@ class AdapterHandlerLibrary: public AllStatic {
   static bool is_abstract_method_adapter(AdapterHandlerEntry* adapter);
 
   static bool link_adapter_handler(AdapterHandlerEntry* handler, AdapterBlob*& adapter_blob) NOT_CDS_RETURN_(false);
+  static bool link_adapter_handler_v1(AdapterHandlerEntry* handler, AdapterBlob*& adapter_blob) NOT_CDS_RETURN_(false);
   static size_t estimate_size_for_archive() NOT_CDS_RETURN_(0);
   static void archive_adapter_table() NOT_CDS_RETURN;
   static void serialize_shared_table_header(SerializeClosure* soc) NOT_CDS_RETURN;

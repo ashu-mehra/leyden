@@ -2828,13 +2828,35 @@ bool AdapterHandlerLibrary::lookup_aot_cache(AdapterHandlerEntry* handler, CodeB
   const char* name = AdapterHandlerLibrary::name(handler->fingerprint());
   const uint32_t id = AdapterHandlerLibrary::id(handler->fingerprint());
   uint32_t offsets[4];
-  if (SCCache::load_adapter(buffer, id, name, offsets)) {
-    address i2c_entry = buffer->insts_begin();
-    assert(offsets[0] == 0, "sanity check");
-    handler->set_entry_points(i2c_entry, i2c_entry + offsets[1], i2c_entry + offsets[2], i2c_entry + offsets[3]);
-    return true;
+  if (!SCCache::load_adapter(buffer, id, name, offsets)) {
+    return false;
   }
-  return false;
+  address i2c_entry = buffer->insts_begin();
+  assert(offsets[0] == 0, "sanity check");
+  handler->set_entry_points(i2c_entry, i2c_entry + offsets[1], i2c_entry + offsets[2], i2c_entry + offsets[3]);
+  return true;
+}
+
+bool AdapterHandlerLibrary::lookup_aot_cache_v1(AdapterHandlerEntry* handler, AdapterBlob*& code_blob) {
+  ResourceMark rm;
+  const char* name = AdapterHandlerLibrary::name(handler->fingerprint());
+  const uint32_t id = AdapterHandlerLibrary::id(handler->fingerprint());
+  uint32_t offsets[4];
+
+  SCCEntry* entry = SCCache::lookup(SCCEntry::Kind::Adapter, id, name);
+  if (entry == nullptr) {
+    return false;
+  }
+
+  SCCodeBlob* scblob = SCCache::load_code_blob(entry);
+  code_blob = AdapterBlob::create(scblob);
+  if (!SCCache::load_adapter_v1(entry, code_blob, name, offsets)) {
+    return false;
+  }
+  address i2c_entry = code_blob->code_begin(); // should it be content_begin(), same as used by AdapterHandlerEntry::relocate()?
+  assert(offsets[0] == 0, "sanity check");
+  handler->set_entry_points(i2c_entry, i2c_entry + offsets[1], i2c_entry + offsets[2], i2c_entry + offsets[3]);
+  return true;
 }
 
 #ifndef PRODUCT
@@ -2883,7 +2905,7 @@ bool AdapterHandlerLibrary::generate_adapter_code(AdapterBlob*& adapter_blob,
                                          sig_bt,
                                          regs,
                                          handler);
-  if (CDSConfig::is_dumping_adapters()) {
+  if (CDSConfig::is_dumping_adapters() && !UseNewCode) {
     // try to save generated code
     const char* name = AdapterHandlerLibrary::name(handler->fingerprint());
     const uint32_t id = AdapterHandlerLibrary::id(handler->fingerprint());
@@ -2909,6 +2931,19 @@ bool AdapterHandlerLibrary::generate_adapter_code(AdapterBlob*& adapter_blob,
     // Ought to log this but compile log is only per compile thread
     // and we're some non descript Java thread.
     return false;
+  }
+  if (CDSConfig::is_dumping_adapters() && UseNewCode) {
+    // try to save generated code
+    const char* name = AdapterHandlerLibrary::name(handler->fingerprint());
+    const uint32_t id = AdapterHandlerLibrary::id(handler->fingerprint());
+    uint32_t offsets[4];
+    offsets[0] = 0;
+    offsets[1] = handler->get_c2i_entry() - handler->get_i2c_entry();
+    offsets[2] = handler->get_c2i_unverified_entry() - handler->get_i2c_entry();
+    offsets[3] = handler->get_c2i_no_clinit_check_entry() - handler->get_i2c_entry();
+    if (!SCCache::store_adapter_v1(adapter_blob, id, name, offsets)) {
+      log_warning(cds)("Failed to store Adapter (id=%x, name=%s) code in the AOT code cache", id, name);
+    }
   }
   handler->relocate(adapter_blob->content_begin());
 #ifndef PRODUCT
@@ -2958,6 +2993,24 @@ bool AdapterHandlerLibrary::link_adapter_handler(AdapterHandlerEntry* handler, A
     return false;
   }
   handler->relocate(adapter_blob->content_begin());
+#ifndef PRODUCT
+  // debugging support
+  if (PrintAdapterHandlers || PrintStubCode) {
+    print_adapter_handler_info(handler, adapter_blob);
+  }
+#endif
+  return true;
+}
+
+bool AdapterHandlerLibrary::link_adapter_handler_v1(AdapterHandlerEntry* handler, AdapterBlob*& adapter_blob) {
+#ifndef PRODUCT
+  if (TestAdapterLinkFailure) {
+    return false;
+  }
+#endif
+  if (!lookup_aot_cache_v1(handler, adapter_blob)) {
+    return false;
+  }
 #ifndef PRODUCT
   // debugging support
   if (PrintAdapterHandlers || PrintStubCode) {
@@ -3073,7 +3126,13 @@ void AdapterHandlerEntry::restore_unshareable_info(TRAPS) {
     AdapterHandlerEntry* entry = AdapterHandlerLibrary::lookup(_fingerprint);
     assert(entry == this, "sanity check");
 #endif
-    if (!AdapterHandlerLibrary::link_adapter_handler(this, adapter_blob)) {
+    bool rc = false;
+    if (UseNewCode) {
+      rc = AdapterHandlerLibrary::link_adapter_handler_v1(this, adapter_blob);
+    } else {
+      rc = AdapterHandlerLibrary::link_adapter_handler(this, adapter_blob);
+    }
+    if (!rc) {
       ResourceMark rm;
       log_warning(cds)("Failed to link AdapterHandlerEntry to its code in the AOT code cache");
       int nargs;

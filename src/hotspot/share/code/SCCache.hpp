@@ -33,6 +33,8 @@
  * In additoin special compiled code is generated with class initialization
  * barriers which can be called on first Java method invocation.
  */
+
+#include "code/codeBlob.hpp"
  
 class AbstractCompiler;
 class ciConstant;
@@ -165,6 +167,7 @@ private:
   uint   _code_size;   // Total size of all code sections
   uint   _reloc_offset;// Relocations
   uint   _reloc_size;  // Max size of relocations per code section
+  uint   _entry_point_offset; // Entry points in code
   uint   _num_inlined_bytecodes;
 
   uint   _comp_level;  // compilation level
@@ -182,6 +185,7 @@ public:
   SCCEntry(uint offset, uint size, uint name_offset, uint name_size,
            uint code_offset, uint code_size,
            uint reloc_offset, uint reloc_size,
+           uint entry_point_offsets,
            Kind kind, uint id, uint comp_level = 0,
            uint comp_id = 0, uint decomp = 0,
            bool has_clinit_barriers = false,
@@ -200,6 +204,7 @@ public:
     _code_size    = code_size;
     _reloc_offset = reloc_offset;
     _reloc_size   = reloc_size;
+    _entry_point_offset = entry_point_offsets;
     _num_inlined_bytecodes = 0;
 
     _comp_level   = comp_level;
@@ -236,6 +241,7 @@ public:
   uint code_size()    const { return _code_size; }
   uint reloc_offset() const { return _reloc_offset; }
   uint reloc_size()   const { return _reloc_size; }
+  uint entry_point_offset() const { return _entry_point_offset; }
   uint num_inlined_bytecodes() const { return _num_inlined_bytecodes; }
   void set_inlined_bytecodes(int bytes) { _num_inlined_bytecodes = bytes; }
 
@@ -255,6 +261,8 @@ public:
 
   bool load_fail()  const { return _load_fail; }
   void set_load_fail()    { _load_fail = true; }
+
+  SCCodeBlob* load_code_blob();
 
   void print(outputStream* st) const;
 };
@@ -331,6 +339,36 @@ enum class DataKind: int {
   MH_Oop_Shared = 11
 };
 
+// Store necessary CodeBlob information during dump time
+struct SCCodeBlob {
+ private:
+  int _size; // total size of CodeBlob in bytes
+  int _relocation_size; // size of relocation (could be bigger than 64Kb)
+  int _content_size;
+  int _code_offset; // offset to where instructions region begins (this includes insts, stubs)
+  int _stub_offset; // offset to where stubs begin
+  int _data_offset; // offset to where data region begins
+  int _header_size;
+  CodeBlobKind _kind;
+
+  address _dumptime_content_start_addr;
+  int _reloc_count;
+  uint _codeblob_data_offset;
+  uint _extra_reloc_offset;
+
+ public:
+  SCCodeBlob(CodeBlob* codeBlob);
+
+  int relocation_size() { return _relocation_size; }
+  int content_size() { return _content_size; }
+  int code_offset() { return _code_offset; }
+  address dumptime_content_start_addr() { return _dumptime_content_start_addr; }
+  int reloc_count() { return _reloc_count; }
+  uint codeblob_data_offset() { return _codeblob_data_offset; }
+  uint extra_reloc_offset() { return _extra_reloc_offset; }
+  void print_on(outputStream* st);
+};
+
 class SCCache;
 
 class SCCReader { // Concurent per compilation request
@@ -361,6 +399,7 @@ public:
   bool compile_blob(CodeBuffer* buffer, int* pc_offset);
 
   bool compile_adapter(CodeBuffer* buffer, const char* name, uint32_t offsets[4]);
+  bool compile_adapter_v1(CodeBlob* codeBlob, const char* name, uint32_t offsets[4]);
 
   Klass* read_klass(const methodHandle& comp_method, bool shared);
   Method* read_method(const methodHandle& comp_method, bool shared);
@@ -370,6 +409,9 @@ public:
   DebugInformationRecorder* read_debug_info(OopRecorder* oop_recorder);
   OopMapSet* read_oop_maps();
   bool read_dependencies(Dependencies* dependencies);
+
+  bool read_code_v1(CodeBlob* codeBlob, uint code_offset);
+  SCCodeBlob* read_code_blob();
 
   jobject read_oop(JavaThread* thread, const methodHandle& comp_method);
   Metadata* read_metadata(const methodHandle& comp_method);
@@ -475,6 +517,19 @@ public:
   bool failed() const { return _failed; }
   void set_failed()   { _failed = true; }
 
+  static const char* kind_to_name(SCCEntry::Kind kind) {
+    switch(kind) {
+      case SCCEntry::Adapter: return "Adapter";
+      case SCCEntry::Stub:    return "Stub";
+      case SCCEntry::Blob:    return "Blob";
+      case SCCEntry::Code:    return "Code";
+      default: ShouldNotReachHere();
+    }
+    return nullptr;
+  }
+
+  static SCCEntry* lookup(SCCEntry::Kind kind, uint32_t id, const char* name);
+
   uint load_size() const { return _load_size; }
   uint write_position() const { return _write_position; }
 
@@ -521,6 +576,9 @@ public:
   bool write_debug_info(DebugInformationRecorder* recorder);
   bool write_oop_maps(OopMapSet* oop_maps);
 
+  bool write_code_v1(CodeBlob* codeBlob, uint& code_size);
+  bool write_extra_relocations(CodeBlob* codeBlob);
+
   jobject read_oop(JavaThread* thread, const methodHandle& comp_method);
   Metadata* read_metadata(const methodHandle& comp_method);
   bool read_oops(OopRecorder* oop_recorder, ciMethod* target);
@@ -537,7 +595,12 @@ public:
   static bool load_adapter(CodeBuffer* buffer, uint32_t id, const char* basic_sig, uint32_t offsets[4]);
   static bool store_adapter(CodeBuffer* buffer, uint32_t id, const char* basic_sig, uint32_t offsets[4]);
 
+  static bool load_adapter_v1(SCCEntry* entry, CodeBlob* codeBlob, const char* name, uint32_t offsets[4]);
+  static bool store_adapter_v1(CodeBlob* codeBlob, uint32_t id, const char* name, uint32_t offsets[4]);
+
   static bool load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level);
+
+  static SCCodeBlob* load_code_blob(SCCEntry* entry);
 
   static SCCEntry* store_nmethod(const methodHandle& method,
                      int compile_id,

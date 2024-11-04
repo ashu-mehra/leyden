@@ -38,6 +38,7 @@ class ImmutableOopMap;
 class ImmutableOopMapSet;
 class JNIHandleBlock;
 class OopMapSet;
+class SCCodeBlob;
 
 // CodeBlob Types
 // Used in the CodeCache to assign CodeBlobs to different CodeHeaps
@@ -123,6 +124,7 @@ protected:
   CodeBlobKind _kind;              // Kind of this code blob
 
   bool _caller_must_gc_arguments;
+  int _reloc_count;
 
 #ifndef PRODUCT
   AsmRemarks _asm_remarks;
@@ -130,6 +132,9 @@ protected:
 #endif
 
   CodeBlob(const char* name, CodeBlobKind kind, CodeBuffer* cb, int size, uint16_t header_size,
+           int16_t frame_complete_offset, int frame_size, OopMapSet* oop_maps, bool caller_must_gc_arguments);
+
+  CodeBlob(const char* name, CodeBlobKind kind, SCCodeBlob* scblob, int size, uint16_t header_size,
            int16_t frame_complete_offset, int frame_size, OopMapSet* oop_maps, bool caller_must_gc_arguments);
 
   // Simple CodeBlob used for simple BufferBlob.
@@ -145,6 +150,7 @@ public:
 
   // Returns the space needed for CodeBlob
   static unsigned int allocation_size(CodeBuffer* cb, int header_size);
+  static unsigned int allocation_size(SCCodeBlob* scblob, int header_size);
   static unsigned int align_code_offset(int offset);
 
   // Deletion
@@ -162,6 +168,8 @@ public:
   bool is_vtable_blob() const                 { return _kind == CodeBlobKind::Vtable; }
   bool is_method_handles_adapter_blob() const { return _kind == CodeBlobKind::MH_Adapter; }
   bool is_upcall_stub() const                 { return _kind == CodeBlobKind::Upcall; }
+
+  CodeBlobKind kind() const { return _kind; }
 
   // Casting
   nmethod* as_nmethod_or_null()               { return is_nmethod() ? (nmethod*) this : nullptr; }
@@ -257,6 +265,9 @@ public:
   void use_remarks(AsmRemarks &remarks) { _asm_remarks.share(remarks); }
   void use_strings(DbgStrings &strings) { _dbg_strings.share(strings); }
 #endif
+
+  int compute_reloc_count();
+  int reloc_count() { return _reloc_count; }
 };
 
 //----------------------------------------------------------------------------------------------------
@@ -287,6 +298,18 @@ class RuntimeBlob : public CodeBlob {
     bool        caller_must_gc_arguments = false
   );
 
+  RuntimeBlob(
+    const char* name,
+    CodeBlobKind kind,
+    SCCodeBlob* scblob,
+    int         size,
+    uint16_t    header_size,
+    int16_t     frame_complete,
+    int         frame_size,
+    OopMapSet*  oop_maps,
+    bool        caller_must_gc_arguments = false
+  );
+
   static void free(RuntimeBlob* blob);
 
   // Deal with Disassembler, VTune, Forte, JvmtiExport, MemoryService.
@@ -309,6 +332,7 @@ class BufferBlob: public RuntimeBlob {
   // Creation support
   BufferBlob(const char* name, CodeBlobKind kind, int size);
   BufferBlob(const char* name, CodeBlobKind kind, CodeBuffer* cb, int size);
+  BufferBlob(const char* name, CodeBlobKind kind, SCCodeBlob* scblob, int size);
 
   void* operator new(size_t s, unsigned size) throw();
 
@@ -333,10 +357,12 @@ class BufferBlob: public RuntimeBlob {
 class AdapterBlob: public BufferBlob {
 private:
   AdapterBlob(int size, CodeBuffer* cb);
+  AdapterBlob(int size, SCCodeBlob* scblob);
 
 public:
   // Creation
   static AdapterBlob* create(CodeBuffer* cb);
+  static AdapterBlob* create(SCCodeBlob* scblob);
 };
 
 //---------------------------------------------------------------------------------------------------
