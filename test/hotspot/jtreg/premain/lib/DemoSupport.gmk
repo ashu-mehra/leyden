@@ -157,7 +157,7 @@ ${DEMO_CDS}: ${DEMO_JAR}
 	rm -f ${DEMO_CDS} ${DEMO_CDS}.log
 	${PREMAIN_JAVA} \
 	    -XX:CacheDataStore=${DEMO_CDS} -XX:CachedCodeMaxSize=512M \
-	    -Xlog:scc,cds=debug,cds+class=debug,cds+heap=warning,cds+resolve=debug:file=${DEMO_CDS}.log::filesize=0 \
+	    -Xlog:scc*=info:file=${DEMO_CDS}.log::filesize=0 \
 	     ${DEMO_CMDLINE}
 	ls -l ${DEMO_CDS}
 	ls -l ${DEMO_CDS}.code

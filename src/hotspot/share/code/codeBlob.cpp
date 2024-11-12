@@ -75,6 +75,18 @@ unsigned int CodeBlob::allocation_size(CodeBuffer* cb, int header_size) {
 }
 
 // This must be consistent with the CodeBlob constructor's layout actions.
+unsigned int CodeBlob::allocation_size(SCnmethod* scnm, int header_size) {
+  unsigned int size = header_size;
+  size += align_up(scnm->relocation_size(), oopSize);
+  // align the size to CodeEntryAlignment
+  size = align_code_offset(size);
+  size += align_up(scnm->content_size(), oopSize);
+  size += align_up(scnm->oops_count() * sizeof(oop*), oopSize);
+  size += align_up(scnm->metadata_count() * sizeof(Metadata*), oopSize);
+  return size;
+}
+
+// This must be consistent with the CodeBlob constructor's layout actions.
 unsigned int CodeBlob::allocation_size(SCCodeBlob* scblob, int header_size) {
   unsigned int size = header_size;
   size += align_up(scblob->relocation_size(), oopSize);
@@ -112,6 +124,32 @@ CodeBlob::CodeBlob(const char* name, CodeBlobKind kind, CodeBuffer* cb, int size
 #endif // COMPILER1
 
   set_oop_maps(oop_maps);
+}
+
+CodeBlob::CodeBlob(const char* name, CodeBlobKind kind, SCnmethod* scnm, int size, uint16_t header_size) :
+  _oop_maps(nullptr), // will be set later when oop maps are read from AOT code cache
+  _name(name),
+  _size(size),
+  _relocation_size(align_up(scnm->relocation_size(), oopSize)),
+  _content_offset(CodeBlob::align_code_offset(header_size + _relocation_size)),
+  _code_offset(_content_offset + scnm->code_offset()),
+  _data_offset(_content_offset + scnm->content_size()),
+  _frame_size(scnm->frame_size()),
+  _header_size(header_size),
+  _frame_complete_offset(scnm->frame_complete_offset()),
+  _kind(kind),
+  _caller_must_gc_arguments(false),
+  _reloc_count(0)
+{
+  assert(is_aligned(_size,            oopSize), "unaligned size");
+  assert(is_aligned(header_size,      oopSize), "unaligned size");
+  assert(is_aligned(_relocation_size, oopSize), "unaligned size");
+  assert(_data_offset <= _size, "codeBlob is too small: %d > %d", _data_offset, _size);
+  assert(code_end() == content_end(), "must be the same - see code_end()");
+#ifdef COMPILER1
+  // probably wrong for tiered
+  assert(_frame_size > -1, "must use frame size");
+#endif // COMPILER1
 }
 
 CodeBlob::CodeBlob(const char* name, CodeBlobKind kind, SCCodeBlob* scblob, int size, uint16_t header_size,
@@ -161,7 +199,7 @@ CodeBlob::CodeBlob(const char* name, CodeBlobKind kind, int size, uint16_t heade
 }
 
 void CodeBlob::purge() {
-  if (_oop_maps != nullptr) {
+  if (_oop_maps != nullptr && !SCCache::is_address_in_aot_cache((address)_oop_maps)) {
     delete _oop_maps;
     _oop_maps = nullptr;
   }
@@ -189,13 +227,12 @@ void CodeBlob::print_code_on(outputStream* st) {
   Disassembler::decode(this, st);
 }
 
-int CodeBlob::compute_reloc_count() {
-  int reloc_count = 0;
+void CodeBlob::compute_reloc_count() {
+  _reloc_count = 0;
   RelocIterator iter(this);
   while (iter.next()) {
-    reloc_count += 1;
+    _reloc_count += 1;
   }
-  return reloc_count;
 }
 
 //-----------------------------------------------------------------------------------------
@@ -214,7 +251,7 @@ RuntimeBlob::RuntimeBlob(
   : CodeBlob(name, kind, cb, size, header_size, frame_complete, frame_size, oop_maps, caller_must_gc_arguments)
 {
   cb->copy_code_and_locs_to(this);
-  _reloc_count = compute_reloc_count();
+  compute_reloc_count();
 }
 
 //-----------------------------------------------------------------------------------------

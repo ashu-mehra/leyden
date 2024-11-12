@@ -39,6 +39,7 @@ class ImmutableOopMapSet;
 class JNIHandleBlock;
 class OopMapSet;
 class SCCodeBlob;
+class SCnmethod;
 
 // CodeBlob Types
 // Used in the CodeCache to assign CodeBlobs to different CodeHeaps
@@ -134,6 +135,8 @@ protected:
   CodeBlob(const char* name, CodeBlobKind kind, CodeBuffer* cb, int size, uint16_t header_size,
            int16_t frame_complete_offset, int frame_size, OopMapSet* oop_maps, bool caller_must_gc_arguments);
 
+  CodeBlob(const char* name, CodeBlobKind kind, SCnmethod* scnmethod, int size, uint16_t header_size);
+
   CodeBlob(const char* name, CodeBlobKind kind, SCCodeBlob* scblob, int size, uint16_t header_size,
            int16_t frame_complete_offset, int frame_size, OopMapSet* oop_maps, bool caller_must_gc_arguments);
 
@@ -150,6 +153,7 @@ public:
 
   // Returns the space needed for CodeBlob
   static unsigned int allocation_size(CodeBuffer* cb, int header_size);
+  static unsigned int allocation_size(SCnmethod* scnm, int header_size);
   static unsigned int allocation_size(SCCodeBlob* scblob, int header_size);
   static unsigned int align_code_offset(int offset);
 
@@ -226,6 +230,7 @@ public:
   // OopMap for frame
   ImmutableOopMapSet* oop_maps() const           { return _oop_maps; }
   void set_oop_maps(OopMapSet* p);
+  void set_oop_maps(ImmutableOopMapSet* p)       { _oop_maps = p; }
 
   const ImmutableOopMap* oop_map_for_slot(int slot, address return_address) const;
   const ImmutableOopMap* oop_map_for_return_address(address return_address) const;
@@ -266,7 +271,7 @@ public:
   void use_strings(DbgStrings &strings) { _dbg_strings.share(strings); }
 #endif
 
-  int compute_reloc_count();
+  void compute_reloc_count();
   int reloc_count() { return _reloc_count; }
 };
 

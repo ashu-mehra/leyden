@@ -2600,7 +2600,9 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
         whitebox_lock_compilation();
       }
       if (StoreCachedCode && task->is_precompiled()) {
-        install_code = false; // not suitable in the current context
+        if (!UseNewCode2) {
+          install_code = false; // not suitable in the current context
+        }
       }
       comp->compile_method(&ci_env, target, osr_bci, install_code, directive);
 
