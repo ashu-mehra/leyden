@@ -482,7 +482,7 @@ void SCCache::new_workflow_start_writing_cache() {
 
   CDSAccess::set_pointer(&dir->_some_klass, vmClasses::String_klass());
 
-  size_t n = 120;
+  size_t n = 0xff;
   void* d = (void*)CDSAccess::allocate_from_code_cache(n);
   CDSAccess::set_pointer(&dir->_my_data, d);
 }
