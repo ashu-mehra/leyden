@@ -1293,7 +1293,7 @@ nmethod* nmethod::new_nmethod(const methodHandle& method,
       LogStream out(log);
       out.print_cr("== new_nmethod 2");
       FlagSetting fs(PrintRelocations, true);
-      nm->print(&out);
+      nm->print_on_impl(&out);
       nm->decode(&out);
     }
 #endif
@@ -1334,6 +1334,14 @@ nmethod::nmethod(Method* method,
   _verified_entry_offset = scnm->verified_entry_offset();
   _entry_bci = entry_bci;
 
+  _mutable_data_size = scnm->mutable_data_size();
+  if (_mutable_data_size > 0) {
+    _mutable_data = (address)os::malloc(_mutable_data_size, mtCode);
+    if (_mutable_data == nullptr) {
+      vm_exit_out_of_memory(_mutable_data_size, OOM_MALLOC_ERROR, "codebuffer: no space for mutable data");
+    }
+  }
+
   _immutable_data_size = scnm->immutable_data_size();
   _skipped_instructions_size = scnm->skipped_instructions_size();
   _stub_offset = content_offset() + scnm->stub_offset();
@@ -1344,9 +1352,8 @@ nmethod::nmethod(Method* method,
 
   _num_stack_arg_slots = entry_bci != InvocationEntryBci ? 0 : _method->constMethod()->num_stack_arg_slots();
 
-  _metadata_offset = scnm->metadata_offset();
 #if INCLUDE_JVMCI
-  _jvmci_data_offset = scnm->jvmci_data_offset();
+  _jvmci_data_size = scnm->jvmci_data_size();
 #endif
 
   _nul_chk_table_offset = scnm->nul_chk_table_offset();

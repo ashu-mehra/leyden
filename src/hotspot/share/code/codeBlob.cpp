@@ -119,13 +119,10 @@ unsigned int CodeBlob::allocation_size(CodeBuffer* cb, int header_size) {
 
 // This must be consistent with the CodeBlob constructor's layout actions.
 unsigned int CodeBlob::allocation_size(SCnmethod* scnm, int header_size) {
-  unsigned int size = header_size;
-  size += align_up(scnm->relocation_size(), oopSize);
   // align the size to CodeEntryAlignment
-  size = align_code_offset(size);
+  unsigned int size = align_code_offset(header_size);
   size += align_up(scnm->content_size(), oopSize);
   size += align_up(scnm->oops_count() * sizeof(oop*), oopSize);
-  size += align_up(scnm->metadata_count() * sizeof(Metadata*), oopSize);
   return size;
 }
 
@@ -174,7 +171,7 @@ CodeBlob::CodeBlob(const char* name, CodeBlobKind kind, SCnmethod* scnm, int siz
   _name(name),
   _size(size),
   _relocation_size(align_up(scnm->relocation_size(), oopSize)),
-  _content_offset(CodeBlob::align_code_offset(header_size + _relocation_size)),
+  _content_offset(CodeBlob::align_code_offset(header_size)),
   _code_offset(_content_offset + scnm->code_offset()),
   _data_offset(_content_offset + scnm->content_size()),
   _frame_size(scnm->frame_size()),
@@ -216,7 +213,7 @@ CodeBlob::CodeBlob(const char* name, CodeBlobKind kind, int size, uint16_t heade
 }
 
 void CodeBlob::purge() {
-  if (_mutable_data != nullptr && !SCCache::is_address_in_aot_cache((address)_mutable_data)) {
+  if (_mutable_data != nullptr) {
     os::free(_mutable_data);
     _mutable_data = nullptr;
   }

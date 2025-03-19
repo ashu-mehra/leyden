@@ -367,12 +367,11 @@ struct SCnmethod {
   int _consts_offset; // offset in content region where constants region begins
   int _code_offset; // offset in content region where instructions region begins (this includes insts, stubs)
   int _stub_offset; // offset in content region where stubs begin
-
+  int _mutable_data_size;
   int _oops_count;
-  int _metadata_offset; // offset in data region where metadata begins
   int _metadata_count;
 #if INCLUDE_JVMCI
-  int _jvmci_data_offset;
+  int _jvmci_data_size;
 #endif
 
   // Misc data from CodeBlob
@@ -436,9 +435,8 @@ struct SCnmethod {
   int content_size() const { return _content_size; }
   int code_offset() const { return _code_offset; }
   int stub_offset() const { return _stub_offset; }
-  int metadata_offset() const { return _metadata_offset; }
 #if INCLUDE_JVMCI
-  int jvmci_data_offset() const { return _jvmci_data_offset; }
+  int jvmci_data_size() const { return _jvmci_data_size; }
 #endif
   int oops_count() const { return _oops_count; }
   int metadata_count() const { return _metadata_count; }
@@ -462,6 +460,7 @@ struct SCnmethod {
   int deopt_mh_handler_offset() const { return _deopt_mh_handler_offset; }
   int16_t unwind_handler_offset() const { return _unwind_handler_offset; }
 
+  int mutable_data_size() const { return _mutable_data_size; }
   int immutable_data_size() const { return _immutable_data_size; }
   int dependencies_size() const { return _dependencies_size; }
   int nul_chk_table_offset() const { return _nul_chk_table_offset; }

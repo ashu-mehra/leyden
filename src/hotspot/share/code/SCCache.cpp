@@ -789,8 +789,8 @@ address SCCache::reserve_bytes(uint nbytes) {
   assert(for_write(), "Code Cache file is not created");
   uint new_position = _write_position + nbytes;
   if (new_position >= (uint)((char*)_store_entries - _store_buffer)) {
-    log_warning(scc)("Failed to ensure %d bytes at offset %d to Startup Code Cache file '%s'. Increase CachedCodeMaxSize.",
-                     nbytes, _write_position, _cache_path);
+    log_warning(scc)("Failed to reserve %d bytes at offset %d in AOT Code Cache. Increase CachedCodeMaxSize.",
+                     nbytes, _write_position);
     set_failed();
     exit_vm_on_store_failure();
     return nullptr;
@@ -3807,13 +3807,13 @@ void SCnmethod::init_nmethod_data(nmethod* nm) {
   // "code" holds insts and stubs
   _code_offset = nm->code_begin() - nm->content_begin();
   _stub_offset = nm->stub_begin() - nm->content_begin();
+  _mutable_data_size = nm->mutable_data_size();
   // "data" holds oops and metadata
   _oops_count = nm->oops_end() - nm->oops_begin();
-  _metadata_offset= (address)nm->metadata_begin() - nm->data_begin();
   _metadata_count = nm->metadata_end() - nm->metadata_begin();
 #if INCLUDE_JVMCI
   assert(nm->jvmci_data_size() == 0, "JVMCI compile is not supported");
-  _jvmci_data_offset = nm->jvmci_data_begin() - nm->data_begin();
+  _jvmci_data_size= nm->jvmci_data_size();
 #endif
   // other CodeBlob data
   _frame_complete_offset = nm->frame_complete_offset();
@@ -3923,10 +3923,10 @@ SCCEntry* SCCache::write_nmethod_v1(nmethod* nm, int dependencies_size, bool for
   {
     ResourceMark rm;
     const char* name = method->name_and_sig_as_C_string();
-    log_info(scc, nmethod)("%d (L%d): Writing nmethod '%s' (comp level: %d, decomp: %d%s%s) to Startup Code Cache '%s'",
+    log_info(scc, nmethod)("%d (L%d): Writing nmethod '%s' (comp level: %d, decomp: %d%s%s) to AOT Code Cache",
                            comp_id, (int)comp_level, name, comp_level, decomp,
                            (ignore_decompile ? ", ignore_decomp" : ""),
-                           (nm->has_clinit_barriers() ? ", has clinit barriers" : ""), _cache_path);
+                           (nm->has_clinit_barriers() ? ", has clinit barriers" : ""));
 
     LogStreamHandle(Info, scc, loader) log;
     if (log.is_enabled()) {
@@ -4051,8 +4051,8 @@ SCCEntry* SCCache::write_nmethod_v1(nmethod* nm, int dependencies_size, bool for
   {
     ResourceMark rm;
     const char* name = nm->method()->name_and_sig_as_C_string();
-    log_info(scc, nmethod)("%d (L%d): Wrote nmethod '%s'%s to Startup Code Cache '%s'",
-                           comp_id, (int)comp_level, name, (for_preload ? " (for preload)" : ""), _cache_path);
+    log_info(scc, nmethod)("%d (L%d): Wrote nmethod '%s'%s to AOT Code Cache",
+                           comp_id, (int)comp_level, name, (for_preload ? " (for preload)" : ""));
   }
   if (VerifyCachedCode) {
     return nullptr;
@@ -4304,7 +4304,7 @@ void SCCache::print_unused_entries_on(outputStream* st) {
   LogStreamHandle(Info, scc, init) info;
   if (info.is_enabled()) {
     SCCache::iterate([&](SCCEntry* entry) {
-      if (!entry->is_loaded()) {
+      if (entry->is_code() && !entry->is_loaded()) {
         MethodTrainingData* mtd = MethodTrainingData::find(methodHandle(Thread::current(), entry->method()));
         if (mtd != nullptr) {
           if (mtd->has_holder()) {
