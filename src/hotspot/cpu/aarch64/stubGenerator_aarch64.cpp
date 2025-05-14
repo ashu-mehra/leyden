@@ -7285,9 +7285,6 @@ class StubGenerator: public StubCodeGenerator {
 
     address start = __ pc();
  
-    if (AOTCodeCache::load_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start)) {
-      return start;
-    }
     const Register x     = r0;
     const Register xlen  = r1;
     const Register y     = r2;
@@ -7309,7 +7306,6 @@ class StubGenerator: public StubCodeGenerator {
     __ leave(); // required for proper stackwalking of RuntimeStub frame
     __ ret(lr);
 
-    AOTCodeCache::store_stub(this, vmIntrinsics::_multiplyToLen, "multiplyToLen", start);
     return start;
   }
 
@@ -7322,9 +7318,6 @@ class StubGenerator: public StubCodeGenerator {
     StubCodeMark mark(this, stub_id);
     address start = __ pc();
 
-    if (AOTCodeCache::load_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start)) {
-      return start;
-    }
     const Register x     = r0;
     const Register xlen  = r1;
     const Register z     = r2;
@@ -7351,7 +7344,6 @@ class StubGenerator: public StubCodeGenerator {
     __ leave();
     __ ret(lr);
 
-    AOTCodeCache::store_stub(this, vmIntrinsics::_squareToLen, "squareToLen", start);
     return start;
   }
 
@@ -7362,9 +7354,6 @@ class StubGenerator: public StubCodeGenerator {
 
     address start = __ pc();
 
-    if (AOTCodeCache::load_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start)) {
-      return start;
-    }
     const Register out     = r0;
     const Register in      = r1;
     const Register offset  = r2;
@@ -7377,7 +7366,6 @@ class StubGenerator: public StubCodeGenerator {
     __ leave();
     __ ret(lr);
 
-    AOTCodeCache::store_stub(this, vmIntrinsics::_mulAdd, "mulAdd", start);
     return start;
   }
 

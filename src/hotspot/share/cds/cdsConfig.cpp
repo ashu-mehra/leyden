@@ -1183,10 +1183,6 @@ void CDSConfig::enable_dumping_aot_code() {
   _is_dumping_aot_code = true;
 }
 
-bool CDSConfig::is_dumping_adapters() {
-  return (AOTAdapterCaching && is_dumping_final_static_archive());
-}
-
 bool CDSConfig::is_experimental_leyden_workflow() {
   return CacheDataStore != nullptr || CDSPreimage != nullptr;
 }
