@@ -697,7 +697,7 @@ public:
 
   ImmutableOopMapSet* read_oop_map_set();
 
-  void fix_relocations(CodeBlob* code_blob);
+  void fix_relocations(CodeBlob* code_blob, GrowableArray<Handle>* oop_list, GrowableArray<Metadata*>* metadata_list) NOT_CDS_RETURN;
 
   void print_on(outputStream* st);
 };
