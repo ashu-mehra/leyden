@@ -64,7 +64,8 @@
           range(2, 246)                                                     \
                                                                             \
   product(bool, AllowArchivingWithJavaAgent, false, DIAGNOSTIC,             \
-          "Allow Java agent to be run with CDS dumping")                    \
+          "Allow Java agent to be run with CDS dumping (not applicable"     \
+          " to AOT")                                                        \
                                                                             \
   develop(ccstr, ArchiveHeapTestClass, nullptr,                             \
           "For JVM internal testing only. The static field named "          \
@@ -112,9 +113,11 @@
           "The configuration file written by -XX:AOTMode=record, and "      \
           "loaded by -XX:AOTMode=create. This file contains profiling data "\
           "for deciding what contents should be added to AOTCache. ")       \
+          constraint(AOTConfigurationConstraintFunc, AtParse)               \
                                                                             \
   product(ccstr, AOTCache, nullptr,                                         \
           "Cache for improving start up and warm up")                       \
+          constraint(AOTCacheConstraintFunc, AtParse)                       \
                                                                             \
   product(ccstr, AOTCacheOutput, nullptr,                                   \
           "Write AOT cache into this file (overrides AOTCache when "        \

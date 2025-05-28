@@ -477,7 +477,6 @@ CompileTask* CompileQueue::get(CompilerThread* thread) {
   // save methods from RedefineClasses across safepoint
   // across compile queue lock below.
   methodHandle save_method;
-  methodHandle save_hot_method;
 
   MonitorLocker locker(_lock);
   transfer_pending();
@@ -556,7 +555,6 @@ CompileTask* CompileQueue::get(CompilerThread* thread) {
     // the compilation queue, which is walked during RedefineClasses.
     Thread* thread = Thread::current();
     save_method = methodHandle(thread, task->method());
-    save_hot_method = methodHandle(thread, task->hot_method());
 
     remove(task);
   }
@@ -1386,13 +1384,8 @@ void CompileBroker::compile_method_base(const methodHandle& method,
       tty->print(" osr_bci: %d", osr_bci);
     }
     tty->print(" level: %d comment: %s count: %d", comp_level, CompileTask::reason_name(compile_reason), hot_count);
-    if (!hot_method.is_null()) {
-      tty->print(" hot: ");
-      if (hot_method() != method()) {
-          hot_method->print_short_name(tty);
-      } else {
-        tty->print("yes");
-      }
+    if (hot_count > 0) {
+      tty->print(" hot: yes");
     }
     tty->cr();
   }

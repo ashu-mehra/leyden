@@ -280,7 +280,7 @@ private:
   static KlassSubGraphInfo* _dump_time_special_subgraph;              // for collecting info during dump time
   static ArchivedKlassSubGraphInfoRecord* _run_time_special_subgraph; // for initializing classes during run time.
 
-  static GrowableArrayCHeap<OopHandle, mtClassShared>* _pending_roots;
+  static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots;
   static GrowableArrayCHeap<OopHandle, mtClassShared>* _root_segments;
   static GrowableArrayCHeap<const char*, mtClassShared>* _context; // for debugging unarchivable objects
   static int _root_segment_max_size_elems;
@@ -416,7 +416,7 @@ private:
   // Dump-time only. Returns the index of the root, which can be used at run time to read
   // the root using get_root(index, ...).
   static int append_root(oop obj);
-  static GrowableArrayCHeap<OopHandle, mtClassShared>* pending_roots() { return _pending_roots; }
+  static GrowableArrayCHeap<oop, mtClassShared>* pending_roots() { return _pending_roots; }
 
   // Dump-time and runtime
   static objArrayOop root_segment(int segment_idx);

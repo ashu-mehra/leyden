@@ -34,18 +34,6 @@
  * @run driver EndTrainingWithAOTCacheMXBean AOT
  */
 
-/*
- * @test id=leyden
- * @requires vm.cds.supports.aot.class.linking
- * @comment work around JDK-8345635
- * @requires !vm.jvmci.enabled
- * @library /test/jdk/lib/testlibrary /test/lib
- * @modules jdk.management
- * @build EndTrainingWithAOTCacheMXBean
- * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar MyTestApp ShouldBeCached ShouldNotBeCached
- * @run driver EndTrainingWithAOTCacheMXBean LEYDEN
- */
-
 import jdk.test.lib.cds.CDSAppTester;
 import jdk.test.lib.helpers.ClassFileInstaller;
 import jdk.test.lib.process.OutputAnalyzer;
@@ -74,7 +62,7 @@ public class EndTrainingWithAOTCacheMXBean {
 
         public String[] vmArgs(RunMode runMode) {
             return new String[] {
-                "-Xlog:cds+class=debug",
+                "-Xlog:aot+class=debug",
                 "--add-modules=jdk.management"
             };
         }
@@ -120,8 +108,8 @@ public class EndTrainingWithAOTCacheMXBean {
                 out.shouldNotContain("Failed to stop recording");
             }
             if (isDumping(runMode)) {
-                out.shouldMatch("cds,class.* ShouldBeCached");
-                out.shouldNotMatch("cds,class.* ShouldNotBeCached");
+                out.shouldMatch("aot,class.* ShouldBeCached");
+                out.shouldNotMatch("aot,class.* ShouldNotBeCached");
             }
         }
     }

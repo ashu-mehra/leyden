@@ -3298,7 +3298,7 @@ void MacroAssembler::wrap_add_sub_imm_insn(Register Rd, Register Rn, uint64_t im
   if (fits) {
     (this->*insn1)(Rd, Rn, imm);
   } else {
-    if (uabs(imm) < (1 << 24)) {
+    if (g_uabs(imm) < (1 << 24)) {
        (this->*insn1)(Rd, Rn, imm & -(1 << 12));
        (this->*insn1)(Rd, Rd, imm & ((1 << 12)-1));
     } else {
@@ -5370,7 +5370,7 @@ void MacroAssembler::encode_klass_not_null_for_aot(Register dst, Register src) {
   // we have to load the klass base from the AOT constants area but
   // not the shift because it is not allowed to change
   int shift = CompressedKlassPointers::shift();
-  assert(shift >= 0 && shift < 4, "unexpected compressd klass shift!");
+  assert(shift >= 0 && shift <= CompressedKlassPointers::max_shift(), "unexpected compressed klass shift!");
   if (dst != src) {
     // we can load the base into dst, subtract it formthe src and shift down
     lea(dst, ExternalAddress(CompressedKlassPointers::base_addr()));
@@ -5436,7 +5436,7 @@ void MacroAssembler::decode_klass_not_null_for_aot(Register dst, Register src) {
   // we have to load the klass base from the AOT constants area but
   // not the shift because it is not allowed to change
   int shift = CompressedKlassPointers::shift();
-  assert(shift >= 0 && shift < 4, "unexpected compressd klass shift!");
+  assert(shift >= 0 && shift <= CompressedKlassPointers::max_shift(), "unexpected compressed klass shift!");
   if (dst != src) {
     // we can load the base into dst then add the offset with a suitable shift
     lea(dst, ExternalAddress(CompressedKlassPointers::base_addr()));

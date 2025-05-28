@@ -68,13 +68,10 @@ void CompileTask::free(CompileTask* task) {
   MonitorLocker locker(CompileTaskAlloc_lock);
   if (!task->is_free()) {
     assert(!task->lock()->is_locked(), "Should not be locked when freed");
-    if ((task->_method_holder != nullptr && JNIHandles::is_weak_global_handle(task->_method_holder)) ||
-        (task->_hot_method_holder != nullptr && JNIHandles::is_weak_global_handle(task->_hot_method_holder))) {
+    if ((task->_method_holder != nullptr && JNIHandles::is_weak_global_handle(task->_method_holder))) {
       JNIHandles::destroy_weak_global(task->_method_holder);
-      JNIHandles::destroy_weak_global(task->_hot_method_holder);
     } else {
       JNIHandles::destroy_global(task->_method_holder);
-      JNIHandles::destroy_global(task->_hot_method_holder);
     }
     if (task->_failure_reason_on_C_heap && task->_failure_reason != nullptr) {
       os::free((void*) task->_failure_reason);
@@ -165,18 +162,6 @@ void CompileTask::initialize(int compile_id,
   JVMCI_ONLY(_blocking_jvmci_compile_state = nullptr;)
   _arena_bytes = 0;
 
-  if (LogCompilation) {
-    if (hot_method.not_null()) {
-      if (hot_method == method) {
-        _hot_method = _method;
-      } else {
-        _hot_method = hot_method();
-        // only add loader or mirror if different from _method_holder
-        _hot_method_holder = JNIHandles::make_weak_global(Handle(thread, hot_method->method_holder()->klass_holder()));
-      }
-    }
-  }
-
   _next = nullptr;
 }
 
@@ -201,11 +186,7 @@ CompileTask* CompileTask::select_for_compilation() {
   assert(_method->method_holder()->is_loader_alive(), "should be alive");
   Handle method_holder(thread, _method->method_holder()->klass_holder());
   JNIHandles::destroy_weak_global(_method_holder);
-  JNIHandles::destroy_weak_global(_hot_method_holder);
   _method_holder = JNIHandles::make_global(method_holder);
-  if (_hot_method != nullptr) {
-    _hot_method_holder = JNIHandles::make_global(Handle(thread, _hot_method->method_holder()->klass_holder()));
-  }
   return this;
 }
 
@@ -215,9 +196,6 @@ void CompileTask::mark_on_stack() {
   }
   // Mark these methods as something redefine classes cannot remove.
   _method->set_on_stack(true);
-  if (_hot_method != nullptr) {
-    _hot_method->set_on_stack(true);
-  }
 }
 
 bool CompileTask::is_unloaded() const {
@@ -231,9 +209,6 @@ void CompileTask::metadata_do(MetadataClosure* f) {
     return;
   }
   f->do_metadata(method());
-  if (hot_method() != nullptr && hot_method() != method()) {
-    f->do_metadata(hot_method());
-  }
 }
 
 // ------------------------------------------------------------------
@@ -545,7 +520,7 @@ void CompileTask::print_inlining_inner_message(outputStream* st, InliningResult 
 }
 
 void CompileTask::print_ul(const char* msg){
-  LogTarget(Debug, jit, compilation) lt;
+  LogTarget(Info, jit, compilation) lt;
   if (lt.is_enabled()) {
     LogStream ls(lt);
     print(&ls, msg, /* short form */ true, /* cr */ true);
@@ -553,7 +528,7 @@ void CompileTask::print_ul(const char* msg){
 }
 
 void CompileTask::print_ul(const nmethod* nm, const char* msg) {
-  LogTarget(Debug, jit, compilation) lt;
+  LogTarget(Info, jit, compilation) lt;
   if (lt.is_enabled()) {
     LogStream ls(lt);
     print_impl(&ls, nm->method(), nm->compile_id(),
