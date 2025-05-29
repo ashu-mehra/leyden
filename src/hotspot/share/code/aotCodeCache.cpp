@@ -1768,48 +1768,12 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
 
 #ifndef PRODUCT
   // Write asm remarks
-  uint* count_ptr = (uint *)reserve_bytes(sizeof(uint));
-  if (count_ptr == nullptr) {
+  if (!cache->write_asm_remarks(*nm)) {
     return nullptr;
   }
-  uint count = 0;
-  bool result = nm->asm_remarks().iterate([&] (uint offset, const char* str) -> bool {
-    log_info(aot, codecache, nmethod)("asm remark offset=%d, str=%s", offset, str);
-    n = write_bytes(&offset, sizeof(uint));
-    if (n != sizeof(uint)) {
-      return false;
-    }
-    n = write_bytes(str, (uint)strlen(str) + 1);
-    if (n != strlen(str) + 1) {
-      return false;
-    }
-    count += 1;
-    return true;
-  });
-  if (!result) {
+  if (!cache->write_dbg_strings(*nm)) {
     return nullptr;
   }
-  *count_ptr = count;
-
-  // Write dbg strings
-  count_ptr = (uint *)reserve_bytes(sizeof(uint));
-  if (count_ptr == nullptr) {
-    return nullptr;
-  }
-  count = 0;
-  result = nm->dbg_strings().iterate([&] (const char* str) -> bool {
-    log_info(aot, codecache, nmethod)("dbg string[" INTPTR_FORMAT "]=%s", p2i(str), str);
-    n = write_bytes(str, (uint)strlen(str) + 1);
-    if (n != strlen(str) + 1) {
-      return false;
-    }
-    count += 1;
-    return true;
-  });
-  if (!result) {
-    return nullptr;
-  }
-  *count_ptr = count;
 #endif /* PRODUCT */
 
   uint reloc_data_size = nm->relocation_size();
@@ -1955,30 +1919,10 @@ bool AOTCodeReader::compile_nmethod(ciEnv* env, ciMethod* target, AbstractCompil
   uint offset;
 
 #ifndef PRODUCT
-  // Read asm remarks
-  offset = read_position();
-  uint count = *(uint *)addr(offset);
-  offset += sizeof(uint);
   AsmRemarks asm_remarks;
-  for (uint i = 0; i < count; i++) {
-    uint remark_offset = *(uint *)addr(offset);
-    offset += sizeof(uint);
-    const char* remark = (const char*)addr(offset);
-    offset += (uint)strlen(remark)+1;
-    asm_remarks.insert(remark_offset, remark);
-  }
-  set_read_position(offset);
-
-  // Read dbg strings
-  count = *(uint *)addr(offset);
-  offset += sizeof(uint);
+  read_asm_remarks(asm_remarks);
   DbgStrings dbg_strings;
-  for (uint i = 0; i < count; i++) {
-    const char* str = (const char*)addr(offset);
-    offset += (uint)strlen(str)+1;
-    dbg_strings.insert(str);
-  }
-  set_read_position(offset);
+  read_dbg_strings(dbg_strings);
 #endif /* PRODUCT */
 
   offset = read_position();
