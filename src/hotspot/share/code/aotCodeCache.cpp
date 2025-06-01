@@ -3825,21 +3825,157 @@ AOTCodeAddressTable::~AOTCodeAddressTable() {
   }
 }
 
-#ifdef PRODUCT
-#define MAX_STR_COUNT 200
-#else
-#define MAX_STR_COUNT 500
-#endif
+// Not MT-safe
+struct AOTCStringWrapper {
+ private:
+  int _id;
+  AOTCStringWrapper(const char* str) : _id(-1) {
+    char* dest = (char*)(this+1);
+    memcpy(dest, str, strlen(str)+1);
+  }
 
-#define _c_str_max  MAX_STR_COUNT
+  void* operator new(size_t x, const char* str) {
+    size_t size = sizeof(AOTCStringWrapper) + strlen(str) + 1;
+    char* buffer = AllocateHeap(size, mtCode);
+    return buffer;
+  }
+
+ public:
+  const char* string() const { return (const char *)(this+1); }
+  int id() const { return _id; }
+  void set_id(int id) { _id = id; }
+
+  static AOTCStringWrapper* create(const char* str) {
+    AOTCStringWrapper* aot_str = new(str) AOTCStringWrapper(str);
+    return aot_str;
+  }
+
+  static unsigned int hash(const char* const& str) { return java_lang_String::hash_code((const jbyte*)str, strlen(str)); }
+  static bool equals(const char* const& str1, const char* const& str2) {
+    if ((str1 == str2) || (strcmp(str1, str2) == 0)) {
+      return true;
+    }
+    return false;
+  }
+};
+
+class AOTCodeDumpTimeStringTable {
+ private:
+  int _used_strings;
+  ResourceHashtable<const char*, AOTCStringWrapper*, 293, AnyObj::C_HEAP, mtCode, AOTCStringWrapper::hash, AOTCStringWrapper::equals> _string_table;
+
+ public:
+  AOTCodeDumpTimeStringTable() : _used_strings(0), _string_table() {}
+
+  const char* add_string(const char* str) {
+    AOTCStringWrapper* aot_str = nullptr;
+    AOTCStringWrapper** aot_str_p = _string_table.get(str);
+    if (aot_str_p == nullptr) {
+      aot_str = AOTCStringWrapper::create(str);
+      _string_table.put(aot_str->string(), aot_str);
+    } else {
+      aot_str = *aot_str_p;
+    }
+    return aot_str->string();
+  }
+
+  int mark_as_used(const char* str) {
+    AOTCStringWrapper** aot_str_p = _string_table.get(str);
+    assert(aot_str_p != nullptr, "sanity check");
+    AOTCStringWrapper* aot_str = *aot_str_p;
+    if (aot_str->id() < 0) {
+      aot_str->set_id(_used_strings++);
+    }
+    return aot_str->id();
+  }
+
+  int used_strings_cnt() { return _used_strings; }
+
+  template<typename Function>
+  void iterate_used_strings(Function function) {
+    _string_table.iterate([&](const char* &str, AOTCStringWrapper* &aot_str) {
+      if (aot_str->id() >= 0) { // filter only strings marked as used
+        return function(aot_str->string());
+      }
+      return true; // continue iteration
+    });
+  }
+
+  template<typename Function>
+  void iterate_all_strings(Function function) {
+    _string_table.iterate([&](const char* &str, AOTCStringWrapper* &aot_str) {
+      return function(aot_str->string());
+    });
+  }
+};
+
 static const int _c_str_base = _all_max;
-
-static const char* _C_strings_in[MAX_STR_COUNT] = {nullptr}; // Incoming strings
-static const char* _C_strings[MAX_STR_COUNT]    = {nullptr}; // Our duplicates
+static const char** _C_strings = nullptr;
 static int _C_strings_count = 0;
-static int _C_strings_s[MAX_STR_COUNT] = {0};
-static int _C_strings_id[MAX_STR_COUNT] = {0};
-static int _C_strings_used = 0;
+
+static AOTCodeDumpTimeStringTable _dumptime_string_table;
+
+const char* AOTCodeCache::add_C_string(const char* str) {
+  if (is_on_for_dump() && str != nullptr) {
+    return _cache->_table->add_C_string(str);
+  }
+  return str;
+}
+
+const char* AOTCodeAddressTable::add_C_string(const char* str) {
+  if (_extrs_complete) {
+    LogStreamHandle(Trace, aot, codecache, stringtable) log; // ctor outside lock
+    MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
+    return _dumptime_string_table.add_string(str);
+  }
+  return str;
+}
+
+int AOTCodeAddressTable::id_for_C_string(address str) {
+  if (str == nullptr) {
+    return -1;
+  }
+  int id = -1;
+  MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
+  _dumptime_string_table.iterate_all_strings([&](const char* aot_str) {
+    if (aot_str == (const char*)str) {
+      id = _dumptime_string_table.mark_as_used(aot_str);
+      return false; // found the match, stop iteration
+    }
+    return true; // continue iteration
+  });
+  return id;
+}
+
+int AOTCodeCache::store_strings() {
+  int used_strings_cnt = _dumptime_string_table.used_strings_cnt();
+  if (used_strings_cnt > 0) {
+    uint offset = _write_position;
+    uint total_length = 0;
+    uint* lengths = (uint *)reserve_bytes(sizeof(uint) * used_strings_cnt);
+    if (lengths == nullptr) {
+      return -1;
+    }
+    int count = 0;
+    bool failed = false;
+    _dumptime_string_table.iterate_used_strings([&](const char* str) {
+      uint len = (uint)strlen(str) + 1;
+      lengths[count++] = len;
+      uint n = write_bytes(str, len);
+      if (n != len) {
+        failed = true;
+      }
+      total_length += len;
+      return true; // continue iteration
+    });
+    if (failed) {
+      return -1;
+    }
+    log_debug(aot, codecache, exit)("  Wrote %d C strings of total length %d at offset %d to AOT Code Cache",
+                                    used_strings_cnt, total_length, offset);
+  }
+  return used_strings_cnt;
+}
 
 void AOTCodeCache::load_strings() {
   uint strings_count  = _load_header->strings_count();
@@ -3853,106 +3989,18 @@ void AOTCodeCache::load_strings() {
   // We have to keep cached strings longer than _cache buffer
   // because they are refernced from compiled code which may
   // still be executed on VM exit after _cache is freed.
-  char* p = NEW_C_HEAP_ARRAY(char, strings_size+1, mtCode);
+  char* p = NEW_C_HEAP_ARRAY(char, strings_size + (strings_count * sizeof(const char*)), mtCode);
+  _C_strings = (const char **)(p + strings_size);
   memcpy(p, addr(strings_offset), strings_size);
   _C_strings_buf = p;
-  assert(strings_count <= MAX_STR_COUNT, "sanity");
   for (uint i = 0; i < strings_count; i++) {
     _C_strings[i] = p;
     uint len = string_lengths[i];
-    _C_strings_s[i] = i;
-    _C_strings_id[i] = i;
     p += len;
   }
   assert((uint)(p - _C_strings_buf) <= strings_size, "(" INTPTR_FORMAT " - " INTPTR_FORMAT ") = %d > %d ", p2i(p), p2i(_C_strings_buf), (uint)(p - _C_strings_buf), strings_size);
   _C_strings_count = strings_count;
-  _C_strings_used  = strings_count;
   log_debug(aot, codecache, init)("  Loaded %d C strings of total length %d at offset %d from AOT Code Cache", _C_strings_count, strings_size, strings_offset);
-}
-
-int AOTCodeCache::store_strings() {
-  if (_C_strings_used > 0) {
-    uint offset = _write_position;
-    uint length = 0;
-    uint* lengths = (uint *)reserve_bytes(sizeof(uint) * _C_strings_used);
-    if (lengths == nullptr) {
-      return -1;
-    }
-    for (int i = 0; i < _C_strings_used; i++) {
-      const char* str = _C_strings[_C_strings_s[i]];
-      uint len = (uint)strlen(str) + 1;
-      length += len;
-      assert(len < 1000, "big string: %s", str);
-      lengths[i] = len;
-      uint n = write_bytes(str, len);
-      if (n != len) {
-        return -1;
-      }
-    }
-    log_debug(aot, codecache, exit)("  Wrote %d C strings of total length %d at offset %d to AOT Code Cache",
-                                   _C_strings_used, length, offset);
-  }
-  return _C_strings_used;
-}
-
-const char* AOTCodeCache::add_C_string(const char* str) {
-  if (is_on_for_dump() && str != nullptr) {
-    return _cache->_table->add_C_string(str);
-  }
-  return str;
-}
-
-const char* AOTCodeAddressTable::add_C_string(const char* str) {
-  if (_extrs_complete) {
-    LogStreamHandle(Trace, aot, codecache, stringtable) log; // ctor outside lock
-    MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
-    // Check previous strings address
-    for (int i = 0; i < _C_strings_count; i++) {
-      if (_C_strings_in[i] == str) {
-        return _C_strings[i]; // Found previous one - return our duplicate
-      } else if (strcmp(_C_strings[i], str) == 0) {
-        return _C_strings[i];
-      }
-    }
-    // Add new one
-    if (_C_strings_count < MAX_STR_COUNT) {
-      // Passed in string can be freed and used space become inaccessible.
-      // Keep original address but duplicate string for future compare.
-      _C_strings_id[_C_strings_count] = -1; // Init
-      _C_strings_in[_C_strings_count] = str;
-      const char* dup = os::strdup(str);
-      _C_strings[_C_strings_count++] = dup;
-      if (log.is_enabled()) {
-        log.print_cr("add_C_string: [%d] " INTPTR_FORMAT " '%s'", _C_strings_count, p2i(dup), dup);
-      }
-      return dup;
-    } else {
-      fatal("Number of C strings >= MAX_STR_COUNT");
-    }
-  }
-  return str;
-}
-
-int AOTCodeAddressTable::id_for_C_string(address str) {
-  if (str == nullptr) {
-    return -1;
-  }
-  MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
-  for (int i = 0; i < _C_strings_count; i++) {
-    if (_C_strings[i] == (const char*)str) { // found
-      int id = _C_strings_id[i];
-      if (id >= 0) {
-        assert(id < _C_strings_used, "%d >= %d", id , _C_strings_used);
-        return id; // Found recorded
-      }
-      // Not found in recorded, add new
-      id = _C_strings_used++;
-      _C_strings_s[id] = i;
-      _C_strings_id[i] = id;
-      return id;
-    }
-  }
-  return -1;
 }
 
 address AOTCodeAddressTable::address_for_C_string(int idx) {
@@ -3978,7 +4026,7 @@ address AOTCodeAddressTable::address_for_id(int idx) {
   }
   uint id = (uint)idx;
   // special case for symbols based relative to os::init
-  if (id > (_c_str_base + _c_str_max)) {
+  if (id > (uint)(_c_str_base + _C_strings_count)) {
     return (address)os::init + idx;
   }
   if (idx < 0) {
@@ -4091,7 +4139,7 @@ int AOTCodeAddressTable::id_for_address(address addr, RelocIterator reloc, CodeB
             }
             log_debug(aot, codecache)("%d (L%d): Address " INTPTR_FORMAT " (offset %d) for runtime target '%s' is missing in AOT Code Cache addresses table",
                           compile_id, comp_level, p2i(addr), dist, (const char*)addr);
-            assert(dist > (uint)(_all_max + MAX_STR_COUNT), "change encoding of distance");
+            //assert(dist > (uint)(_all_max + MAX_STR_COUNT), "change encoding of distance");
             return dist;
           }
           reloc.print_current_on(tty);
