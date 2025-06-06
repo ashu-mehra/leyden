@@ -877,8 +877,19 @@ bool AOTCodeCache::align_write() {
   if (n != padding) {
     return false;
   }
-  log_trace(aot, codecache)("Adjust write alignment in AOT Code Cache");
+  log_trace(aot, codecache)("Adjust write alignment by %d bytes in AOT Code Cache", padding);
   return true;
+}
+
+void AOTCodeReader::align_read() {
+  // We are not executing code from cache - we copy it by bytes first.
+  // No need for big alignment (or at all).
+  uint padding = DATA_ALIGNMENT - (_read_position & (DATA_ALIGNMENT - 1));
+  if (padding == DATA_ALIGNMENT) {
+    return;
+  }
+  _read_position += padding;
+  log_trace(aot, codecache)("Adjust read alignment in AOT Code Cache");
 }
 
 // Check to see if AOT code cache has required space to store "nbytes" of data
@@ -1119,6 +1130,8 @@ static int uint_cmp(const void *i, const void *j) {
   return a > b ? 1 : a < b ? -1 : 0;
 }
 
+static OffsetListTable _offset_list_table;
+
 bool AOTCodeCache::finish_write() {
   if (!align_write()) {
     return false;
@@ -1249,6 +1262,20 @@ bool AOTCodeCache::finish_write() {
           max_size = size;
         }
         copy_bytes((_store_buffer + entries_address[i].offset()), (address)current, size);
+
+        OffsetList** value = _offset_list_table.get(&entries_address[i]);
+        if (value != nullptr) {
+          OffsetList* metadata_ptr_offset_list = *value;
+          for (int idx= 0; idx < metadata_ptr_offset_list->length(); idx++) {
+            Metadata** m = (Metadata **)(current + metadata_ptr_offset_list->at(idx));
+            if (*m != nullptr && *m != (Metadata*)Universe::non_oop_word()) {
+              assert((*m)->is_metadata(), "sanity check");
+              assert(AOTCacheAccess::can_generate_aot_code((address)*m), "Found metadata not stored in AOT Cache");
+              AOTCacheAccess::mark_pointer((address*)m);
+            }
+          }
+        }
+
         entries_address[i].set_offset(current - start); // New offset
         entries_address[i].update_method_for_writing();
         current += size;
@@ -1395,9 +1422,9 @@ bool AOTCodeCache::store_code_blob(CodeBlob& blob, AOTCodeEntry::Kind entry_kind
   }
   CodeBlob::archive_blob(&blob, archive_buffer);
 
-  uint reloc_data_size = blob.relocation_size();
-  n = cache->write_bytes((address)blob.relocation_begin(), reloc_data_size);
-  if (n != reloc_data_size) {
+  uint mutable_data_size = blob.mutable_data_size();
+  n = cache->write_bytes(blob.mutable_data_begin(), mutable_data_size);
+  if (n != mutable_data_size) {
     return false;
   }
 
@@ -1491,8 +1518,8 @@ CodeBlob* AOTCodeReader::compile_code_blob(const char* name, int entry_offset_co
   CodeBlob* archived_blob = (CodeBlob*)addr(offset);
   offset += archived_blob->size();
 
-  address reloc_data = (address)addr(offset);
-  offset += archived_blob->relocation_size();
+  address mutable_data = (address)addr(offset);
+  offset += archived_blob->mutable_data_size();
   set_read_position(offset);
 
   ImmutableOopMapSet* oop_maps = nullptr;
@@ -1509,7 +1536,7 @@ CodeBlob* AOTCodeReader::compile_code_blob(const char* name, int entry_offset_co
 
   CodeBlob* code_blob = CodeBlob::create(archived_blob,
                                          stored_name,
-                                         reloc_data,
+                                         mutable_data,
                                          oop_maps
 #ifndef PRODUCT
                                          , asm_remarks
@@ -1671,6 +1698,9 @@ AOTCodeEntry* AOTCodeCache::store_nmethod(nmethod* nm, AbstractCompiler* compile
   return entry;
 }
 
+static int _nmethod_asm_remarks = 0;
+static int _nmethod_dbg_strings = 0;
+
 AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
   AOTCodeCache* cache = open_for_dump();
   assert(cache != nullptr, "sanity check");
@@ -1755,69 +1785,32 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
   }
 
   // Write CodeBlob
-  if (!cache->align_write()) {
+  if (!align_write()) {
     return nullptr;
   }
-  uint blob_offset = cache->_write_position - entry_position;
-  address archive_buffer = cache->reserve_bytes(nm->size());
+  uint blob_offset = _write_position - entry_position;
+  address archive_buffer = reserve_bytes(nm->size());
   if (archive_buffer == nullptr) {
     return nullptr;
   }
   CodeBlob::archive_blob(nm, archive_buffer);
 
-#ifndef PRODUCT
-  // Write asm remarks
-  uint* count_ptr = (uint *)reserve_bytes(sizeof(uint));
-  if (count_ptr == nullptr) {
-    return nullptr;
-  }
-  uint count = 0;
-  bool result = nm->asm_remarks().iterate([&] (uint offset, const char* str) -> bool {
-    log_info(aot, codecache, nmethod)("asm remark offset=%d, str=%s", offset, str);
-    n = write_bytes(&offset, sizeof(uint));
-    if (n != sizeof(uint)) {
-      return false;
-    }
-    n = write_bytes(str, (uint)strlen(str) + 1);
-    if (n != strlen(str) + 1) {
-      return false;
-    }
-    count += 1;
-    return true;
-  });
-  if (!result) {
-    return nullptr;
-  }
-  *count_ptr = count;
+  nm->verify_metadata_is_shareable();
+ 
+  OffsetList* metadata_ptr_offset_list = new OffsetList();
 
-  // Write dbg strings
-  count_ptr = (uint *)reserve_bytes(sizeof(uint));
-  if (count_ptr == nullptr) {
+  uint mutable_data_size = nm->mutable_data_size();
+  uint mutable_data_offset = _write_position - entry_position;
+  n = write_bytes(nm->mutable_data_begin(), mutable_data_size);
+  if (n != mutable_data_size) {
     return nullptr;
   }
-  count = 0;
-  result = nm->dbg_strings().iterate([&] (const char* str) -> bool {
-    log_info(aot, codecache, nmethod)("dbg string[" INTPTR_FORMAT "]=%s", p2i(str), str);
-    n = write_bytes(str, (uint)strlen(str) + 1);
-    if (n != strlen(str) + 1) {
-      return false;
-    }
-    count += 1;
-    return true;
-  });
-  if (!result) {
-    return nullptr;
-  }
-  *count_ptr = count;
-#endif /* PRODUCT */
+  uint metadata_table_offset = mutable_data_offset + nm->metadata_offset_in_bytes();
+  int metadata_table_cnt = nm->metadata_size() / wordSize;
+  collect_metadata_pointers_offset(nm, mutable_data_offset, *metadata_ptr_offset_list);
+  //collect_inlined_metadata_pointers_offset(nm, blob_offset, *metadata_ptr_offset_list);
 
-  uint reloc_data_size = nm->relocation_size();
-  n = write_bytes((address)nm->relocation_begin(), reloc_data_size);
-  if (n != reloc_data_size) {
-    return nullptr;
-  }
-
-  // Write oops and metadata present in the nmethod's data region
+  // Write oops present in the nmethod's data region
   if (!write_oops(nm)) {
     if (lookup_failed() && !failed()) {
       // Skip this method and reposition file
@@ -1825,17 +1818,9 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
     }
     return nullptr;
   }
-  if (!write_metadata(nm)) {
-    if (lookup_failed() && !failed()) {
-      // Skip this method and reposition file
-      set_write_position(entry_position);
-    }
-    return nullptr;
-  }
-
   bool has_oop_maps = false;
   if (nm->oop_maps() != nullptr) {
-    if (!cache->write_oop_map_set(*nm)) {
+    if (!write_oop_map_set(*nm)) {
       return nullptr;
     }
     has_oop_maps = true;
@@ -1861,6 +1846,62 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
     return nullptr;
   }
 
+#ifndef PRODUCT
+#if 1 
+  // Write asm remark
+  uint* count_ptr = (uint *)reserve_bytes(sizeof(uint));
+  if (count_ptr == nullptr) {
+    return nullptr;
+  }
+  uint count = 0;
+  bool result = nm->asm_remarks().iterate([&] (uint offset, const char* str) -> bool {
+    //log_info(aot, codecache, nmethod)("asm remark offset=%d, str=%s", offset, str);
+    n = write_bytes(&offset, sizeof(uint));
+    if (n != sizeof(uint)) {
+      return false;
+    }
+    n = write_bytes(str, (uint)strlen(str) + 1);
+    if (n != strlen(str) + 1) {
+      return false;
+    }
+    count += 1;
+    return true;
+  });
+  if (!result) {
+    return nullptr;
+  }
+  *count_ptr = count;
+  _nmethod_asm_remarks += count;
+  // Write dbg strings
+  count_ptr = (uint *)reserve_bytes(sizeof(uint));
+  if (count_ptr == nullptr) {
+    return nullptr;
+  }
+  count = 0;
+  result = nm->dbg_strings().iterate([&] (const char* str) -> bool {
+    //log_info(aot, codecache, nmethod)("dbg string[" INTPTR_FORMAT "]=%s", p2i(str), str);
+    n = write_bytes(str, (uint)strlen(str) + 1);
+    if (n != strlen(str) + 1) {
+      return false;
+    }
+    count += 1;
+    return true;
+  });
+  if (!result) {
+    return nullptr;
+  }
+  *count_ptr = count;
+  _nmethod_dbg_strings += count;
+#else
+  // Write asm remarks
+  if (!cache->write_asm_remarks(*nm)) {
+    return nullptr;
+  }
+  if (!cache->write_dbg_strings(*nm)) {
+    return nullptr;
+  }
+#endif
+#endif /* PRODUCT */
   if (!write_relocations(*nm, &oop_list, &metadata_list)) {
     return nullptr;
   }
@@ -1871,7 +1912,11 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
                                                 name_offset, name_size,
                                                 blob_offset, has_oop_maps,
                                                 nm->content_begin(), comp_level, comp_id, decomp,
-                                                nm->has_clinit_barriers(), for_preload, ignore_decompile);
+                                                nm->has_clinit_barriers(), for_preload, ignore_decompile,
+                                                metadata_table_cnt, metadata_table_offset);
+
+  _offset_list_table.put(entry, metadata_ptr_offset_list);
+
   if (method_in_cds) {
     entry->set_method(method);
   }
@@ -1891,6 +1936,20 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
     return nullptr;
   }
   return entry;
+}
+
+void AOTCodeReader::populate_oop_recorder_metadata(OopRecorder* oop_recorder, AOTCodeEntry* aot_code_entry) {
+  uint entry_position = aot_code_entry->offset();
+  uint metadata_table_offset = entry_position + aot_code_entry->metadata_table_offset();
+  for (int i = 0; i < aot_code_entry->metadata_table_cnt(); i++) {
+    Metadata** m = (Metadata **)addr(metadata_table_offset);
+    metadata_table_offset += sizeof(Metadata *);
+    if (oop_recorder->is_real(*m)) {
+      oop_recorder->find_index(*m);
+    } else {
+      oop_recorder->allocate_metadata_index(*m);
+    }
+  }
 }
 
 bool AOTCodeCache::load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level) {
@@ -1950,10 +2009,47 @@ bool AOTCodeReader::compile_nmethod(ciEnv* env, ciMethod* target, AbstractCompil
 
   OopRecorder* oop_recorder = new OopRecorder(env->arena());
   env->set_oop_recorder(oop_recorder);
+  populate_oop_recorder_metadata(oop_recorder, aot_code_entry);
 
-  uint offset;
+  uint offset = read_position();
+  address mutable_data = (address)addr(offset);
+  offset += archived_nm->mutable_data_size();
+  set_read_position(offset);
+
+  // Read oops and metadata
+  VM_ENTRY_MARK
+  GrowableArray<Handle> oop_list;
+
+  if (!read_oop_list(THREAD, target, oop_list, oop_recorder)) {
+   return false;
+  }
+
+  ImmutableOopMapSet* oopmaps = read_oop_map_set();
+
+  offset = read_position();
+  address immutable_data = (address)addr(offset);
+  offset += archived_nm->immutable_data_size();
+  set_read_position(offset);
+
+  GrowableArray<Handle> reloc_immediate_oop_list;
+  GrowableArray<Metadata*> reloc_immediate_metadata_list;
+  if (!read_oop_metadata_list(THREAD, target, reloc_immediate_oop_list, reloc_immediate_metadata_list)) {
+   return false;
+  }
+
+  // Read Dependencies (compressed already)
+  Dependencies* dependencies = new Dependencies(env);
+  dependencies->set_content(immutable_data, archived_nm->dependencies_size());
+  env->set_dependencies(dependencies);
+
+  const char* name = addr(entry_position + aot_code_entry->name_offset());
+
+  if (VerifyCachedCode) {
+    return false;
+  }
 
 #ifndef PRODUCT
+#if 1 
   // Read asm remarks
   offset = read_position();
   uint count = *(uint *)addr(offset);
@@ -1978,54 +2074,21 @@ bool AOTCodeReader::compile_nmethod(ciEnv* env, ciMethod* target, AbstractCompil
     dbg_strings.insert(str);
   }
   set_read_position(offset);
+#else
+  AsmRemarks asm_remarks;
+  read_asm_remarks(asm_remarks);
+  DbgStrings dbg_strings;
+  read_dbg_strings(dbg_strings);
+#endif
 #endif /* PRODUCT */
 
-  offset = read_position();
-  address reloc_data = (address)addr(offset);
-  offset += archived_nm->relocation_size();
-  set_read_position(offset);
-
-  // Read oops and metadata
-  VM_ENTRY_MARK
-  GrowableArray<Handle> oop_list;
-  GrowableArray<Metadata*> metadata_list;
-
-  if (!read_oop_metadata_list(THREAD, target, oop_list, metadata_list, oop_recorder)) {
-   return false;
-  }
-
-  ImmutableOopMapSet* oopmaps = read_oop_map_set();
-
-  offset = read_position();
-  address immutable_data = (address)addr(offset);
-  offset += archived_nm->immutable_data_size();
-  set_read_position(offset);
-
-  GrowableArray<Handle> reloc_immediate_oop_list;
-  GrowableArray<Metadata*> reloc_immediate_metadata_list;
-  if (!read_oop_metadata_list(THREAD, target, reloc_immediate_oop_list, reloc_immediate_metadata_list, nullptr)) {
-   return false;
-  }
-
-  // Read Dependencies (compressed already)
-  Dependencies* dependencies = new Dependencies(env);
-  dependencies->set_content(immutable_data, archived_nm->dependencies_size());
-  env->set_dependencies(dependencies);
-
-  const char* name = addr(entry_position + aot_code_entry->name_offset());
-
-  if (VerifyCachedCode) {
-    return false;
-  }
-
   TraceTime t1("Total time to register AOT nmethod", &_t_totalRegister, enable_timers(), false);
-  env->register_aot_method(THREAD,
+  nm = env->register_aot_method(THREAD,
                            target,
                            compiler,
                            archived_nm,
-                           reloc_data,
+                           mutable_data,
                            oop_list,
-                           metadata_list,
                            oopmaps,
                            immutable_data,
                            reloc_immediate_oop_list,
@@ -2040,7 +2103,6 @@ bool AOTCodeReader::compile_nmethod(ciEnv* env, ciMethod* target, AbstractCompil
 #ifdef ASSERT
     LogStreamHandle(Debug, aot, codecache, nmethod) log;
     if (log.is_enabled()) {
-      nmethod* nm = target->get_Method()->code();
       FlagSetting fs(PrintRelocations, true);
       nm->print_on(&log);
       nm->decode2(&log);
@@ -2145,6 +2207,43 @@ void AOTCodeCache::preload_startup_code(TRAPS) {
 
 // ------------ process code and data --------------
 
+void AOTCodeCache::collect_metadata_pointers_offset(nmethod* nm, uint mutable_data_offset, OffsetList& metadata_ptr_offset_list) {
+  for (Metadata** p = nm->metadata_begin(); p < nm->metadata_end(); p++) {
+    if (*p == Universe::non_oop_word() || *p == nullptr) {
+      continue;  // skip non-oops
+    }
+    Metadata* md = *p;
+    if ((AOTCacheAccess::can_generate_aot_code((address)md))) {
+      assert(!md->is_methodCounters(), "does not expect MethodCounter in metadata table");
+      int offset_in_mutable_data = (address)p - nm->mutable_data_begin();
+      int offset_in_entry_data = mutable_data_offset + offset_in_mutable_data;
+      metadata_ptr_offset_list.append(offset_in_entry_data);
+      log_info(aot, codecache, nmethod)("collect_metadata_pointers_offset> Adding metadata_ptr_offset=%d", offset_in_entry_data);
+    }
+  }
+}
+
+void AOTCodeCache::collect_inlined_metadata_pointers_offset(nmethod* nm, uint archived_blob_offset, OffsetList& metadata_ptr_offset_list) {
+  RelocIterator iter(nm);
+  while (iter.next()) {
+    if (iter.type() == relocInfo::metadata_type) {
+      metadata_Relocation* r = (metadata_Relocation*)iter.reloc();
+      if (r->metadata_is_immediate()) {
+        Metadata* md = r->metadata_value();
+        if (md == Universe::non_oop_word() || md == nullptr) {
+          continue;  // skip non-oops
+        }
+        if ((AOTCacheAccess::can_generate_aot_code((address)md)) && !md->is_methodCounters()) {
+          uint offset_in_codeblob = (uint)((address)r->metadata_addr() - nm->header_begin());
+          uint offset_in_entry_data = archived_blob_offset + offset_in_codeblob;
+          metadata_ptr_offset_list.append(offset_in_entry_data);
+          log_info(aot, codecache, nmethod)("collect_inlined_metadata_pointers_offset> Adding metadata_ptr_offset=%d", offset_in_entry_data);
+        }
+      }
+    }
+  }
+}
+
 bool AOTCodeCache::write_relocations(CodeBlob& code_blob, GrowableArray<Handle>* oop_list, GrowableArray<Metadata*>* metadata_list) {
   GrowableArray<uint> reloc_data;
   RelocIterator iter(&code_blob);
@@ -2169,11 +2268,14 @@ bool AOTCodeCache::write_relocations(CodeBlob& code_blob, GrowableArray<Handle>*
       case relocInfo::metadata_type: {
         metadata_Relocation* r = (metadata_Relocation*)iter.reloc();
         if (r->metadata_is_immediate()) {
-          assert(metadata_list != nullptr, "sanity check");
-          // store index of metadata in the reloc immediate metadata list
-          int metadata_idx = metadata_list->find(r->metadata_value());
-          assert(metadata_idx != -1, "sanity check");
-          reloc_data.at_put(idx, (uint)metadata_idx);
+          //Metadata* md = r->metadata_value();
+          //if (!AOTCacheAccess::can_generate_aot_code((address)md)) {
+            assert(metadata_list != nullptr, "sanity check");
+            // store index of metadata in the reloc immediate metadata list
+            int metadata_idx = metadata_list->find(r->metadata_value());
+            assert(metadata_idx != -1, "sanity check");
+            reloc_data.at_put(idx, (uint)metadata_idx);
+          //}
         }
         break;
       }
@@ -2283,16 +2385,19 @@ void AOTCodeReader::fix_relocations(CodeBlob* code_blob, GrowableArray<Handle>* 
       case relocInfo::metadata_type: {
         assert(code_blob->is_nmethod(), "sanity check");
         metadata_Relocation* r = (metadata_Relocation*)iter.reloc();
-        Metadata* m;
+        Metadata* m = nullptr;
         if (r->metadata_is_immediate()) {
-          assert(metadata_list != nullptr, "sanity check");
-          m = metadata_list->at(reloc_data[j]);
+         //if (reloc_data[j] != (uint)-1) {
+            assert(metadata_list != nullptr, "sanity check");
+            m = metadata_list->at(reloc_data[j]);
+            r->set_value((address)m);
+          //}
         } else {
           // Get already updated value from nmethod.
           int index = r->metadata_index();
           m = code_blob->as_nmethod()->metadata_at(index);
+          r->set_value((address)m);
         }
-        r->set_value((address)m);
         break;
       }
       case relocInfo::virtual_call_type:   // Fall through. They all call resolve_*_call blobs.
@@ -3095,7 +3200,7 @@ oop AOTCodeReader::read_oop(JavaThread* thread, const methodHandle& comp_method)
   return obj;
 }
 
-bool AOTCodeReader::read_oop_metadata_list(JavaThread* thread, ciMethod* target, GrowableArray<Handle> &oop_list, GrowableArray<Metadata*> &metadata_list, OopRecorder* oop_recorder) {
+bool AOTCodeReader::read_oop_list(JavaThread* thread, ciMethod* target, GrowableArray<Handle> &oop_list, OopRecorder* oop_recorder) {
   methodHandle comp_method(JavaThread::current(), target->get_Method());
   JavaThread* current = JavaThread::current();
   uint offset = read_position();
@@ -3131,23 +3236,117 @@ bool AOTCodeReader::read_oop_metadata_list(JavaThread* thread, ciMethod* target,
     }
   }
 
+#if 0
   offset = read_position();
   count = *(int *)addr(offset);
   offset += sizeof(int);
   set_read_position(offset);
+  for (int i = 0; i < count; i++) {
+    uint idx = *(uint *)addr(offset);
+    offset += sizeof(uint);
+    align_read();
+    offset = read_position();
+    DataKind kind = *(DataKind*)addr(offset);
+    offset += sizeof(DataKind);
+    assert(kind == DataKind::MethodCnts, "invalid data kind %d", (int)kind);
+    Method* m = *(Method **)addr(offset);
+    offset += sizeof(Method*);
+    assert(m->is_shared(), "must be in AOT Cache");
+    MethodCounters* mc = m->get_method_counters(Thread::current());
+    if (mc == nullptr) {
+      set_lookup_failed();
+      log_info(aot, codecache)("%d (L%d): Failed to get MethodCounters", compile_id(), comp_level());
+      return false;
+    } else {
+      log_info(aot, codecache)("%d (L%d): Read MethodCounters : " INTPTR_FORMAT, compile_id(), comp_level(), p2i(mc));
+    }
+    nonshareable_metadata_list.append(mc);
+    idx_list.append(idx);
+    LogTarget(Debug, aot, codecache, metadata) log;
+    if (log.is_enabled()) {
+      LogStream ls(log);
+      mc->print_value_on(&ls);
+      ls.cr();
+    }
+  }
+#endif
+  return true;
+}
+
+bool AOTCodeReader::read_oop_metadata_list(JavaThread* thread, ciMethod* target, GrowableArray<Handle> &oop_list, GrowableArray<Metadata*> &metadata_list) {
+  methodHandle comp_method(JavaThread::current(), target->get_Method());
+  JavaThread* current = JavaThread::current();
+  uint offset = read_position();
+  int count = *(int *)addr(offset);
+  offset += sizeof(int);
+  set_read_position(offset);
+  for (int i = 0; i < count; i++) {
+    oop obj = read_oop(current, comp_method);
+    if (lookup_failed()) {
+      return false;
+    }
+    Handle h(thread, obj);
+    oop_list.append(h);
+#if 0
+    if (oop_recorder != nullptr) {
+      jobject jo = JNIHandles::make_local(thread, obj);
+      if (oop_recorder->is_real(jo)) {
+        oop_recorder->find_index(jo);
+      } else {
+        oop_recorder->allocate_oop_index(jo);
+      }
+    }
+#endif
+    LogStreamHandle(Debug, aot, codecache, oops) log;
+    if (log.is_enabled()) {
+      log.print("%d: " INTPTR_FORMAT " ", i, p2i(obj));
+      if (obj == Universe::non_oop_word()) {
+        log.print("non-oop word");
+      } else if (obj == nullptr) {
+        log.print("nullptr-oop");
+      } else {
+        obj->print_value_on(&log);
+      }
+      log.cr();
+    }
+  }
+
+  offset = read_position();
+  count = *(int *)addr(offset);
+  offset += sizeof(int);
+  set_read_position(offset);
+#if 0
+  for (int i = 0; i < count; i++) {
+    DataKind kind = *(DataKind*)addr(offset);
+    offset += sizeof(DataKind);
+    assert(kind == DataKind::MethodCnts, "invalid data kind %d", (int)kind);
+    Method* m = *(Method **)addr(offset);
+    offset += sizeof(Method*);
+    assert(m->is_shared(), "must be in AOT Cache");
+    MethodCounters* mc = m->get_method_counters(Thread::current());
+    if (mc == nullptr) {
+      set_lookup_failed();
+      log_info(aot, codecache)("%d (L%d): Failed to get MethodCounters", compile_id(), comp_level());
+      return false;
+    } else {
+      log_info(aot, codecache)("%d (L%d): Read MethodCounters : " INTPTR_FORMAT, compile_id(), comp_level(), p2i(mc));
+    }
+    metadata_list.append(mc);
+    LogTarget(Debug, aot, codecache, metadata) log;
+    if (log.is_enabled()) {
+      LogStream ls(log);
+      mc->print_value_on(&ls);
+      ls.cr();
+    }
+  }
+  set_read_position(offset);
+#endif
   for (int i = 0; i < count; i++) {
     Metadata* m = read_metadata(comp_method);
     if (lookup_failed()) {
       return false;
     }
     metadata_list.append(m);
-    if (oop_recorder != nullptr) {
-      if (oop_recorder->is_real(m)) {
-        oop_recorder->find_index(m);
-      } else {
-        oop_recorder->allocate_metadata_index(m);
-      }
-    }
     LogTarget(Debug, aot, codecache, metadata) log;
     if (log.is_enabled()) {
       LogStream ls(log);
@@ -3201,6 +3400,9 @@ bool AOTCodeCache::write_oops(nmethod* nm) {
   return true;
 }
 
+static int _total_asm_remarks = 0;
+static int _total_dbg_strings = 0;
+
 #ifndef PRODUCT
 bool AOTCodeCache::write_asm_remarks(CodeBlob& cb) {
   // Write asm remarks
@@ -3226,6 +3428,7 @@ bool AOTCodeCache::write_asm_remarks(CodeBlob& cb) {
     return true;
   });
   *count_ptr = count;
+  _total_asm_remarks += count;
   return result;
 }
 
@@ -3265,6 +3468,7 @@ bool AOTCodeCache::write_dbg_strings(CodeBlob& cb) {
     return true;
   });
   *count_ptr = count;
+  _total_dbg_strings += count;
   return result;
 }
 
@@ -3886,7 +4090,7 @@ AOTCodeAddressTable::~AOTCodeAddressTable() {
 #ifdef PRODUCT
 #define MAX_STR_COUNT 200
 #else
-#define MAX_STR_COUNT 500
+#define MAX_STR_COUNT 100000
 #endif
 
 #define _c_str_max  MAX_STR_COUNT
@@ -3898,6 +4102,7 @@ static int _C_strings_count = 0;
 static int _C_strings_s[MAX_STR_COUNT] = {0};
 static int _C_strings_id[MAX_STR_COUNT] = {0};
 static int _C_strings_used = 0;
+static int add_string_cnt = 0;
 
 void AOTCodeCache::load_strings() {
   uint strings_count  = _load_header->strings_count();
@@ -3940,7 +4145,7 @@ int AOTCodeCache::store_strings() {
       const char* str = _C_strings[_C_strings_s[i]];
       uint len = (uint)strlen(str) + 1;
       length += len;
-      assert(len < 1000, "big string: %s", str);
+      //assert(len < 1000, "big string: %s", str);
       lengths[i] = len;
       uint n = write_bytes(str, len);
       if (n != len) {
@@ -3949,6 +4154,9 @@ int AOTCodeCache::store_strings() {
     }
     log_debug(aot, codecache, exit)("  Wrote %d C strings of total length %d at offset %d to AOT Code Cache",
                                    _C_strings_used, length, offset);
+    log_debug(aot, codecache, exit)("  add_string_cnt=%d, _C_strings_count=%d, _C_strings_used=%d", add_string_cnt, _C_strings_count, _C_strings_used);
+    log_debug(aot, codecache, exit)("  total_asm_remraks=%d, total_dbg_strings=%d", _total_asm_remarks, _total_dbg_strings);
+    log_debug(aot, codecache, exit)("  nmethod_asm_remraks=%d, nmethod_dbg_strings=%d", _nmethod_asm_remarks, _nmethod_dbg_strings);
   }
   return _C_strings_used;
 }
@@ -3960,11 +4168,13 @@ const char* AOTCodeCache::add_C_string(const char* str) {
   return str;
 }
 
+
 const char* AOTCodeAddressTable::add_C_string(const char* str) {
   if (_extrs_complete) {
     LogStreamHandle(Trace, aot, codecache, stringtable) log; // ctor outside lock
     MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
     // Check previous strings address
+    add_string_cnt++;
     for (int i = 0; i < _C_strings_count; i++) {
       if (_C_strings_in[i] == str) {
         return _C_strings[i]; // Found previous one - return our duplicate

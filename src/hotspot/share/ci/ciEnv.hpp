@@ -372,13 +372,12 @@ public:
   int compile_id();  // task()->compile_id()
 
   // Register method loaded from AOT code cache
-  void register_aot_method(JavaThread* thread,
+  nmethod* register_aot_method(JavaThread* thread,
                            ciMethod* target,
                            AbstractCompiler* compiler,
                            nmethod* archived_nm,
-                           address reloc_data,
+                           address mutable_data,
                            GrowableArray<Handle>& oop_list,
-                           GrowableArray<Metadata*>& metadata_list,
                            ImmutableOopMapSet* oopmaps,
                            address immutable_data,
                            GrowableArray<Handle>& reloc_imm_oop_list,

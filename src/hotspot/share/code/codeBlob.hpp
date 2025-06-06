@@ -109,7 +109,7 @@ class CodeBlob {
   friend class JVMCIVMStructs;
 
 private:
-  void restore_mutable_data(address reloc_data);
+  void restore_mutable_data(address mutable_data);
 
 protected:
   // order fields from large to small to minimize padding between fields
@@ -315,10 +315,10 @@ public:
 
   // methods to restore a blob from AOT code cache into the CodeCache
   void post_restore();
-  CodeBlob* restore(address code_cache_buffer, const char* name, address archived_reloc_data, ImmutableOopMapSet* archived_oop_maps);
+  CodeBlob* restore(address code_cache_buffer, const char* name, address archived_mutable_data, ImmutableOopMapSet* archived_oop_maps);
   static CodeBlob* create(CodeBlob* archived_blob,
                           const char* name,
-                          address archived_reloc_data,
+                          address archived_mutable_data,
                           ImmutableOopMapSet* archived_oop_maps
 #ifndef PRODUCT
                           , AsmRemarks& archived_asm_remarks

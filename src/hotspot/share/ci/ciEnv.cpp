@@ -1114,13 +1114,12 @@ void ciEnv::make_code_usable(JavaThread* thread, ciMethod* target, bool preload,
   }
 }
 
-void ciEnv::register_aot_method(JavaThread* thread,
+nmethod* ciEnv::register_aot_method(JavaThread* thread,
                                 ciMethod* target,
                                 AbstractCompiler* compiler,
                                 nmethod* archived_nm,
-                                address reloc_data,
+                                address mutable_data,
                                 GrowableArray<Handle>& oop_list,
-                                GrowableArray<Metadata*>& metadata_list,
                                 ImmutableOopMapSet* oopmaps,
                                 address immutable_data,
                                 GrowableArray<Handle>& reloc_imm_oop_list,
@@ -1151,16 +1150,15 @@ void ciEnv::register_aot_method(JavaThread* thread,
     NoSafepointVerifier nsv;
 
     if (!is_compilation_valid(thread, target, preload, true /*install_code*/, nullptr /*code_buffer*/, aot_code_entry)) {
-      return;
+      return nullptr;
     }
 
     nm = nmethod::new_nmethod(archived_nm,
                               method,
                               compiler,
                               compile_id(),
-                              reloc_data,
+                              mutable_data,
                               oop_list,
-                              metadata_list,
                               oopmaps,
                               immutable_data,
                               reloc_imm_oop_list,
@@ -1183,6 +1181,7 @@ void ciEnv::register_aot_method(JavaThread* thread,
     // The CodeCache is full.
     record_failure("code cache is full");
   }
+  return nm;
   // safepoints are allowed again
 }
 

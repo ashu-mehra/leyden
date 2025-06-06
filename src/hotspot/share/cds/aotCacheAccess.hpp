@@ -38,8 +38,8 @@ class ReservedSpace;
 
 class AOTCacheAccess : AllStatic {
 private:
-  static bool can_generate_aot_code(address addr) NOT_CDS_RETURN_(false);
 public:
+  static bool can_generate_aot_code(address addr) NOT_CDS_RETURN_(false);
   static bool can_generate_aot_code(Method* m) {
     return can_generate_aot_code((address)m);
   }
@@ -98,6 +98,7 @@ public:
     set_pointer((address*)ptr, (address)value);
   }
   static void set_pointer(address* ptr, address value);
+  static void mark_pointer(address* ptr);
 };
 
 #endif // SHARE_CDS_AOTCACHEACCESS_HPP

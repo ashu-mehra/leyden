@@ -23,6 +23,7 @@
  */
 
 #include "asm/assembler.inline.hpp"
+#include "cds/aotCacheAccess.hpp"
 #include "code/aotCodeCache.hpp"
 #include "code/codeCache.hpp"
 #include "code/compiledIC.hpp"
@@ -1252,9 +1253,8 @@ nmethod* nmethod::new_nmethod(const methodHandle& method,
 nmethod* nmethod::restore(address code_cache_buffer,
                           const methodHandle& method,
                           int compile_id,
-                          address reloc_data,
+                          address mutable_data,
                           GrowableArray<Handle>& oop_list,
-                          GrowableArray<Metadata*>& metadata_list,
                           ImmutableOopMapSet* oop_maps,
                           address immutable_data,
                           GrowableArray<Handle>& reloc_imm_oop_list,
@@ -1265,13 +1265,14 @@ nmethod* nmethod::restore(address code_cache_buffer,
 #endif /* PRODUCT */
                           AOTCodeReader* aot_code_reader)
 {
-  CodeBlob::restore(code_cache_buffer, "nmethod", reloc_data, oop_maps);
+  CodeBlob::restore(code_cache_buffer, "nmethod", mutable_data, oop_maps);
   nmethod* nm = (nmethod*)code_cache_buffer;
   nm->set_method(method());
   nm->_compile_id = compile_id;
   nm->set_immutable_data(immutable_data);
   nm->copy_values(&oop_list);
-  nm->copy_values(&metadata_list);
+  //nm->copy_nonshareable_metadata(idx_list, nonshareable_metadata_list);
+  //nm->copy_values(&metadata_list);
 
   aot_code_reader->fix_relocations(nm, &reloc_imm_oop_list, &reloc_imm_metadata_list);
 
@@ -1296,9 +1297,8 @@ nmethod* nmethod::new_nmethod(nmethod* archived_nm,
                               const methodHandle& method,
                               AbstractCompiler* compiler,
                               int compile_id,
-                              address reloc_data,
+                              address mutable_data,
                               GrowableArray<Handle>& oop_list,
-                              GrowableArray<Metadata*>& metadata_list,
                               ImmutableOopMapSet* oop_maps,
                               address immutable_data,
                               GrowableArray<Handle>& reloc_imm_oop_list,
@@ -1319,9 +1319,8 @@ nmethod* nmethod::new_nmethod(nmethod* archived_nm,
       nm = archived_nm->restore(code_cache_buffer,
                                 method,
                                 compile_id,
-                                reloc_data,
+                                mutable_data,
                                 oop_list,
-                                metadata_list,
                                 oop_maps,
                                 immutable_data,
                                 reloc_imm_oop_list,
@@ -1901,6 +1900,42 @@ void nmethod::copy_values(GrowableArray<jobject>* array) {
   fix_oop_relocations(nullptr, nullptr, /*initialize_immediates=*/ true);
 }
 
+void nmethod::verify_metadata_is_shareable() {
+  Metadata** dest = metadata_begin();
+  bool passed = true;
+  int cnt = 0;
+  for (Metadata** p = metadata_begin(); p < metadata_end(); p++) {
+    cnt += 1;
+    if (*p == Universe::non_oop_word() || *p == nullptr)  continue;  // skip non-oops
+    Metadata* md = *p;
+    if (md->is_methodCounters()) {
+      log_info(aot, codecache)("Found MethodCounter in metadata table");
+    }
+    if ((!AOTCacheAccess::can_generate_aot_code((address)md)) && !md->is_methodCounters()) {
+      log_info(aot, codecache)("Metadata %p (in metdata region) not in AOT Cache", md);
+      passed = false;
+    }
+  }
+  log_info(aot, codecache)("Number of entries in metadata table=%d", cnt);
+  RelocIterator iter(this);
+  while (iter.next()) {
+    if (iter.type() == relocInfo::metadata_type) {
+      metadata_Relocation* r = (metadata_Relocation*)iter.reloc();
+      if (r->metadata_is_immediate() && r->metadata_value() != nullptr) {
+        Metadata* md = r->metadata_value();
+        if (md->is_methodCounters()) {
+          log_info(aot, codecache)("Found MethodCounter inlined in code");
+        }
+        if ((!AOTCacheAccess::can_generate_aot_code((address)md)) && !md->is_methodCounters()) {
+          log_info(aot, codecache)("Metadata %p (inlined in code) not in AOT Cache", md);
+          passed = false;
+        }
+      }
+    }
+  }
+  assert(passed, "Found metadata not in AOT Cache");
+}
+
 void nmethod::copy_values(GrowableArray<Metadata*>* array) {
   int length = array->length();
   assert((address)(metadata_begin() + length) <= (address)metadata_end(), "big enough");
@@ -1943,8 +1978,11 @@ void nmethod::create_reloc_immediates_list(JavaThread* thread, GrowableArray<Han
     } else if (iter.type() == relocInfo::metadata_type) {
       metadata_Relocation* reloc = iter.metadata_reloc();
       if (reloc->metadata_is_immediate()) {
-        Metadata* m = reloc->metadata_value();
-        metadata_list.append(m);
+        Metadata* md = reloc->metadata_value();
+        //if (!AOTCacheAccess::can_generate_aot_code((address)md)) {
+          //assert(md->is_methodCounters(), "Unexpected metadata of type %d", md->type());
+          metadata_list.append(md);
+        //}
       }
     }
   }

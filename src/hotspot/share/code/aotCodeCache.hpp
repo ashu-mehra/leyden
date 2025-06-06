@@ -119,6 +119,8 @@ private:
   bool   _ignore_decompile; // ignore decompile counter if compilation is done
                             // during "assembly" phase without running application
   address _dumptime_content_start_addr; // CodeBlob::content_begin() at dump time; used for applying relocations
+  int    _metadata_table_cnt;
+  uint   _metadata_table_offset;
 
 public:
   // this constructor is used only by AOTCodeEntry::Stub
@@ -161,7 +163,9 @@ public:
                uint comp_id = 0, uint decomp = 0,
                bool has_clinit_barriers = false,
                bool for_preload = false,
-               bool ignore_decompile = false) {
+               bool ignore_decompile = false,
+               int metadata_table_cnt = 0,
+               uint metadata_table_offset = 0) {
     _next         = nullptr;
     _method       = nullptr;
     _kind         = kind;
@@ -190,6 +194,9 @@ public:
     _loaded       = false;
     _not_entrant  = false;
     _load_fail    = false;
+
+    _metadata_table_cnt = metadata_table_cnt;
+    _metadata_table_offset = metadata_table_offset;
   }
 
   void* operator new(size_t x, AOTCodeCache* cache);
@@ -219,6 +226,8 @@ public:
 
   bool has_oop_maps() const { return _has_oop_maps; }
   address dumptime_content_start_addr() const { return _dumptime_content_start_addr; }
+  int metadata_table_cnt() { return _metadata_table_cnt; }
+  uint metadata_table_offset() { return _metadata_table_offset; }
   uint num_inlined_bytecodes() const { return _num_inlined_bytecodes; }
   void set_inlined_bytecodes(int bytes) { _num_inlined_bytecodes = bytes; }
 
@@ -327,6 +336,9 @@ enum class DataKind: int {
   String_Shared = 10,
   MH_Oop_Shared = 11
 };
+
+using OffsetList = GrowableArrayCHeap<uint, mtCode>;
+using OffsetListTable = ResourceHashtable<AOTCodeEntry*, OffsetList*, 293, AnyObj::C_HEAP, mtCode>;
 
 class AOTCodeCache : public CHeapObj<mtCode> {
 
@@ -485,6 +497,8 @@ private:
   bool lookup_failed()   const { return _lookup_failed; }
 
   AOTCodeEntry* write_nmethod(nmethod* nm, bool for_preload);
+  void collect_metadata_pointers_offset(nmethod* nm, uint mutable_data_offset, OffsetList& metadata_ptr_offset_list);
+  void collect_inlined_metadata_pointers_offset(nmethod* nm, uint archived_blob_offset, OffsetList& metadata_ptr_offset_list);
 
   // States:
   //   S >= 0: allow new readers, S readers are currently active
@@ -696,6 +710,8 @@ public:
 
   AOTCodeEntry* aot_code_entry() { return (AOTCodeEntry*)_entry; }
 
+  void align_read();
+
   // convenience method to convert offset in AOTCodeEntry data to its address
   bool compile_nmethod(ciEnv* env, ciMethod* target, AbstractCompiler* compiler);
 
@@ -709,7 +725,9 @@ public:
   bool read_oops(OopRecorder* oop_recorder, ciMethod* target);
   bool read_metadata(OopRecorder* oop_recorder, ciMethod* target);
 
-  bool read_oop_metadata_list(JavaThread* thread, ciMethod* target, GrowableArray<Handle> &oop_list, GrowableArray<Metadata*> &metadata_list, OopRecorder* oop_recorder);
+  void populate_oop_recorder_metadata(OopRecorder* oop_recorder, AOTCodeEntry* aot_code_entry);
+  bool read_oop_list(JavaThread* thread, ciMethod* target, GrowableArray<Handle> &oop_list, OopRecorder* oop_recorder);
+  bool read_oop_metadata_list(JavaThread* thread, ciMethod* target, GrowableArray<Handle> &oop_list, GrowableArray<Metadata*> &metadata_list);
   void apply_relocations(nmethod* nm, GrowableArray<Handle> &oop_list, GrowableArray<Metadata*> &metadata_list) NOT_CDS_RETURN;
 
   ImmutableOopMapSet* read_oop_map_set();

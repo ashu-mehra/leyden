@@ -487,9 +487,8 @@ class nmethod : public CodeBlob {
   nmethod* restore(address code_cache_buffer,
                    const methodHandle& method,
                    int compile_id,
-                   address reloc_data,
+                   address mutable_data,
                    GrowableArray<Handle>& oop_list,
-                   GrowableArray<Metadata*>& metadata_list,
                    ImmutableOopMapSet* oop_maps,
                    address immutable_data,
                    GrowableArray<Handle>& reloc_imm_oop_list,
@@ -506,9 +505,8 @@ public:
                               const methodHandle& method,
                               AbstractCompiler* compiler,
                               int compile_id,
-                              address reloc_data,
+                              address mutable_data,
                               GrowableArray<Handle>& oop_list,
-                              GrowableArray<Metadata*>& metadata_list,
                               ImmutableOopMapSet* oop_maps,
                               address immutable_data,
                               GrowableArray<Handle>& reloc_imm_oop_list,
@@ -588,6 +586,7 @@ public:
 
   // mutable data
   Metadata** metadata_begin     () const { return (Metadata**) (mutable_data_begin() + _relocation_size); }
+  int metadata_offset_in_bytes() { return (int)((address)metadata_begin() - (address)mutable_data_begin()); }
 #if INCLUDE_JVMCI
   Metadata** metadata_end       () const { return (Metadata**) (mutable_data_begin() + _relocation_size + _metadata_size); }
   address jvmci_data_begin      () const { return               mutable_data_begin() + _relocation_size + _metadata_size; }
@@ -773,6 +772,7 @@ public:
   void copy_values(GrowableArray<jobject>* oops);
   void copy_values(GrowableArray<Metadata*>* metadata);
   void copy_values(GrowableArray<address>* metadata) {} // Nothing to do
+  void verify_metadata_is_shareable();
 
   // Relocation support
 private:

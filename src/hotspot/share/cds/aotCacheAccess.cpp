@@ -165,3 +165,8 @@ void AOTCacheAccess::set_pointer(address* ptr, address value) {
   *ptr = value;
   ArchivePtrMarker::mark_pointer(ptr);
 }
+
+void AOTCacheAccess::mark_pointer(address* ptr) {
+  address value = *ptr;
+  set_pointer(ptr, value);
+}

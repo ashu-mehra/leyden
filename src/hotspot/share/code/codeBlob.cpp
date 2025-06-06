@@ -188,16 +188,14 @@ CodeBlob::CodeBlob(const char* name, CodeBlobKind kind, int size, uint16_t heade
   assert(_mutable_data = blob_end(), "sanity");
 }
 
-void CodeBlob::restore_mutable_data(address reloc_data) {
+void CodeBlob::restore_mutable_data(address mutable_data) {
   // Relocation data is now stored as part of the mutable data area; allocate it before copy relocations
   if (_mutable_data_size > 0) {
     _mutable_data = (address)os::malloc(_mutable_data_size, mtCode);
     if (_mutable_data == nullptr) {
       vm_exit_out_of_memory(_mutable_data_size, OOM_MALLOC_ERROR, "codebuffer: no space for mutable data");
     }
-  }
-  if (_relocation_size > 0) {
-    memcpy((address)relocation_begin(), reloc_data, relocation_size());
+    memcpy(_mutable_data, mutable_data, _mutable_data_size);
   }
 }
 
@@ -266,20 +264,20 @@ void CodeBlob::post_restore() {
 
 CodeBlob* CodeBlob::restore(address code_cache_buffer,
                             const char* name,
-                            address archived_reloc_data,
+                            address archived_mutable_data,
                             ImmutableOopMapSet* archived_oop_maps)
 {
   copy_to(code_cache_buffer);
   CodeBlob* code_blob = (CodeBlob*)code_cache_buffer;
   code_blob->set_name(name);
-  code_blob->restore_mutable_data(archived_reloc_data);
+  code_blob->restore_mutable_data(archived_mutable_data);
   code_blob->set_oop_maps(archived_oop_maps);
   return code_blob;
 }
 
 CodeBlob* CodeBlob::create(CodeBlob* archived_blob,
                            const char* name,
-                           address archived_reloc_data,
+                           address archived_mutable_data,
                            ImmutableOopMapSet* archived_oop_maps
 #ifndef PRODUCT
                            , AsmRemarks& archived_asm_remarks
@@ -299,7 +297,7 @@ CodeBlob* CodeBlob::create(CodeBlob* archived_blob,
     if (code_cache_buffer != nullptr) {
       blob = archived_blob->restore(code_cache_buffer,
                                     name,
-                                    archived_reloc_data,
+                                    archived_mutable_data,
                                     archived_oop_maps);
 #ifndef PRODUCT
       blob->use_remarks(archived_asm_remarks);
