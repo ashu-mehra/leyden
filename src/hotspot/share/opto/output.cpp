@@ -1460,6 +1460,8 @@ void PhaseOutput::fill_buffer(C2_MacroAssembler* masm, uint* blk_starts) {
   }
 #endif
 
+  MarkAssemblyPhase map(masm);
+
   NonSafepointEmitter non_safepoints(C);  // emit non-safepoints lazily
 
   // Emit the constant table.

@@ -44,6 +44,77 @@ typedef enum {
 class outputStream;
 enum class vmIntrinsicID;
 
+#include CPU_HEADER(cpu_feature_flags)
+
+enum Feature_Flag {
+#define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
+  CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
+#undef DECLARE_CPU_FEATURE_FLAG
+  MAX_CPU_FEATURES
+};
+
+class VM_Features {
+ private:
+  uint64_t _features_bitmap[(MAX_CPU_FEATURES / BitsPerLong) + 1];
+
+  STATIC_ASSERT(sizeof(_features_bitmap) * BitsPerByte >= MAX_CPU_FEATURES);
+
+  // Number of 8-byte elements in _bitmap.
+  constexpr static int features_bitmap_element_count() {
+    return sizeof(_features_bitmap) / sizeof(uint64_t);
+  }
+
+  constexpr static int features_bitmap_element_shift_count() {
+    return LogBitsPerLong;
+  }
+
+  constexpr static uint64_t features_bitmap_element_mask() {
+    return (1ULL << features_bitmap_element_shift_count()) - 1;
+  }
+
+  static int index(Feature_Flag feature) {
+    int idx = feature >> features_bitmap_element_shift_count();
+    assert(idx < features_bitmap_element_count(), "Features array index out of bounds");
+    return idx;
+  }
+
+  static uint64_t bit_mask(Feature_Flag feature) {
+    return (1ULL << (feature & features_bitmap_element_mask()));
+  }
+
+  static int _features_bitmap_size; // for JVMCI purposes
+ public:
+  VM_Features() {
+    for (int i = 0; i < features_bitmap_element_count(); i++) {
+      _features_bitmap[i] = 0;
+    }
+  }
+
+  void set_feature(Feature_Flag feature) {
+    int idx = index(feature);
+    _features_bitmap[idx] |= bit_mask(feature);
+  }
+
+  void clear_feature(Feature_Flag feature) {
+    int idx = index(feature);
+    _features_bitmap[idx] &= ~bit_mask(feature);
+  }
+
+  bool supports_feature(Feature_Flag feature) {
+    int idx = index(feature);
+    return (_features_bitmap[idx] & bit_mask(feature)) != 0;
+  }
+
+  bool supports(VM_Features* features) {
+    for (int i = 0; i < features_bitmap_element_count(); i++) {
+      if ((_features_bitmap[i] & features->_features_bitmap[i]) != features->_features_bitmap[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
 // Abstract_VM_Version provides information about the VM.
 
 class Abstract_VM_Version: AllStatic {
@@ -55,14 +126,14 @@ class Abstract_VM_Version: AllStatic {
   static const char*  _s_internal_vm_info_string;
 
   // CPU feature flags, can be affected by VM settings.
-  static uint64_t _features;
+  static VM_Features _features;
 
   static const char* _features_string;
 
   static const char* _cpu_info_string;
 
   // Original CPU feature flags, not affected by VM settings.
-  static uint64_t _cpu_features;
+  static VM_Features _cpu_features;
 
   // These are set by machine-dependent initializations
 #ifndef SUPPORTS_NATIVE_CX8
@@ -214,6 +285,7 @@ class Abstract_VM_Version: AllStatic {
   // VM_Version statics
   static const size_t      CPU_TYPE_DESC_BUF_SIZE = 256;
   static const size_t      CPU_DETAILED_DESC_BUF_SIZE = 4096;
+  static const size_t      CPU_FEATURES_STRING_BUF_SIZE = 2048;
 
   static int   _no_of_threads;
   static int   _no_of_cores;
@@ -229,6 +301,9 @@ class Abstract_VM_Version: AllStatic {
 
   static const char* cpu_name(void);
   static const char* cpu_description(void);
+  // Note that caller is responsible for freeing the returned buffer using FREE_C_HEAP_OBJ
+  static const char* cpu_features_string(VM_Features* features);
+  static VM_Features cpu_features() { return _features; }
 };
 
 #endif // SHARE_RUNTIME_ABSTRACT_VM_VERSION_HPP

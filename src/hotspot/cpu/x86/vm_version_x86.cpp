@@ -36,6 +36,7 @@
 #include "runtime/java.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/stubCodeGenerator.hpp"
+#include "runtime/thread.hpp"
 #include "runtime/vm_version.hpp"
 #include "utilities/checkedCast.hpp"
 #include "utilities/powerOfTwo.hpp"
@@ -47,9 +48,9 @@ int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
 
-#define DECLARE_CPU_FEATURE_NAME(id, name, bit) name,
+#define DECLARE_CPU_FEATURE_NAME(id, name, bit) XSTR(name),
 const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
-#undef DECLARE_CPU_FEATURE_FLAG
+#undef DECLARE_CPU_FEATURE_NAME
 
 // Address of instruction which causes SEGV
 address VM_Version::_cpuinfo_segv_addr = nullptr;
@@ -63,11 +64,6 @@ address VM_Version::_cpuinfo_cont_addr_apx = nullptr;
 static BufferBlob* stub_blob;
 static const int stub_size = 2000;
 
-int VM_Version::VM_Features::_features_bitmap_size = sizeof(VM_Version::VM_Features::_features_bitmap) / BytesPerLong;
-
-VM_Version::VM_Features VM_Version::_features;
-VM_Version::VM_Features VM_Version::_cpu_features;
-
 extern "C" {
   typedef void (*get_cpu_info_stub_t)(void*);
   typedef void (*detect_virt_stub_t)(uint32_t, uint32_t*);
@@ -77,19 +73,22 @@ static get_cpu_info_stub_t get_cpu_info_stub = nullptr;
 static detect_virt_stub_t detect_virt_stub = nullptr;
 static clear_apx_test_state_t clear_apx_test_state_stub = nullptr;
 
-bool VM_Version::supports_clflush() {
-  // clflush should always be available on x86_64
-  // if not we are in real trouble because we rely on it
-  // to flush the code cache.
-  // Unfortunately, Assembler::clflush is currently called as part
-  // of generation of the code cache flush routine. This happens
-  // under Universe::init before the processor features are set
-  // up. Assembler::flush calls this routine to check that clflush
-  // is allowed. So, we give the caller a free pass if Universe init
-  // is still in progress.
-  assert ((!Universe::is_fully_initialized() || _features.supports_feature(CPU_FLUSH)), "clflush should be available");
-  return true;
-}
+// Feature identification
+#define CPU_FEATURE_DETECTION_DEFN(id, name, bit) \
+bool VM_Version::supports_##name() { \
+  bool used = _features.supports_feature(CPU_##id); \
+  if (used) { \
+    if (Thread::current()->is_Java_thread() && AOTCodeCache::is_on_for_dump()) { \
+      AbstractAssembler* assembler = JavaThread::current()->assembler(); \
+      if (assembler != nullptr) { \
+        assembler->set_cpu_feature_used(CPU_##id); \
+      } \
+    } \
+  } \
+  return used; \
+};
+CPU_FEATURE_FLAGS(CPU_FEATURE_DETECTION_DEFN)
+#undef CPU_FEATURE_DETECTION
 
 #define CPUID_STANDARD_FN   0x0
 #define CPUID_STANDARD_FN_1 0x1
@@ -1077,7 +1076,7 @@ void VM_Version::get_processor_features() {
     _has_intel_jcc_erratum = IntelJccErratumMitigation;
   }
 
-  assert(supports_clflush(), "Always present");
+  assert(!Universe::is_fully_initialized() || supports_clflush(), "Always present");
   if (X86ICacheSync == -1) {
     // Auto-detect, choosing the best performant one that still flushes
     // the cache. We could switch to CPUID/SERIALIZE ("4"/"5") going forward.
@@ -2900,7 +2899,7 @@ int64_t VM_Version::maximum_qualified_cpu_frequency(void) {
   return _max_qualified_cpu_frequency;
 }
 
-VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
+VM_Features VM_Version::CpuidInfo::feature_flags() const {
   VM_Features vm_features;
   if (std_cpuid1_edx.bits.cmpxchg8 != 0)
     vm_features.set_feature(CPU_CX8);
@@ -3296,9 +3295,9 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
   return true;
 }
 
-void VM_Version::insert_features_names(VM_Version::VM_Features features, char* buf, size_t buflen) {
+void VM_Version::insert_features_names(VM_Features features, char* buf, size_t buflen) {
   for (int i = 0; i < MAX_CPU_FEATURES; i++) {
-    if (features.supports_feature((VM_Version::Feature_Flag)i)) {
+    if (features.supports_feature((Feature_Flag)i)) {
       int res = jio_snprintf(buf, buflen, ", %s", _features_names[i]);
       assert(res > 0, "not enough temporary space allocated");
       buf += res;

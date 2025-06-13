@@ -992,6 +992,10 @@ void* AOTCodeEntry::operator new(size_t x, AOTCodeCache* cache) {
 static bool check_entry(AOTCodeEntry::Kind kind, uint id, uint comp_level, uint decomp, AOTCodeEntry* entry) {
   if (entry->kind() == kind) {
     assert(entry->id() == id, "sanity");
+    if (!VM_Version::cpu_features().supports(entry->cpu_features_used())) {
+      log_debug(aot, codecache)("CPU features mismatch, skipping this entry");
+      return false;
+    }
     if (kind != AOTCodeEntry::Code || (!entry->not_entrant() && !entry->has_clinit_barriers() &&
                                   (entry->comp_level() == comp_level) &&
                                   (entry->ignore_decompile() || entry->decompile() == decomp))) {
@@ -1636,7 +1640,7 @@ bool AOTCodeCache::load_stub(StubCodeGenerator* cgen, vmIntrinsicID id, const ch
   return true;
 }
 
-AOTCodeEntry* AOTCodeCache::store_nmethod(nmethod* nm, AbstractCompiler* compiler, bool for_preload) {
+AOTCodeEntry* AOTCodeCache::store_nmethod(nmethod* nm, AbstractCompiler* compiler, bool for_preload, VM_Features* cpu_features) {
   if (!is_dumping_code()) {
     return nullptr;
   }
@@ -1663,14 +1667,14 @@ AOTCodeEntry* AOTCodeCache::store_nmethod(nmethod* nm, AbstractCompiler* compile
 
   TraceTime t1("Total time to store AOT code", &_t_totalStore, enable_timers(), false);
   AOTCodeEntry* entry = nullptr;
-  entry = cache->write_nmethod(nm, for_preload);
+  entry = cache->write_nmethod(nm, for_preload, cpu_features);
   if (entry == nullptr) {
     log_info(aot, codecache, nmethod)("%d (L%d): nmethod store attempt failed", nm->compile_id(), comp_level);
   }
   return entry;
 }
 
-AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
+AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload, VM_Features* cpu_features) {
   AOTCodeCache* cache = open_for_dump();
   assert(cache != nullptr, "sanity check");
   assert(!nm->has_clinit_barriers() || _gen_preload_code, "sanity");
@@ -1832,7 +1836,8 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
                                                 entry_position, entry_size,
                                                 name_offset, name_size,
                                                 blob_offset, has_oop_maps,
-                                                nm->content_begin(), comp_level, comp_id, decomp,
+                                                nm->content_begin(), cpu_features,
+                                                comp_level, comp_id, decomp,
                                                 nm->has_clinit_barriers(), for_preload, ignore_decompile);
   if (method_in_cds) {
     entry->set_method(method);
@@ -1843,11 +1848,21 @@ AOTCodeEntry* AOTCodeCache::write_nmethod(nmethod* nm, bool for_preload) {
     assert(entry->method() != nullptr, "sanity");
   }
 #endif
-  {
+
+  LogStreamHandle(Info, aot, codecache, nmethod) log;
+  if (log.is_enabled()) {
     ResourceMark rm;
     const char* name = nm->method()->name_and_sig_as_C_string();
-    log_info(aot, codecache, nmethod)("%d (L%d): Wrote nmethod '%s'%s to AOT Code Cache",
-                           comp_id, (int)comp_level, name, (for_preload ? " (for preload)" : ""));
+    const char* cpu_features_str = VM_Version::cpu_features_string(cpu_features);
+    const char* features_str = cpu_features_str;
+    if (features_str == nullptr || features_str[0] == '\0') {
+      features_str = "<empty>";
+    }
+    log_info(aot, codecache, nmethod)("%d (L%d): Wrote nmethod '%s'%s to AOT Code Cache, cpu features used=%s",
+                           comp_id, (int)comp_level, name, (for_preload ? " (for preload)" : ""), features_str);
+    if (cpu_features_str != nullptr) {
+      FREE_C_HEAP_OBJ(cpu_features_str);
+    }
   }
   if (VerifyCachedCode) {
     return nullptr;
@@ -1969,7 +1984,18 @@ bool AOTCodeReader::compile_nmethod(ciEnv* env, ciMethod* target, AbstractCompil
   bool success = task->is_success();
   if (success) {
     aot_code_entry->set_loaded();
-    log_info(aot, codecache, nmethod)("%d (L%d): Read nmethod '%s' from AOT Code Cache", compile_id(), comp_level(), name);
+    LogStreamHandle(Info, aot, codecache, nmethod) log1;
+    if (log1.is_enabled()) {
+      const char* cpu_features_str = VM_Version::cpu_features_string(aot_code_entry->cpu_features_used());
+      const char* features_str = cpu_features_str;
+      if (features_str == nullptr || features_str[0] == '\0') {
+	features_str = "<empty>";
+      }
+      log1.print("%d (L%d): Read nmethod '%s' from AOT Code Cache, cpu features=%s", compile_id(), comp_level(), name, features_str);
+      if (cpu_features_str != nullptr) {
+	FREE_C_HEAP_OBJ(cpu_features_str);
+      }
+    }
 #ifdef ASSERT
     LogStreamHandle(Debug, aot, codecache, nmethod) log;
     if (log.is_enabled()) {

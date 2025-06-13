@@ -1252,7 +1252,7 @@ void ciEnv::register_method(ciMethod* target,
       assert(!method->is_synchronized() || nm->has_monitors(), "");
 
       if (aot_code_entry == nullptr) {
-        aot_code_entry = AOTCodeCache::store_nmethod(nm, compiler, for_preload);
+        aot_code_entry = AOTCodeCache::store_nmethod(nm, compiler, for_preload, code_buffer->cpu_features_used());
         if (aot_code_entry != nullptr) {
           aot_code_entry->set_inlined_bytecodes(num_inlined_bytecodes());
           if (has_clinit_barriers) {

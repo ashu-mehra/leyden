@@ -349,6 +349,9 @@ int Compilation::emit_code_body() {
   code()->initialize_oop_recorder(env()->oop_recorder());
 
   _masm = new C1_MacroAssembler(code());
+
+  MarkAssemblyPhase map(_masm);
+
   _masm->set_oop_recorder(env()->oop_recorder());
 
   LIR_Assembler lir_asm(this);

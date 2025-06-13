@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2000, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -701,7 +700,7 @@
                                                                                                                                      \
      static_field(Abstract_VM_Version,         _s_vm_release,                                 const char*)                           \
      static_field(Abstract_VM_Version,         _s_internal_vm_info_string,                    const char*)                           \
-     static_field(Abstract_VM_Version,         _features,                                     uint64_t)                              \
+     static_field(Abstract_VM_Version,         _features,                                     VM_Features)                           \
      static_field(Abstract_VM_Version,         _features_string,                              const char*)                           \
      static_field(Abstract_VM_Version,         _cpu_info_string,                              const char*)                           \
      static_field(Abstract_VM_Version,         _vm_major_version,                             int)                                   \
@@ -1167,6 +1166,7 @@
                                                                           \
   declare_toplevel_type(Abstract_VM_Version)                              \
   declare_toplevel_type(VM_Version)                                       \
+  declare_toplevel_type(VM_Features)                                      \
                                                                           \
   /*************/                                                         \
   /* Arguments */                                                         \

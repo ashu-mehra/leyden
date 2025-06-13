@@ -29,13 +29,15 @@
 #include "runtime/vm_version.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+int VM_Features::_features_bitmap_size = sizeof(VM_Features::_features_bitmap) / BytesPerLong;
+
 const char* Abstract_VM_Version::_s_vm_release = Abstract_VM_Version::vm_release();
 const char* Abstract_VM_Version::_s_internal_vm_info_string = Abstract_VM_Version::internal_vm_info_string();
 
-uint64_t Abstract_VM_Version::_features = 0;
+VM_Features Abstract_VM_Version::_features;
 const char* Abstract_VM_Version::_features_string = "";
 const char* Abstract_VM_Version::_cpu_info_string = "";
-uint64_t Abstract_VM_Version::_cpu_features = 0;
+VM_Features Abstract_VM_Version::_cpu_features;
 
 #ifndef SUPPORTS_NATIVE_CX8
 bool Abstract_VM_Version::_supports_cx8 = false;
@@ -401,4 +403,27 @@ const char* Abstract_VM_Version::cpu_description(void) {
   }
   strncpy(tmp, _cpu_desc, CPU_DETAILED_DESC_BUF_SIZE);
   return tmp;
+}
+
+// Note that caller is responsible for freeing the returned buffer using FREE_C_HEAP_OBJ
+const char* Abstract_VM_Version::cpu_features_string(VM_Features* features) {
+  char* buffer = NEW_C_HEAP_ARRAY_RETURN_NULL(char, CPU_FEATURES_STRING_BUF_SIZE, mtCompiler);
+  if (buffer != nullptr) {
+    char* cursor = (char *)buffer;
+    const char* buf_end = buffer+CPU_FEATURES_STRING_BUF_SIZE;
+    for (int i = 0; i < MAX_CPU_FEATURES; i++) {
+      if (features->supports_feature((Feature_Flag)i)) {
+	const char* name = VM_Version::feature_name((Feature_Flag)i);
+	assert((size_t)(buf_end - cursor) >= strlen(name)+2, "buffer is too small");
+	if ((size_t)(buf_end - cursor) >= strlen(name)+2) { // +1 for null char and +1 for space
+	  cursor = stpcpy(cursor, " ");
+	  cursor = stpcpy(cursor, name);
+	} else {
+	  break;
+	}
+      }
+    }
+    *cursor = '\0';
+  }
+  return (const char*)buffer;
 }

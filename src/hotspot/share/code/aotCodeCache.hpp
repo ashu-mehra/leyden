@@ -29,6 +29,7 @@
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
 #include "oops/oopsHierarchy.hpp"
+#include "runtime/abstract_vm_version.hpp"
 #include "utilities/exceptions.hpp"
 
 /*
@@ -118,12 +119,13 @@ private:
   bool   _ignore_decompile; // ignore decompile counter if compilation is done
                             // during "assembly" phase without running application
   address _dumptime_content_start_addr; // CodeBlob::content_begin() at dump time; used for applying relocations
+  VM_Features _cpu_features_used;
 
 public:
   // this constructor is used only by AOTCodeEntry::Stub
   AOTCodeEntry(uint offset, uint size, uint name_offset, uint name_size,
                uint code_offset, uint code_size,
-               Kind kind, uint id) {
+               Kind kind, uint id) : _cpu_features_used() {
     assert(kind == AOTCodeEntry::Stub, "sanity check");
     _next         = nullptr;
     _method       = nullptr;
@@ -155,6 +157,7 @@ public:
                uint name_offset,  uint name_size,
                uint blob_offset,  bool has_oop_maps,
                address dumptime_content_start_addr,
+               VM_Features* cpu_features = nullptr,
                uint comp_level = 0,
                uint comp_id = 0, uint decomp = 0,
                bool has_clinit_barriers = false,
@@ -172,6 +175,10 @@ public:
     _code_size    = 0; // unused
 
     _dumptime_content_start_addr = dumptime_content_start_addr;
+
+    if (cpu_features != nullptr) {
+      _cpu_features_used = *cpu_features;
+    }
     _num_inlined_bytecodes = 0;
 
     _comp_level   = comp_level;
@@ -216,6 +223,7 @@ public:
 
   bool has_oop_maps() const { return _has_oop_maps; }
   address dumptime_content_start_addr() const { return _dumptime_content_start_addr; }
+  VM_Features* cpu_features_used() { return &_cpu_features_used; }
   uint num_inlined_bytecodes() const { return _num_inlined_bytecodes; }
   void set_inlined_bytecodes(int bytes) { _num_inlined_bytecodes = bytes; }
 
@@ -481,7 +489,7 @@ private:
   void clear_lookup_failed()   { _lookup_failed = false; }
   bool lookup_failed()   const { return _lookup_failed; }
 
-  AOTCodeEntry* write_nmethod(nmethod* nm, bool for_preload);
+  AOTCodeEntry* write_nmethod(nmethod* nm, bool for_preload, VM_Features* cpu_features);
 
   // States:
   //   S >= 0: allow new readers, S readers are currently active
@@ -588,7 +596,7 @@ public:
                                   int* entry_offsets = nullptr) NOT_CDS_RETURN_(nullptr);
 
   static bool load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level) NOT_CDS_RETURN_(false);
-  static AOTCodeEntry* store_nmethod(nmethod* nm, AbstractCompiler* compiler, bool for_preload) NOT_CDS_RETURN_(nullptr);
+  static AOTCodeEntry* store_nmethod(nmethod* nm, AbstractCompiler* compiler, bool for_preload, VM_Features* cpu_features) NOT_CDS_RETURN_(nullptr);
 
   static uint store_entries_cnt() {
     if (is_on_for_dump()) {

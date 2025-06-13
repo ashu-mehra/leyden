@@ -30,6 +30,7 @@
 #include "code/oopRecorder.hpp"
 #include "code/relocInfo.hpp"
 #include "memory/allocation.hpp"
+#include "runtime/abstract_vm_version.hpp"
 #include "utilities/checkedCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/growableArray.hpp"
@@ -213,6 +214,7 @@ class AbstractAssembler : public ResourceObj  {
  protected:
   CodeSection* _code_section;          // section within the code buffer
   OopRecorder* _oop_recorder;          // support for relocInfo::oop_type
+  VM_Features* _cpu_features_used;
 
  public:
   // Code emission & accessing
@@ -507,6 +509,28 @@ class AbstractAssembler : public ResourceObj  {
    */
   void pd_patch_instruction(address branch, address target, const char* file, int line);
 
+  void set_cpu_feature_used(Feature_Flag flag) {
+    _cpu_features_used->set_feature(flag);
+  }
+
+  bool is_cpu_feature_used(Feature_Flag flag) {
+    return _cpu_features_used->supports_feature(flag);
+  }
+};
+
+class MarkAssemblyPhase {
+ public:
+  MarkAssemblyPhase(AbstractAssembler* assembler) {
+    JavaThread* thread = JavaThread::current();
+    assert(thread != nullptr, "not a JavaThread");
+    thread->set_assembler(assembler);
+  }
+
+  ~MarkAssemblyPhase() {
+    JavaThread* thread = JavaThread::current();
+    assert(thread != nullptr, "not a JavaThread");
+    thread->set_assembler(nullptr);
+  }
 };
 
 #include CPU_HEADER(assembler)

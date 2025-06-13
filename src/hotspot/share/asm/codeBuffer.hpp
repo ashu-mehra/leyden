@@ -583,6 +583,8 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
   address      decode_begin();
 #endif
 
+  VM_Features  _cpu_features_used;
+
   void initialize_misc(const char * name) {
     // all pointers other than code_start/end and those inside the sections
     assert(name != nullptr, "must have a name");
@@ -814,6 +816,7 @@ class CodeBuffer: public StackObj DEBUG_ONLY(COMMA private Scrubber) {
   void initialize_oop_recorder(OopRecorder* r);
 
   OopRecorder* oop_recorder() const { return _oop_recorder; }
+  VM_Features* cpu_features_used() { return &_cpu_features_used; }
 
   address last_insn() const { return _last_insn; }
   void set_last_insn(address a) { _last_insn = a; }

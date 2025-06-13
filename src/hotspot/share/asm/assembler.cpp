@@ -49,6 +49,7 @@ AbstractAssembler::AbstractAssembler(CodeBuffer* code) {
   }
   _code_section = cs;
   _oop_recorder= code->oop_recorder();
+  _cpu_features_used = code->cpu_features_used();
   DEBUG_ONLY( _short_branch_delta = 0; )
 }
 

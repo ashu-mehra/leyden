@@ -324,6 +324,7 @@ void CompileTask::print_impl(outputStream* st, Method* method, int compile_id, i
   if (msg != nullptr) {
     st->print("   %s", msg);
   }
+
   if (cr) {
     st->cr();
   }

@@ -2611,7 +2611,6 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
       }
     }
 
-
     if (!ci_env.failing() && !task->is_success() && !task->is_precompiled()) {
       assert(ci_env.failure_reason() != nullptr, "expect failure reason");
       assert(false, "compiler should always document failure: %s", ci_env.failure_reason());

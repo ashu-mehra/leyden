@@ -52,6 +52,7 @@
 #include "utilities/ticks.hpp"
 #endif
 
+class AbstractAssembler;
 class AsyncExceptionHandshake;
 class DeoptResourceMark;
 class InternalOOMEMark;
@@ -1327,6 +1328,16 @@ public:
   // Called when holding the Service_lock.
   static bool has_oop_handles_to_release() {
     return _oop_handle_list != nullptr;
+  }
+
+  AbstractAssembler* _assembler;
+
+ public:
+  void set_assembler(AbstractAssembler* assembler) {
+    _assembler = assembler;
+  }
+  AbstractAssembler* assembler() const {
+    return _assembler;
   }
 };
 
