@@ -78,7 +78,7 @@ static clear_apx_test_state_t clear_apx_test_state_stub = nullptr;
 bool VM_Version::supports_##name() { \
   bool used = _features.supports_feature(CPU_##id); \
   if (used) { \
-    if (Thread::current()->is_Java_thread() && AOTCodeCache::is_on_for_dump()) { \
+    if (AOTCodeCache::is_on_for_dump() && Thread::current()->is_Java_thread()) { \
       AbstractAssembler* assembler = JavaThread::current()->assembler(); \
       if (assembler != nullptr) { \
         assembler->set_cpu_feature_used(CPU_##id); \

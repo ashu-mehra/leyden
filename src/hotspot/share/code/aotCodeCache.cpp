@@ -992,13 +992,13 @@ void* AOTCodeEntry::operator new(size_t x, AOTCodeCache* cache) {
 static bool check_entry(AOTCodeEntry::Kind kind, uint id, uint comp_level, uint decomp, AOTCodeEntry* entry) {
   if (entry->kind() == kind) {
     assert(entry->id() == id, "sanity");
-    if (!VM_Version::cpu_features().supports(entry->cpu_features_used())) {
-      log_debug(aot, codecache)("CPU features mismatch, skipping this entry");
-      return false;
-    }
     if (kind != AOTCodeEntry::Code || (!entry->not_entrant() && !entry->has_clinit_barriers() &&
                                   (entry->comp_level() == comp_level) &&
                                   (entry->ignore_decompile() || entry->decompile() == decomp))) {
+      if (!VM_Version::cpu_features().supports(entry->cpu_features_used())) {
+        log_debug(aot, codecache)("Required CPU features are not supported, skip this entry");
+        return false;
+      }
       return true; // Found
     }
   }

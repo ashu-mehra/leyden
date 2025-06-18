@@ -280,7 +280,7 @@ address StubGenerator::generate_libmFmod() {
 //                         AVX2 code
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
-  } else if (VM_Version::supports_fma()) {       // AVX2 version
+  } else if (VM_Version::supports_fma_avx()) {       // AVX2 version
 
     Label L_104a, L_11bd, L_10c1, L_1090, L_11b9, L_10e7, L_11af, L_111c, L_10f3, L_116e, L_112a;
     Label L_1173, L_1157, L_117f, L_11a0;

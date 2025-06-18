@@ -413,14 +413,16 @@ const char* Abstract_VM_Version::cpu_features_string(VM_Features* features) {
     const char* buf_end = buffer+CPU_FEATURES_STRING_BUF_SIZE;
     for (int i = 0; i < MAX_CPU_FEATURES; i++) {
       if (features->supports_feature((Feature_Flag)i)) {
-	const char* name = VM_Version::feature_name((Feature_Flag)i);
-	assert((size_t)(buf_end - cursor) >= strlen(name)+2, "buffer is too small");
-	if ((size_t)(buf_end - cursor) >= strlen(name)+2) { // +1 for null char and +1 for space
-	  cursor = stpcpy(cursor, " ");
-	  cursor = stpcpy(cursor, name);
-	} else {
-	  break;
-	}
+        const char* name = VM_Version::feature_name((Feature_Flag)i);
+        assert((size_t)(buf_end - cursor) >= strlen(name)+2, "buffer is too small");
+        if ((size_t)(buf_end - cursor) >= strlen(name)+2) { // +1 for null char and +1 for space
+          if (i == 0) {
+            cursor = stpcpy(cursor, " ");
+          }
+          cursor = stpcpy(cursor, name);
+        } else {
+          break;
+        }
       }
     }
     *cursor = '\0';

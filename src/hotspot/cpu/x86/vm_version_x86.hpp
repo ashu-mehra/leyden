@@ -685,6 +685,7 @@ public:
   static bool supports_avx512nobw()   { return (supports_evex() && !supports_avx512bw()); }
   static bool supports_avx256only()   { return (supports_avx2() && !supports_evex()); }
   static bool supports_avxonly()      { return ((supports_avx2() || supports_avx()) && !supports_evex()); }
+  static bool supports_fma_avx()          { return supports_fma() && supports_avx(); }
   static bool supports_avx512_simd_sort() {
     if (supports_avx512dq()) {
       // Disable AVX512 version of SIMD Sort on AMD Zen4 Processors.

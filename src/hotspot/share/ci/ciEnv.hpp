@@ -35,7 +35,6 @@
 #include "compiler/compiler_globals.hpp"
 #include "compiler/compilerThread.hpp"
 #include "oops/methodData.hpp"
-#include "runtime/vm_version.hpp"
 #include "runtime/javaThread.hpp"
 
 class CompileTask;
