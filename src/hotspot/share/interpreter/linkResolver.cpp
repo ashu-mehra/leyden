@@ -259,7 +259,7 @@ void CallInfo::print() {
 LinkInfo::LinkInfo(const constantPoolHandle& pool, int index, const methodHandle& current_method, Bytecodes::Code code, TRAPS) {
    // resolve klass
   _resolved_klass = pool->klass_ref_at(index, code, CHECK);
-
+  _index = index;
   // Get name, signature, and static klass
   _name          = pool->name_ref_at(index, code);
   _signature     = pool->signature_ref_at(index, code);
@@ -275,7 +275,7 @@ LinkInfo::LinkInfo(const constantPoolHandle& pool, int index, const methodHandle
 LinkInfo::LinkInfo(const constantPoolHandle& pool, int index, Bytecodes::Code code, TRAPS) {
    // resolve klass
   _resolved_klass = pool->klass_ref_at(index, code, CHECK);
-
+  _index = index;
   // Get name, signature, and static klass
   _name          = pool->name_ref_at(index, code);
   _signature     = pool->signature_ref_at(index, code);
@@ -651,7 +651,7 @@ Method* LinkResolver::resolve_method_statically(Bytecodes::Code code,
     Symbol* method_name = vmSymbols::invoke_name();
     Symbol* method_signature = pool->signature_ref_at(index, code);
     Klass*  current_klass = pool->pool_holder();
-    LinkInfo link_info(resolved_klass, method_name, method_signature, current_klass);
+    LinkInfo link_info(resolved_klass, method_name, method_signature, current_klass, index);
     return resolve_method(link_info, code, THREAD);
   }
 
@@ -1109,7 +1109,26 @@ void LinkResolver::resolve_field(fieldDescriptor& fd,
 void LinkResolver::resolve_static_call(CallInfo& result,
                                        const LinkInfo& link_info,
                                        ClassInitMode init_mode, TRAPS) {
-  Method* resolved_method = linktime_resolve_static_method(link_info, CHECK);
+  PerfTraceTime timer(SharedRuntime::_perf_lr_resolve_static_total_time);
+  AtomicAccess::inc(&SharedRuntime::_lr_resolve_static_ctr);
+  Method* resolved_method = nullptr;
+  Klass* current_klass = link_info.current_klass();
+  if (UseNewCode && current_klass != nullptr && current_klass->is_instance_klass()) {
+    constantPoolHandle constants(THREAD, ((InstanceKlass*)current_klass)->constants());
+    if (link_info.index() != -1 && constants->is_resolved(link_info.index(), Bytecodes::_invokestatic)) {
+      resolved_method = constants->resolved_method_entry_at(link_info.index())->method();
+      Klass* resolved_klass = resolved_method->method_holder();
+      assert(resolved_klass->is_instance_klass(), "InstanceKlass expected");
+      if (((InstanceKlass*)resolved_klass)->is_initialized() || ((InstanceKlass*)resolved_klass)->is_reentrant_initialization(THREAD)) {
+        result.set_static(resolved_method->method_holder(), methodHandle(THREAD, resolved_method), CHECK);
+        AtomicAccess::inc(&SharedRuntime::_lr_resolve_static_cache_hit_ctr);
+        return;
+      }
+    }
+  }
+  if (resolved_method == nullptr) {
+    resolved_method = linktime_resolve_static_method(link_info, CHECK);
+  }
 
   // The resolved class can change as a result of this resolution.
   Klass* resolved_klass = resolved_method->method_holder();
@@ -1123,7 +1142,7 @@ void LinkResolver::resolve_static_call(CallInfo& result,
     }
     // Use updated LinkInfo to reresolve with resolved method holder
     LinkInfo new_info(resolved_klass, link_info.name(), link_info.signature(),
-                      link_info.current_klass(),
+                      link_info.current_klass(), link_info.index(),
                       link_info.check_access() ? LinkInfo::AccessCheck::required : LinkInfo::AccessCheck::skip,
                       link_info.check_loader_constraints() ? LinkInfo::LoaderConstraintCheck::required : LinkInfo::LoaderConstraintCheck::skip);
     resolved_method = linktime_resolve_static_method(new_info, CHECK);
@@ -1167,7 +1186,21 @@ void LinkResolver::resolve_special_call(CallInfo& result,
                                         Handle recv,
                                         const LinkInfo& link_info,
                                         TRAPS) {
-  Method* resolved_method = linktime_resolve_special_method(link_info, CHECK);
+  PerfTraceTime timer(SharedRuntime::_perf_lr_resolve_special_total_time);
+  AtomicAccess::inc(&SharedRuntime::_lr_resolve_special_ctr);
+  Method* resolved_method = nullptr;
+  Klass* current_klass = link_info.current_klass();
+  if (UseNewCode && current_klass != nullptr && current_klass->is_instance_klass()) {
+    constantPoolHandle constants(THREAD, ((InstanceKlass*)current_klass)->constants());
+    if (link_info.index() != -1 && constants->is_resolved(link_info.index(), Bytecodes::_invokespecial)) {
+      resolved_method = constants->resolved_method_entry_at(link_info.index())->method();
+      result.set_static(link_info.resolved_klass(), methodHandle(THREAD, resolved_method), CHECK);
+      AtomicAccess::inc(&SharedRuntime::_lr_resolve_special_cache_hit_ctr);
+      return;
+    }
+  }
+  
+  resolved_method = linktime_resolve_special_method(link_info, CHECK);
   runtime_resolve_special_method(result, link_info, methodHandle(THREAD, resolved_method), recv, CHECK);
 }
 
@@ -1347,7 +1380,26 @@ void LinkResolver::runtime_resolve_special_method(CallInfo& result,
 void LinkResolver::resolve_virtual_call(CallInfo& result, Handle recv, Klass* receiver_klass,
                                         const LinkInfo& link_info,
                                         bool check_null_and_abstract, TRAPS) {
-  Method* resolved_method = linktime_resolve_virtual_method(link_info, CHECK);
+  PerfTraceTime timer(SharedRuntime::_perf_lr_resolve_virtual_total_time);
+  AtomicAccess::inc(&SharedRuntime::_lr_resolve_virtual_ctr);
+  Method* resolved_method = nullptr;
+  Klass* current_klass = link_info.current_klass();
+  if (UseNewCode && current_klass != nullptr && current_klass->is_instance_klass()) {
+    constantPoolHandle constants(THREAD, ((InstanceKlass*)current_klass)->constants());
+    if (link_info.index() != -1 && constants->is_resolved(link_info.index(), Bytecodes::_invokevirtual)) {
+      ResolvedMethodEntry* rme = constants->resolved_method_entry_at(link_info.index());
+      resolved_method = rme->method();
+      if (rme->is_vfinal()) {
+        result.set_virtual(link_info.resolved_klass(), methodHandle(THREAD, resolved_method),
+                           methodHandle(THREAD, resolved_method), rme->table_index(), CHECK);
+        AtomicAccess::inc(&SharedRuntime::_lr_resolve_virtual_cache_hit_ctr);
+        return;
+      }
+    }
+  }
+  if (resolved_method == nullptr) {
+    resolved_method = linktime_resolve_virtual_method(link_info, CHECK);
+  }
   runtime_resolve_virtual_method(result, methodHandle(THREAD, resolved_method),
                                  link_info.resolved_klass(),
                                  recv, receiver_klass,
@@ -1493,8 +1545,21 @@ void LinkResolver::runtime_resolve_virtual_method(CallInfo& result,
 void LinkResolver::resolve_interface_call(CallInfo& result, Handle recv, Klass* recv_klass,
                                           const LinkInfo& link_info,
                                           bool check_null_and_abstract, TRAPS) {
+  PerfTraceTime timer(SharedRuntime::_perf_lr_resolve_interface_total_time);
+  AtomicAccess::inc(&SharedRuntime::_lr_resolve_interface_ctr);
   // throws linktime exceptions
-  Method* resolved_method = linktime_resolve_interface_method(link_info, CHECK);
+  Method* resolved_method = nullptr;
+  Klass* current_klass = link_info.current_klass();
+  if (UseNewCode && current_klass != nullptr && current_klass->is_instance_klass()) {
+    constantPoolHandle constants(THREAD, ((InstanceKlass*)current_klass)->constants());
+    if (link_info.index() != -1 && constants->is_resolved(link_info.index(), Bytecodes::_invokeinterface)) {
+      resolved_method = constants->resolved_method_entry_at(link_info.index())->method();
+      AtomicAccess::inc(&SharedRuntime::_lr_resolve_interface_cache_hit_ctr);
+    }
+  }
+  if (resolved_method == nullptr) {
+    resolved_method = linktime_resolve_interface_method(link_info, CHECK);
+  }
   methodHandle mh(THREAD, resolved_method);
   runtime_resolve_interface_method(result, mh, link_info.resolved_klass(),
                                    recv, recv_klass, check_null_and_abstract,
@@ -1723,13 +1788,13 @@ void LinkResolver::resolve_invoke(CallInfo& result, Handle recv, const constantP
   return;
 }
 
-void LinkResolver::resolve_invoke(CallInfo& result, Handle& recv,
+void LinkResolver::resolve_invoke(CallInfo& result, Handle& recv, int index,
                              const methodHandle& attached_method,
                              Bytecodes::Code byte, TRAPS) {
   Klass* defc = attached_method->method_holder();
   Symbol* name = attached_method->name();
   Symbol* type = attached_method->signature();
-  LinkInfo link_info(defc, name, type);
+  LinkInfo link_info(defc, name, type, index);
   switch(byte) {
     case Bytecodes::_invokevirtual:
       resolve_virtual_call(result, recv, recv->klass(), link_info,

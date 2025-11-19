@@ -771,7 +771,7 @@ Handle MethodHandles::resolve_MemberName(Handle mname, Klass* caller, int lookup
   case IS_METHOD:
     {
       CallInfo result;
-      LinkInfo link_info(defc, name, type, caller, access_check, loader_constraint_check);
+      LinkInfo link_info(defc, name, type, caller, -1, access_check, loader_constraint_check);
       {
         assert(!HAS_PENDING_EXCEPTION, "");
         if (ref_kind == JVM_REF_invokeStatic) {
@@ -812,7 +812,7 @@ Handle MethodHandles::resolve_MemberName(Handle mname, Klass* caller, int lookup
   case IS_CONSTRUCTOR:
     {
       CallInfo result;
-      LinkInfo link_info(defc, name, type, caller, access_check, loader_constraint_check);
+      LinkInfo link_info(defc, name, type, caller, -1, access_check, loader_constraint_check);
       {
         assert(!HAS_PENDING_EXCEPTION, "");
         if (name == vmSymbols::object_initializer_name()) {
@@ -837,7 +837,7 @@ Handle MethodHandles::resolve_MemberName(Handle mname, Klass* caller, int lookup
       fieldDescriptor result; // find_field initializes fd if found
       {
         assert(!HAS_PENDING_EXCEPTION, "");
-        LinkInfo link_info(defc, name, type, caller, LinkInfo::AccessCheck::skip, loader_constraint_check);
+        LinkInfo link_info(defc, name, type, caller, -1, LinkInfo::AccessCheck::skip, loader_constraint_check);
         LinkResolver::resolve_field(result, link_info, Bytecodes::_nop, ClassInitMode::dont_init, THREAD);
         if (HAS_PENDING_EXCEPTION) {
           if (speculative_resolve) {

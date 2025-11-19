@@ -786,14 +786,15 @@ Method* ciEnv::lookup_method(ciInstanceKlass* accessor,
                              Symbol*          name,
                              Symbol*          sig,
                              Bytecodes::Code  bc,
-                             constantTag      tag) {
+                             constantTag      tag,
+                             int index) {
   InstanceKlass* accessor_klass = accessor->get_instanceKlass();
   Klass* holder_klass = holder->get_Klass();
 
   // Accessibility checks are performed in ciEnv::get_method_by_index_impl.
   assert(check_klass_accessibility(accessor, holder_klass), "holder not accessible");
 
-  LinkInfo link_info(holder_klass, name, sig, accessor_klass,
+  LinkInfo link_info(holder_klass, name, sig, accessor_klass, index,
                      LinkInfo::AccessCheck::required,
                      LinkInfo::LoaderConstraintCheck::required,
                      tag);
@@ -883,7 +884,7 @@ ciMethod* ciEnv::get_method_by_index_impl(const constantPoolHandle& cpool,
     if (holder_is_accessible) {  // Our declared holder is loaded.
       constantTag tag = cpool->tag_ref_at(index, bc);
       assert(accessor->get_instanceKlass() == cpool->pool_holder(), "not the pool holder?");
-      Method* m = lookup_method(accessor, holder, name_sym, sig_sym, bc, tag);
+      Method* m = lookup_method(accessor, holder, name_sym, sig_sym, bc, tag, index);
       if (m != nullptr) {
         ciInstanceKlass* cik = get_instance_klass(m->method_holder());
         if ((bc == Bytecodes::_invokestatic && cik->is_not_initialized()) || !cik->is_loaded()) {

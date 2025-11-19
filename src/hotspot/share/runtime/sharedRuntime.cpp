@@ -48,10 +48,12 @@
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "metaprogramming/primitiveConversions.hpp"
+#include "oops/constantPool.inline.hpp"
 #include "oops/klass.hpp"
 #include "oops/method.inline.hpp"
 #include "oops/objArrayKlass.hpp"
 #include "oops/oop.inline.hpp"
+#include "oops/resolvedMethodEntry.hpp"
 #include "prims/forte.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "prims/jvmtiThreadState.hpp"
@@ -108,6 +110,15 @@ PerfTickCounters* SharedRuntime::_perf_resolve_virtual_total_time     = nullptr;
 PerfTickCounters* SharedRuntime::_perf_resolve_static_total_time      = nullptr;
 PerfTickCounters* SharedRuntime::_perf_handle_wrong_method_total_time = nullptr;
 PerfTickCounters* SharedRuntime::_perf_ic_miss_total_time             = nullptr;
+
+PerfTickCounters* SharedRuntime::_perf_preload_resolve_opt_virtual_total_time = nullptr;
+PerfTickCounters* SharedRuntime::_perf_preload_resolve_virtual_total_time     = nullptr;
+PerfTickCounters* SharedRuntime::_perf_preload_resolve_static_total_time      = nullptr;
+
+PerfTickCounters* SharedRuntime::_perf_lr_resolve_static_total_time = nullptr;
+PerfTickCounters* SharedRuntime::_perf_lr_resolve_special_total_time = nullptr;
+PerfTickCounters* SharedRuntime::_perf_lr_resolve_virtual_total_time = nullptr;
+PerfTickCounters* SharedRuntime::_perf_lr_resolve_interface_total_time = nullptr;
 
 #if 0
 // TODO tweak global stub name generation to match this
@@ -186,6 +197,13 @@ void SharedRuntime::generate_stubs() {
     NEWPERFTICKCOUNTERS(_perf_resolve_static_total_time,      SUN_CI, "resovle_static_call");
     NEWPERFTICKCOUNTERS(_perf_handle_wrong_method_total_time, SUN_CI, "handle_wrong_method");
     NEWPERFTICKCOUNTERS(_perf_ic_miss_total_time ,            SUN_CI, "ic_miss");
+    NEWPERFTICKCOUNTERS(_perf_preload_resolve_opt_virtual_total_time, SUN_CI, "preload_resovle_opt_virtual_call");
+    NEWPERFTICKCOUNTERS(_perf_preload_resolve_virtual_total_time,     SUN_CI, "preload_resovle_virtual_call");
+    NEWPERFTICKCOUNTERS(_perf_preload_resolve_static_total_time,      SUN_CI, "preload_resovle_static_call");
+    NEWPERFTICKCOUNTERS(_perf_lr_resolve_static_total_time,      SUN_CI, "lr_resovle_static_call");
+    NEWPERFTICKCOUNTERS(_perf_lr_resolve_special_total_time, SUN_CI, "lr_resovle_special_call");
+    NEWPERFTICKCOUNTERS(_perf_lr_resolve_virtual_total_time, SUN_CI, "lr_resovle_virtual_call");
+    NEWPERFTICKCOUNTERS(_perf_lr_resolve_interface_total_time, SUN_CI, "lr_resovle_interface_call");
     if (HAS_PENDING_EXCEPTION) {
       vm_exit_during_initialization("SharedRuntime::generate_stubs() failed unexpectedly");
     }
@@ -209,10 +227,18 @@ void SharedRuntime::print_counters_on(outputStream* st) {
   st->print_cr("SharedRuntime:");
   if (UsePerfData) {
     print_counter_on(st, "resolve_opt_virtual_call:", _perf_resolve_opt_virtual_total_time, _resolve_opt_virtual_ctr);
+    print_counter_on(st, "  preload_resolve_opt_virtual_call:", _perf_preload_resolve_opt_virtual_total_time, _preload_resolve_opt_virtual_ctr);
     print_counter_on(st, "resolve_virtual_call:",     _perf_resolve_virtual_total_time,     _resolve_virtual_ctr);
+    print_counter_on(st, "  preload_resolve_virtual_call:",     _perf_preload_resolve_virtual_total_time,     _preload_resolve_virtual_ctr);
     print_counter_on(st, "resolve_static_call:",      _perf_resolve_static_total_time,      _resolve_static_ctr);
+    print_counter_on(st, "  preload_resolve_static_call:",      _perf_preload_resolve_static_total_time,      _preload_resolve_static_ctr);
     print_counter_on(st, "handle_wrong_method:",      _perf_handle_wrong_method_total_time, _wrong_method_ctr);
     print_counter_on(st, "ic_miss:",                  _perf_ic_miss_total_time,             _ic_miss_ctr);
+
+    print_counter_on(st, "lr_resolve_static_call:", _perf_lr_resolve_static_total_time, _lr_resolve_static_ctr);
+    print_counter_on(st, "lr_resolve_special_call:", _perf_lr_resolve_special_total_time, _lr_resolve_special_ctr);
+    print_counter_on(st, "lr_resolve_virtual_call:", _perf_lr_resolve_virtual_total_time, _lr_resolve_virtual_ctr);
+    print_counter_on(st, "lr_resolve_interface_call:", _perf_lr_resolve_interface_total_time, _lr_resolve_interface_ctr);
 
     jlong total_elapsed_time_us = Management::ticks_to_us(_perf_resolve_opt_virtual_total_time->elapsed_counter_value() +
                                                           _perf_resolve_virtual_total_time->elapsed_counter_value() +
@@ -230,6 +256,15 @@ void SharedRuntime::print_counters_on(outputStream* st) {
 
     }
     st->cr();
+    st->print("  %-28s %5d", "lr_resolve_static_cache_hit_ctr:", _lr_resolve_static_cache_hit_ctr);
+    st->cr();
+    st->print("  %-28s %5d", "lr_resolve_special_cache_hit_ctr:", _lr_resolve_special_cache_hit_ctr);
+    st->cr();
+    st->print("  %-28s %5d", "lr_resolve_virtual_cache_hit_ctr:", _lr_resolve_virtual_cache_hit_ctr);
+    st->cr();
+    st->print("  %-28s %5d", "lr_resolve_interface_cache_hit_ctr:", _lr_resolve_interface_cache_hit_ctr);
+    st->cr();
+
   } else {
     st->print_cr("  no data (UsePerfData is turned off)");
   }
@@ -259,6 +294,19 @@ uint SharedRuntime::_resolve_static_ctr = 0;
 uint SharedRuntime::_resolve_virtual_ctr = 0;
 uint SharedRuntime::_resolve_opt_virtual_ctr = 0;
 
+uint SharedRuntime::_preload_resolve_static_ctr = 0;
+uint SharedRuntime::_preload_resolve_virtual_ctr = 0;
+uint SharedRuntime::_preload_resolve_opt_virtual_ctr = 0;
+
+uint SharedRuntime::_lr_resolve_static_ctr = 0;
+uint SharedRuntime::_lr_resolve_special_ctr = 0;
+uint SharedRuntime::_lr_resolve_virtual_ctr = 0;
+uint SharedRuntime::_lr_resolve_interface_ctr = 0;
+
+uint SharedRuntime::_lr_resolve_static_cache_hit_ctr = 0;
+uint SharedRuntime::_lr_resolve_special_cache_hit_ctr = 0;
+uint SharedRuntime::_lr_resolve_virtual_cache_hit_ctr = 0;
+uint SharedRuntime::_lr_resolve_interface_cache_hit_ctr = 0;
 #ifndef PRODUCT
 uint SharedRuntime::_implicit_null_throws = 0;
 uint SharedRuntime::_implicit_div0_throws = 0;
@@ -1389,7 +1437,7 @@ Handle SharedRuntime::find_callee_info_helper(vframeStream& vfst, Bytecodes::Cod
   // Resolve method
   if (attached_method.not_null()) {
     // Parameterized by attached method.
-    LinkResolver::resolve_invoke(callinfo, receiver, attached_method, bc, CHECK_NH);
+    LinkResolver::resolve_invoke(callinfo, receiver, bytecode_index, attached_method, bc, CHECK_NH);
   } else {
     // Parameterized by bytecode.
     constantPoolHandle constants(current, caller->constants());
@@ -1458,19 +1506,33 @@ methodHandle SharedRuntime::find_callee_method(TRAPS) {
   return callee_method;
 }
 
-// Resolves a call.
-methodHandle SharedRuntime::resolve_helper(bool is_virtual, bool is_optimized, TRAPS) {
+#if 0
+methodHandle SharedRuntime::fast_static_call_resolve_helper(nmethod* caller_nm, frame& caller_frame, TRAPS) {
   JavaThread* current = THREAD;
   ResourceMark rm(current);
-  RegisterMap cbl_map(current,
-                      RegisterMap::UpdateMap::skip,
-                      RegisterMap::ProcessFrames::include,
-                      RegisterMap::WalkContinuation::skip);
-  frame caller_frame = current->last_frame().sender(&cbl_map);
 
-  CodeBlob* caller_cb = caller_frame.cb();
-  guarantee(caller_cb != nullptr && caller_cb->is_nmethod(), "must be called from compiled method");
-  nmethod* caller_nm = caller_cb->as_nmethod();
+  // last java frame on stack (which includes native call frames)
+  vframeStream vfst(current, true);  // Do not skip and javaCalls
+  int          bci   = vfst.bci();
+  Bytecode_invoke bytecode(caller, bci);
+  int bytecode_index = bytecode.index();
+  bc = bytecode.invoke_code();
+
+  constantPoolHandle constants(current, caller->constants());
+  Klass* current_klass = constants->klass_ref_at(bytecode_index, code, CHECK);
+  if (UseNewCode && current_klass != nullptr && current_klass->is_instance_klass()) {
+    constantPoolHandle constants(THREAD, ((InstanceKlass*)current_klass)->constants());
+    if (link_info.index() != -1 && constants->is_resolved(link_info.index(), Bytecodes::_invokestatic)) {
+      return constants->resolved_method_entry_at(link_info.index())->method();
+    }
+  }
+}
+#endif
+
+// Resolves a call.
+methodHandle SharedRuntime::resolve_helper(nmethod* caller_nm, frame& caller_frame, bool is_virtual, bool is_optimized, TRAPS) {
+  JavaThread* current = THREAD;
+  ResourceMark rm(current);
 
   // determine call info & receiver
   // note: a) receiver is null for static calls
@@ -1679,6 +1741,20 @@ address SharedRuntime::get_resolved_entry(JavaThread* current, methodHandle call
   return callee_method->verified_code_entry();
 }
 
+nmethod* get_caller_nmethod(JavaThread* current, frame& caller_frame) {
+  ResourceMark rm(current);
+  RegisterMap cbl_map(current,
+                      RegisterMap::UpdateMap::skip,
+                      RegisterMap::ProcessFrames::include,
+                      RegisterMap::WalkContinuation::skip);
+  caller_frame = current->last_frame().sender(&cbl_map);
+
+  CodeBlob* caller_cb = caller_frame.cb();
+  guarantee(caller_cb != nullptr && caller_cb->is_nmethod(), "must be called from compiled method");
+  nmethod* caller_nm = caller_cb->as_nmethod();
+  return caller_nm;
+}
+
 // resolve a static call and patch code
 JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_static_call_C(JavaThread* current ))
   PerfTraceTime timer(_perf_resolve_static_total_time);
@@ -1686,7 +1762,18 @@ JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_static_call_C(JavaThread* curren
   methodHandle callee_method;
   bool enter_special = false;
   JRT_BLOCK
-    callee_method = SharedRuntime::resolve_helper(false, false, CHECK_NULL);
+    frame caller_frame;
+    nmethod* caller_nm = get_caller_nmethod(current, caller_frame);
+    if (caller_nm->preloaded()) {
+      PerfTraceTime timer(_perf_preload_resolve_static_total_time);
+      AtomicAccess::inc(&_preload_resolve_static_ctr);
+      //callee_method = SharedRuntime::fast_static_call_resolve_helper(caller_nm, caller_frame, CHECK_NULL);
+      //if (callee_method == nullptr) {
+        callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, false, false, CHECK_NULL);
+     // }
+    } else {
+      callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, false, false, CHECK_NULL);
+    }
     current->set_vm_result_metadata(callee_method());
   JRT_BLOCK_END
   // return compiled code entry point after potential safepoints
@@ -1699,7 +1786,15 @@ JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_virtual_call_C(JavaThread* curre
 
   methodHandle callee_method;
   JRT_BLOCK
-    callee_method = SharedRuntime::resolve_helper(true, false, CHECK_NULL);
+    frame caller_frame;
+    nmethod* caller_nm = get_caller_nmethod(current, caller_frame);
+    if (caller_nm->preloaded()) {
+      PerfTraceTime timer(_perf_preload_resolve_virtual_total_time);
+      AtomicAccess::inc(&_preload_resolve_virtual_ctr);
+      callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, true, false, CHECK_NULL);
+    } else {
+      callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, true, false, CHECK_NULL);
+    }
     current->set_vm_result_metadata(callee_method());
   JRT_BLOCK_END
   // return compiled code entry point after potential safepoints
@@ -1714,7 +1809,15 @@ JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_opt_virtual_call_C(JavaThread* c
 
   methodHandle callee_method;
   JRT_BLOCK
-    callee_method = SharedRuntime::resolve_helper(true, true, CHECK_NULL);
+    frame caller_frame;
+    nmethod* caller_nm = get_caller_nmethod(current, caller_frame);
+    if (caller_nm->preloaded()) {
+      PerfTraceTime timer(_perf_preload_resolve_opt_virtual_total_time);
+      AtomicAccess::inc(&_preload_resolve_opt_virtual_ctr);
+      callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, true, true, CHECK_NULL);
+    } else {
+      callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, true, true, CHECK_NULL);
+    }
     current->set_vm_result_metadata(callee_method());
   JRT_BLOCK_END
   // return compiled code entry point after potential safepoints

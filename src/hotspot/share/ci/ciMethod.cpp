@@ -824,7 +824,7 @@ ciMethod* ciMethod::resolve_invoke(ciKlass* caller, ciKlass* exact_receiver, boo
   Symbol* h_name      = name()->get_symbol();
   Symbol* h_signature = signature()->get_symbol();
 
-  LinkInfo link_info(resolved, h_name, h_signature, caller_klass,
+  LinkInfo link_info(resolved, h_name, h_signature, caller_klass, -1,
                      check_access ? LinkInfo::AccessCheck::required : LinkInfo::AccessCheck::skip,
                      check_access ? LinkInfo::LoaderConstraintCheck::required : LinkInfo::LoaderConstraintCheck::skip);
   Method* m = nullptr;

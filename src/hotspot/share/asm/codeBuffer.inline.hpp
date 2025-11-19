@@ -60,7 +60,7 @@ bool emit_shared_stubs_to_interp(CodeBuffer* cb, SharedStubToInterpRequests* sha
       __ relocate(static_stub_Relocation::spec(caller_pc), relocate_format);
       ++i;
     } while (i < shared_stub_to_interp_requests->length() && shared_stub_to_interp_requests->at(i).shared_method() == method);
-    __ emit_static_call_stub();
+    __ emit_static_call_stub(UseNewCode ? method->get_Method() : nullptr);
     __ end_a_stub();
   }
   return true;

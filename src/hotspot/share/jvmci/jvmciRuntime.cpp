@@ -1790,7 +1790,7 @@ Method* JVMCIRuntime::lookup_method(InstanceKlass* accessor,
   // Accessibility checks are performed in JVMCIEnv::get_method_by_index_impl().
   assert(check_klass_accessibility(accessor, holder), "holder not accessible");
 
-  LinkInfo link_info(holder, name, sig, accessor,
+  LinkInfo link_info(holder, name, sig, accessor, -1,
                      LinkInfo::AccessCheck::required,
                      LinkInfo::LoaderConstraintCheck::required,
                      tag);

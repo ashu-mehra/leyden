@@ -33,7 +33,8 @@
 DEMO_NAME       = spring-boot-getting-started
 DEMO_SRC        = gs-spring-boot/complete/src/main/java/com/example/springboot/Application.java
 DEMO_JAR        = gs-spring-boot/complete/spring-boot-complete-0.0.1-SNAPSHOT/spring-boot-complete-0.0.1-SNAPSHOT.jar
-DEMO_CMDLINE    = -Dserver.port=0 -Dspring.aot.enabled=true -Dspring.output.ansi.enabled=NEVER -Dspring.context.exit=onRefresh -jar ${DEMO_JAR}
+#DEMO_CMDLINE    = -XX:+UnlockDiagnosticVMOptions -XX:-UseNewCode -XX:+UsePerfData -XX:+TraceThreadTime -Xlog:init -Dserver.port=0 -Dspring.aot.enabled=true -Dspring.output.ansi.enabled=NEVER -Dspring.context.exit=onRefresh -jar ${DEMO_JAR}
+DEMO_CMDLINE    = -Xms1g -Xmx1g -Dserver.port=0 -Dspring.aot.enabled=true -Dspring.output.ansi.enabled=NEVER -Dspring.context.exit=onRefresh -jar ${DEMO_JAR}
 # This is for uploading into Artifactory, usually to a path like
 #    https://xxxx.com/artifactory/yyyy/io/spring/spring-boot-getting-started/3.3.0/spring-boot-getting-started-3.3.0.zip
 DEMO_ARTIFACT   = spring-boot-getting-started-3.3.0.zip

@@ -161,7 +161,7 @@ private:
                            Symbol*          name,
                            Symbol*          sig,
                            Bytecodes::Code  bc,
-                           constantTag      tag);
+                           constantTag      tag, int index);
 
   ciConstant unbox_primitive_value(ciObject* cibox, BasicType expected_bt = T_ILLEGAL);
   ciConstant get_resolved_constant(const constantPoolHandle& cpool, int obj_index);

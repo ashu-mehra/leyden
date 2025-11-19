@@ -379,7 +379,7 @@ class SharedRuntime: AllStatic {
 
   // Resolves a call site- may patch in the destination of the call into the
   // compiled code.
-  static methodHandle resolve_helper(bool is_virtual, bool is_optimized, TRAPS);
+  static methodHandle resolve_helper(nmethod* caller_nm, frame& caller_frame, bool is_virtual, bool is_optimized, TRAPS);
 
  private:
   // deopt blob
@@ -576,12 +576,36 @@ class SharedRuntime: AllStatic {
   static PerfTickCounters* _perf_resolve_static_total_time;
   static PerfTickCounters* _perf_handle_wrong_method_total_time;
   static PerfTickCounters* _perf_ic_miss_total_time;
+
+  static PerfTickCounters* _perf_preload_resolve_opt_virtual_total_time;
+  static PerfTickCounters* _perf_preload_resolve_virtual_total_time;
+  static PerfTickCounters* _perf_preload_resolve_static_total_time;
+
+ public:
+  static PerfTickCounters* _perf_lr_resolve_static_total_time;
+  static PerfTickCounters* _perf_lr_resolve_special_total_time;
+  static PerfTickCounters* _perf_lr_resolve_virtual_total_time;
+  static PerfTickCounters* _perf_lr_resolve_interface_total_time;
+
+  static uint _lr_resolve_static_ctr;
+  static uint _lr_resolve_special_ctr;
+  static uint _lr_resolve_virtual_ctr;
+  static uint _lr_resolve_interface_ctr;
+
+  static uint _lr_resolve_static_cache_hit_ctr;
+  static uint _lr_resolve_special_cache_hit_ctr;
+  static uint _lr_resolve_virtual_cache_hit_ctr;
+  static uint _lr_resolve_interface_cache_hit_ctr;
  public:
   static uint _ic_miss_ctr;                      // total # of IC misses
   static uint _wrong_method_ctr;
   static uint _resolve_static_ctr;
   static uint _resolve_virtual_ctr;
   static uint _resolve_opt_virtual_ctr;
+
+  static uint _preload_resolve_static_ctr;
+  static uint _preload_resolve_virtual_ctr;
+  static uint _preload_resolve_opt_virtual_ctr;
 
   static void print_counters_on(outputStream* st);
 

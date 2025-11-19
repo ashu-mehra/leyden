@@ -1000,11 +1000,15 @@ int MacroAssembler::ic_check(int end_alignment) {
   return uep_offset;
 }
 
-void MacroAssembler::emit_static_call_stub() {
+void MacroAssembler::emit_static_call_stub(Method* method) {
   // Static stub relocation also tags the Method* in the code-stream.
   mov_metadata(rbx, (Metadata*) nullptr);  // Method is zapped till fixup time.
   // This is recognized as unresolved by relocs/nativeinst/ic code.
-  jump(RuntimeAddress(pc()));
+  if (false && method != nullptr && method->adapter() != nullptr && UseNewCode) {
+    jump(RuntimeAddress(method->get_c2i_entry()));
+  } else {
+    jump(RuntimeAddress(pc()));
+  }
 }
 
 // Implementation of call_VM versions

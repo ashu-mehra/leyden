@@ -77,7 +77,7 @@ class CallInfo : public StackObj {
 
   friend class BootstrapInfo;
   friend class LinkResolver;
-
+  friend class SharedRuntime;
  public:
   CallInfo() {
 #ifndef PRODUCT
@@ -135,6 +135,7 @@ class LinkInfo : public StackObj {
   Symbol*     _name;            // extracted from JVM_CONSTANT_NameAndType
   Symbol*     _signature;
   Klass*      _resolved_klass;  // class that the constant pool entry points to
+  int _index;
   Klass*      _current_klass;   // class that owns the constant pool
   methodHandle _current_method;  // sending method
   bool        _check_access;
@@ -149,13 +150,14 @@ class LinkInfo : public StackObj {
   LinkInfo(const constantPoolHandle& pool, int index, Bytecodes::Code code, TRAPS);
 
   // Condensed information from other call sites within the vm.
-  LinkInfo(Klass* resolved_klass, Symbol* name, Symbol* signature, Klass* current_klass,
+  LinkInfo(Klass* resolved_klass, Symbol* name, Symbol* signature, Klass* current_klass, int index = -1,
            AccessCheck check_access = AccessCheck::required,
            LoaderConstraintCheck check_loader_constraints = LoaderConstraintCheck::required,
            constantTag tag = JVM_CONSTANT_Invalid) :
       _name(name),
       _signature(signature),
       _resolved_klass(resolved_klass),
+      _index(index),
       _current_klass(current_klass),
       _current_method(methodHandle()),
       _check_access(check_access == AccessCheck::required),
@@ -164,23 +166,24 @@ class LinkInfo : public StackObj {
     assert(_resolved_klass != nullptr, "must always have a resolved_klass");
   }
 
-  LinkInfo(Klass* resolved_klass, Symbol* name, Symbol* signature, const methodHandle& current_method,
+  LinkInfo(Klass* resolved_klass, Symbol* name, Symbol* signature, const methodHandle& current_method, int index = -1,
            AccessCheck check_access = AccessCheck::required,
            LoaderConstraintCheck check_loader_constraints = LoaderConstraintCheck::required,
            constantTag tag = JVM_CONSTANT_Invalid) :
-    LinkInfo(resolved_klass, name, signature, current_method->method_holder(), check_access, check_loader_constraints, tag) {
+    LinkInfo(resolved_klass, name, signature, current_method->method_holder(), index, check_access, check_loader_constraints, tag) {
     _current_method = current_method;
   }
 
   // Case where we just find the method and don't check access against the current class, used by JavaCalls
-  LinkInfo(Klass* resolved_klass, Symbol*name, Symbol* signature) :
-    LinkInfo(resolved_klass, name, signature, nullptr, AccessCheck::skip, LoaderConstraintCheck::skip,
+  LinkInfo(Klass* resolved_klass, Symbol*name, Symbol* signature, int index = -1) :
+    LinkInfo(resolved_klass, name, signature, nullptr, index, AccessCheck::skip, LoaderConstraintCheck::skip,
              JVM_CONSTANT_Invalid) {}
 
   // accessors
   Symbol* name() const                  { return _name; }
   Symbol* signature() const             { return _signature; }
   Klass* resolved_klass() const         { return _resolved_klass; }
+  int index() const { return _index; }
   Klass* current_klass() const          { return _current_klass; }
   Method* current_method() const        { return _current_method(); }
   constantTag tag() const               { return _tag; }
@@ -368,7 +371,7 @@ class LinkResolver: AllStatic {
   }
 
   // runtime resolving from attached method
-  static void resolve_invoke(CallInfo& result, Handle& recv,
+  static void resolve_invoke(CallInfo& result, Handle& recv, int index,
                              const methodHandle& attached_method,
                              Bytecodes::Code byte, TRAPS);
 

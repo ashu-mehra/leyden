@@ -895,7 +895,7 @@ public:
   static int ic_check_size();
   int ic_check(int end_alignment);
 
-  void emit_static_call_stub();
+  void emit_static_call_stub(Method* method = nullptr);
 
   // Jumps
 
