@@ -938,6 +938,8 @@ bool InstanceKlass::link_class_or_fail(TRAPS) {
 }
 
 bool InstanceKlass::link_class_impl(TRAPS) {
+  ResourceMark rm(THREAD);
+  log_info(class,load)("Linking class %s", external_name());
   if (CDSConfig::is_dumping_static_archive() && SystemDictionaryShared::has_class_failed_verification(this)) {
     // This is for CDS static dump only -- we use the in_error_state to indicate that
     // the class has failed verification. Throwing the NoClassDefFoundError here is just

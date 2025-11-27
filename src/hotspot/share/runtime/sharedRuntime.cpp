@@ -120,6 +120,11 @@ PerfTickCounters* SharedRuntime::_perf_lr_resolve_special_total_time = nullptr;
 PerfTickCounters* SharedRuntime::_perf_lr_resolve_virtual_total_time = nullptr;
 PerfTickCounters* SharedRuntime::_perf_lr_resolve_interface_total_time = nullptr;
 
+PerfTickCounters* SharedRuntime::_perf_lr_resolve_static_resolve_method_time = nullptr;
+uint SharedRuntime::_lr_resolve_static_resolve_method_ctr = 0;
+uint SharedRuntime::_perf_resolve_static_cache_hit_ctr = 0;
+uint SharedRuntime::_perf_resolve_opt_virtual_cache_hit_ctr = 0;
+
 #if 0
 // TODO tweak global stub name generation to match this
 #define SHARED_STUB_NAME_DECLARE(name, type) "Shared Runtime " # name "_blob",
@@ -204,6 +209,8 @@ void SharedRuntime::generate_stubs() {
     NEWPERFTICKCOUNTERS(_perf_lr_resolve_special_total_time, SUN_CI, "lr_resovle_special_call");
     NEWPERFTICKCOUNTERS(_perf_lr_resolve_virtual_total_time, SUN_CI, "lr_resovle_virtual_call");
     NEWPERFTICKCOUNTERS(_perf_lr_resolve_interface_total_time, SUN_CI, "lr_resovle_interface_call");
+
+    NEWPERFTICKCOUNTERS(_perf_lr_resolve_static_resolve_method_time,      SUN_CI, "lr_resovle_static_resolve_method_call");
     if (HAS_PENDING_EXCEPTION) {
       vm_exit_during_initialization("SharedRuntime::generate_stubs() failed unexpectedly");
     }
@@ -236,6 +243,7 @@ void SharedRuntime::print_counters_on(outputStream* st) {
     print_counter_on(st, "ic_miss:",                  _perf_ic_miss_total_time,             _ic_miss_ctr);
 
     print_counter_on(st, "lr_resolve_static_call:", _perf_lr_resolve_static_total_time, _lr_resolve_static_ctr);
+    print_counter_on(st, "  lr_resolve_static_resolve_method_call:", _perf_lr_resolve_static_resolve_method_time, _lr_resolve_static_resolve_method_ctr);
     print_counter_on(st, "lr_resolve_special_call:", _perf_lr_resolve_special_total_time, _lr_resolve_special_ctr);
     print_counter_on(st, "lr_resolve_virtual_call:", _perf_lr_resolve_virtual_total_time, _lr_resolve_virtual_ctr);
     print_counter_on(st, "lr_resolve_interface_call:", _perf_lr_resolve_interface_total_time, _lr_resolve_interface_ctr);
@@ -255,6 +263,10 @@ void SharedRuntime::print_counters_on(outputStream* st) {
       st->print(" (elapsed) " JLONG_FORMAT_W(5) "us (thread)", total_thread_time_us);
 
     }
+    st->cr();
+    st->print("  %-28s %5d", "perf_resolve_static_cache_hit_ctr:", _perf_resolve_static_cache_hit_ctr);
+    st->cr();
+    st->print("  %-28s %5d", "perf_resolve_opt_virtual_cache_hit_ctr:", _perf_resolve_opt_virtual_cache_hit_ctr);
     st->cr();
     st->print("  %-28s %5d", "lr_resolve_static_cache_hit_ctr:", _lr_resolve_static_cache_hit_ctr);
     st->cr();
@@ -1327,7 +1339,7 @@ Handle SharedRuntime::find_callee_info(Bytecodes::Code& bc, CallInfo& callinfo, 
   // last java frame on stack (which includes native call frames)
   vframeStream vfst(current, true);  // Do not skip and javaCalls
 
-  return find_callee_info_helper(vfst, bc, callinfo, THREAD);
+  return find_callee_info_helper(vfst, bc, callinfo, nullptr, THREAD);
 }
 
 Method* SharedRuntime::extract_attached_method(vframeStream& vfst) {
@@ -1336,16 +1348,47 @@ Method* SharedRuntime::extract_attached_method(vframeStream& vfst) {
   address pc = vfst.frame_pc();
   { // Get call instruction under lock because another thread may be busy patching it.
     CompiledICLocker ic_locker(caller);
-    return caller->attached_method_before_pc(pc);
+    bool is_mhi;
+    return caller->attached_method_before_pc(pc, is_mhi);
   }
   return nullptr;
+}
+
+Method* SharedRuntime::extract_attached_method_if_mhi(vframeStream& vfst) {
+  nmethod* caller = vfst.nm();
+
+  address pc = vfst.frame_pc();
+  { // Get call instruction under lock because another thread may be busy patching it.
+    CompiledICLocker ic_locker(caller);
+    bool is_mhi;
+    Method* attached_method = caller->attached_method_before_pc(pc, is_mhi);
+    if (is_mhi) {
+      return attached_method;
+    }
+  }
+  return nullptr;
+}
+
+Method* SharedRuntime::extract_attached_method_if_mhi(nmethod* caller, address pc) {
+  CompiledICLocker ic_locker(caller);
+  bool is_mhi;
+  Method* attached_method = caller->attached_method_before_pc(pc, is_mhi);
+  if (is_mhi) {
+    return attached_method;
+  }
+  return nullptr;
+}
+
+Method* SharedRuntime::extract_attached_method(nmethod* caller, address pc, bool& is_mhi) {
+  CompiledICLocker ic_locker(caller);
+  return caller->attached_method_before_pc(pc, is_mhi);
 }
 
 // Finds receiver, CallInfo (i.e. receiver method), and calling bytecode
 // for a call current in progress, i.e., arguments has been pushed on stack
 // but callee has not been invoked yet.  Caller frame must be compiled.
 Handle SharedRuntime::find_callee_info_helper(vframeStream& vfst, Bytecodes::Code& bc,
-                                              CallInfo& callinfo, TRAPS) {
+                                              CallInfo& callinfo, Method* attached_method, TRAPS) {
   Handle receiver;
   Handle nullHandle;  // create a handy null handle for exception returns
   JavaThread* current = THREAD;
@@ -1366,31 +1409,32 @@ Handle SharedRuntime::find_callee_info_helper(vframeStream& vfst, Bytecodes::Cod
   int bytecode_index = bytecode.index();
   bc = bytecode.invoke_code();
 
-  methodHandle attached_method(current, extract_attached_method(vfst));
-  if (attached_method.not_null()) {
+  methodHandle attached_method_h(current, attached_method);
+  if (attached_method_h.not_null()) {
     Method* callee = bytecode.static_target(CHECK_NH);
     vmIntrinsics::ID id = callee->intrinsic_id();
     // When VM replaces MH.invokeBasic/linkTo* call with a direct/virtual call,
     // it attaches statically resolved method to the call site.
     if (MethodHandles::is_signature_polymorphic(id) &&
         MethodHandles::is_signature_polymorphic_intrinsic(id)) {
+
       bc = MethodHandles::signature_polymorphic_intrinsic_bytecode(id);
 
       // Adjust invocation mode according to the attached method.
       switch (bc) {
         case Bytecodes::_invokevirtual:
-          if (attached_method->method_holder()->is_interface()) {
+          if (attached_method_h->method_holder()->is_interface()) {
             bc = Bytecodes::_invokeinterface;
           }
           break;
         case Bytecodes::_invokeinterface:
-          if (!attached_method->method_holder()->is_interface()) {
+          if (!attached_method_h->method_holder()->is_interface()) {
             bc = Bytecodes::_invokevirtual;
           }
           break;
         case Bytecodes::_invokehandle:
-          if (!MethodHandles::is_signature_polymorphic_method(attached_method())) {
-            bc = attached_method->is_static() ? Bytecodes::_invokestatic
+          if (!MethodHandles::is_signature_polymorphic_method(attached_method_h())) {
+            bc = attached_method_h->is_static() ? Bytecodes::_invokestatic
                                               : Bytecodes::_invokevirtual;
           }
           break;
@@ -1418,7 +1462,7 @@ Handle SharedRuntime::find_callee_info_helper(vframeStream& vfst, Bytecodes::Cod
     // Caller-frame is a compiled frame
     frame callerFrame = stubFrame.sender(&reg_map2);
 
-    if (attached_method.is_null()) {
+    if (attached_method_h.is_null()) {
       Method* callee = bytecode.static_target(CHECK_NH);
       if (callee == nullptr) {
         THROW_(vmSymbols::java_lang_NoSuchMethodException(), nullHandle);
@@ -1435,9 +1479,9 @@ Handle SharedRuntime::find_callee_info_helper(vframeStream& vfst, Bytecodes::Cod
   }
 
   // Resolve method
-  if (attached_method.not_null()) {
+  if (attached_method_h.not_null()) {
     // Parameterized by attached method.
-    LinkResolver::resolve_invoke(callinfo, receiver, bytecode_index, attached_method, bc, CHECK_NH);
+    LinkResolver::resolve_invoke(callinfo, receiver, bytecode_index, attached_method_h, bc, CHECK_NH);
   } else {
     // Parameterized by bytecode.
     constantPoolHandle constants(current, caller->constants());
@@ -1450,9 +1494,9 @@ Handle SharedRuntime::find_callee_info_helper(vframeStream& vfst, Bytecodes::Cod
     assert(receiver.not_null(), "should have thrown exception");
     Klass* receiver_klass = receiver->klass();
     Klass* rk = nullptr;
-    if (attached_method.not_null()) {
+    if (attached_method_h.not_null()) {
       // In case there's resolved method attached, use its holder during the check.
-      rk = attached_method->method_holder();
+      rk = attached_method_h->method_holder();
     } else {
       // Klass is already loaded.
       constantPoolHandle constants(current, caller->constants());
@@ -1499,47 +1543,52 @@ methodHandle SharedRuntime::find_callee_method(TRAPS) {
   } else {
     Bytecodes::Code bc;
     CallInfo callinfo;
-    find_callee_info_helper(vfst, bc, callinfo, CHECK_(methodHandle()));
+    Method* attached_method = extract_attached_method_if_mhi(vfst);
+    find_callee_info_helper(vfst, bc, callinfo, attached_method, CHECK_(methodHandle()));
     callee_method = methodHandle(current, callinfo.selected_method());
   }
   assert(callee_method()->is_method(), "must be");
   return callee_method;
 }
 
-#if 0
-methodHandle SharedRuntime::fast_static_call_resolve_helper(nmethod* caller_nm, frame& caller_frame, TRAPS) {
-  JavaThread* current = THREAD;
-  ResourceMark rm(current);
-
-  // last java frame on stack (which includes native call frames)
-  vframeStream vfst(current, true);  // Do not skip and javaCalls
-  int          bci   = vfst.bci();
-  Bytecode_invoke bytecode(caller, bci);
-  int bytecode_index = bytecode.index();
-  bc = bytecode.invoke_code();
-
-  constantPoolHandle constants(current, caller->constants());
-  Klass* current_klass = constants->klass_ref_at(bytecode_index, code, CHECK);
-  if (UseNewCode && current_klass != nullptr && current_klass->is_instance_klass()) {
-    constantPoolHandle constants(THREAD, ((InstanceKlass*)current_klass)->constants());
-    if (link_info.index() != -1 && constants->is_resolved(link_info.index(), Bytecodes::_invokestatic)) {
-      return constants->resolved_method_entry_at(link_info.index())->method();
-    }
-  }
-}
-#endif
-
 // Resolves a call.
 methodHandle SharedRuntime::resolve_helper(nmethod* caller_nm, frame& caller_frame, bool is_virtual, bool is_optimized, TRAPS) {
   JavaThread* current = THREAD;
   ResourceMark rm(current);
+
+  Method* attached_method = nullptr;
+
+  if (UseNewCode2) {
+    bool is_mhi;
+    attached_method = extract_attached_method(caller_nm, caller_frame.pc(), is_mhi);
+    if (attached_method != nullptr && !attached_method->is_abstract() && !is_mhi) {
+    //if (attached_method != nullptr && !is_mhi) {
+      if (!is_virtual || is_optimized) {
+        methodHandle callee_method(current, attached_method);
+        CompiledICLocker ml(caller_nm);
+        // Callsite is a direct call - set it to the destination method
+        CompiledDirectCall* callsite = CompiledDirectCall::before(caller_frame.pc());
+        callsite->set(callee_method);
+        if (!is_virtual) {
+          AtomicAccess::inc(&_perf_resolve_static_cache_hit_ctr);
+        } else if (is_optimized) {
+          AtomicAccess::inc(&_perf_resolve_opt_virtual_cache_hit_ctr);
+        }
+        return callee_method;
+      }
+    }
+  } else {
+    attached_method = extract_attached_method_if_mhi(caller_nm, caller_frame.pc());
+  }
 
   // determine call info & receiver
   // note: a) receiver is null for static calls
   //       b) an exception is thrown if receiver is null for non-static calls
   CallInfo call_info;
   Bytecodes::Code invoke_code = Bytecodes::_illegal;
-  Handle receiver = find_callee_info(invoke_code, call_info, CHECK_(methodHandle()));
+  // last java frame on stack (which includes native call frames)
+  vframeStream vfst(current, true);  // Do not skip and javaCalls
+  Handle receiver = find_callee_info_helper(vfst, invoke_code, call_info, attached_method, CHECK_(methodHandle()));
 
   NoSafepointVerifier nsv;
 
@@ -1767,10 +1816,7 @@ JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_static_call_C(JavaThread* curren
     if (caller_nm->preloaded()) {
       PerfTraceTime timer(_perf_preload_resolve_static_total_time);
       AtomicAccess::inc(&_preload_resolve_static_ctr);
-      //callee_method = SharedRuntime::fast_static_call_resolve_helper(caller_nm, caller_frame, CHECK_NULL);
-      //if (callee_method == nullptr) {
-        callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, false, false, CHECK_NULL);
-     // }
+      callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, false, false, CHECK_NULL);
     } else {
       callee_method = SharedRuntime::resolve_helper(caller_nm, caller_frame, false, false, CHECK_NULL);
     }
@@ -1830,9 +1876,13 @@ methodHandle SharedRuntime::handle_ic_miss_helper(TRAPS) {
   CallInfo call_info;
   Bytecodes::Code bc;
 
+  // last java frame on stack (which includes native call frames)
+  vframeStream vfst(current, true);  // Do not skip and javaCalls
+
+  Method* attached_method = extract_attached_method_if_mhi(vfst);
   // receiver is null for static calls. An exception is thrown for null
   // receivers for non-static calls
-  Handle receiver = find_callee_info(bc, call_info, CHECK_(methodHandle()));
+  Handle receiver = find_callee_info_helper(vfst, bc, call_info, attached_method, CHECK_(methodHandle()));
 
   methodHandle callee_method(current, call_info.selected_method());
 

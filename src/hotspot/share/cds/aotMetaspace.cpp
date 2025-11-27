@@ -1405,6 +1405,12 @@ bool AOTMetaspace::try_link_class(JavaThread* current, InstanceKlass* ik) {
     ik->link_class(THREAD);
     if (HAS_PENDING_EXCEPTION) {
       ResourceMark rm(THREAD);
+      char* ex_msg = (char*)"";
+      oop message = java_lang_Throwable::message(PENDING_EXCEPTION);
+      if (message != nullptr) {
+        ex_msg = java_lang_String::as_utf8_string(message);
+      }
+      aot_log_warning(aot)("%s: %s", PENDING_EXCEPTION->klass()->external_name(), ex_msg);
       aot_log_warning(aot)("Preload Warning: Verification failed for %s",
                     ik->external_name());
       CLEAR_PENDING_EXCEPTION;

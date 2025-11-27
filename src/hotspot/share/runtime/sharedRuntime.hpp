@@ -404,9 +404,12 @@ class SharedRuntime: AllStatic {
 
  private:
   static Handle find_callee_info(Bytecodes::Code& bc, CallInfo& callinfo, TRAPS);
-  static Handle find_callee_info_helper(vframeStream& vfst, Bytecodes::Code& bc, CallInfo& callinfo, TRAPS);
+  static Handle find_callee_info_helper(vframeStream& vfst, Bytecodes::Code& bc, CallInfo& callinfo, Method* attached_method, TRAPS);
 
   static Method* extract_attached_method(vframeStream& vfst);
+  static Method* extract_attached_method_if_mhi(vframeStream& vfst);
+  static Method* extract_attached_method_if_mhi(nmethod* caller, address pc);
+  static Method* extract_attached_method(nmethod* caller, address pc, bool& is_mhi);
 
 #if defined(X86) && defined(COMPILER1)
   // For Object.hashCode, System.identityHashCode try to pull hashCode from object header if available.
@@ -586,6 +589,12 @@ class SharedRuntime: AllStatic {
   static PerfTickCounters* _perf_lr_resolve_special_total_time;
   static PerfTickCounters* _perf_lr_resolve_virtual_total_time;
   static PerfTickCounters* _perf_lr_resolve_interface_total_time;
+
+  static PerfTickCounters* _perf_lr_resolve_static_resolve_method_time;
+  static uint _lr_resolve_static_resolve_method_ctr;
+
+  static uint _perf_resolve_static_cache_hit_ctr;
+  static uint _perf_resolve_opt_virtual_cache_hit_ctr;
 
   static uint _lr_resolve_static_ctr;
   static uint _lr_resolve_special_ctr;

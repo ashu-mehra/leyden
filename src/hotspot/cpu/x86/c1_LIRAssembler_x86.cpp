@@ -2181,16 +2181,44 @@ void LIR_Assembler::align_call(LIR_Code code) {
 
 
 void LIR_Assembler::call(LIR_OpJavaCall* op, relocInfo::relocType rtype) {
+  assert(op->code() != lir_icvirtual_call, "unexpected code");
   assert((__ offset() + NativeCall::displacement_offset) % BytesPerWord == 0,
          "must be aligned");
-  __ call(AddressLiteral(op->addr(), rtype));
+  if (op->method()->is_method_handle_intrinsic()) {
+    if (op->code() == lir_static_call || op->code() == lir_dynamic_call) {
+      RelocationHolder rspec = static_call_Relocation::spec(0, true);
+      __ call(AddressLiteral(op->addr(), rspec));
+    } else if (op->code() == lir_optvirtual_call) {
+      RelocationHolder rspec = opt_virtual_call_Relocation::spec(0, true);
+      __ call(AddressLiteral(op->addr(), rspec));
+    }
+  } else if (op->code() == lir_static_call) {
+    uint method_index = _masm->code()->oop_recorder()->find_index(op->method()->constant_encoding());
+    RelocationHolder rspec = static_call_Relocation::spec(method_index, false);
+    __ call(AddressLiteral(op->addr(), rspec));
+  } else if (op->code() == lir_optvirtual_call) {
+    uint method_index = 0;
+    if (op->cha_monomorphic_target() != nullptr) {
+      method_index = _masm->code()->oop_recorder()->find_index(op->cha_monomorphic_target()->constant_encoding());
+    } else {
+      method_index = _masm->code()->oop_recorder()->find_index(op->method()->constant_encoding());
+    }
+    RelocationHolder rspec = opt_virtual_call_Relocation::spec(method_index, false);
+    __ call(AddressLiteral(op->addr(), rspec));
+  } else {
+    __ call(AddressLiteral(op->addr(), rtype));
+  }
   add_call_info(code_offset(), op->info());
   __ post_call_nop();
 }
 
 
 void LIR_Assembler::ic_call(LIR_OpJavaCall* op) {
-  __ ic_call(op->addr());
+  if (op->method()->is_method_handle_intrinsic()) {
+    __ ic_call(op->addr(), 0, true);
+  } else {
+    __ ic_call(op->addr());
+  }
   add_call_info(code_offset(), op->info());
   assert((__ offset() - NativeCall::instruction_size + NativeCall::displacement_offset) % BytesPerWord == 0,
          "must be aligned");

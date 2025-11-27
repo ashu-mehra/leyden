@@ -1163,6 +1163,8 @@ Method* LinkResolver::linktime_resolve_static_method(const LinkInfo& link_info, 
   Klass* resolved_klass = link_info.resolved_klass();
   Method* resolved_method;
   if (!resolved_klass->is_interface()) {
+    PerfTraceTime timer(SharedRuntime::_perf_lr_resolve_static_resolve_method_time);
+    AtomicAccess::inc(&SharedRuntime::_lr_resolve_static_resolve_method_ctr);
     resolved_method = resolve_method(link_info, Bytecodes::_invokestatic, CHECK_NULL);
   } else {
     resolved_method = resolve_interface_method(link_info, Bytecodes::_invokestatic, CHECK_NULL);
