@@ -499,9 +499,12 @@ static const char* get_type(Klass* k) {
   return type;
 }
 
+static int archived_entries_cnt = 0;
+
 void ConstantPool::remove_unshareable_entries() {
   ResourceMark rm;
   log_info(aot, resolve)("Archiving CP entries for %s", pool_holder()->name()->as_C_string());
+  archived_entries_cnt = 0;
   for (int cp_index = 1; cp_index < length(); cp_index++) { // cp_index 0 is unused
     int cp_tag = tag_at(cp_index).value();
     switch (cp_tag) {
@@ -531,8 +534,9 @@ void ConstantPool::remove_unshareable_entries() {
 
   if (cache() != nullptr) {
     // cache() is null if this class is not yet linked.
-    cache()->remove_unshareable_info();
+    archived_entries_cnt += cache()->remove_unshareable_info();
   }
+  log_info(aot, resolve)("Archived %d CP entries for %s", archived_entries_cnt, pool_holder()->name()->as_C_string());
 }
 
 void ConstantPool::remove_resolved_klass_if_non_deterministic(int cp_index) {
@@ -574,6 +578,7 @@ void ConstantPool::remove_resolved_klass_if_non_deterministic(int cp_index) {
     if (can_archive) {
       log.print(" => %s %s%s", k->name()->as_C_string(), get_type(k),
                 (!k->is_instance_klass() || pool_holder()->is_subtype_of(k)) ? "" : " (not supertype)");
+      archived_entries_cnt += 1;
     } else {
       Symbol* name = klass_name_at(cp_index);
       log.print(" => %s", name->as_C_string());

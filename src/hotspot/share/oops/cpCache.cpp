@@ -397,8 +397,11 @@ void ConstantPoolCache::record_gc_epoch() {
 }
 
 #if INCLUDE_CDS
-void ConstantPoolCache::remove_unshareable_info() {
+int archived_entries_cnt = 0;
+
+int ConstantPoolCache::remove_unshareable_info() {
   assert(CDSConfig::is_dumping_archive(), "sanity");
+  archived_entries_cnt = 0;
 
   if (_resolved_indy_entries != nullptr) {
     remove_resolved_indy_entries_if_non_deterministic();
@@ -420,6 +423,7 @@ void ConstantPoolCache::remove_unshareable_info() {
     }
   }
 #endif
+  return archived_entries_cnt;
 }
 
 void ConstantPoolCache::remove_resolved_field_entries_if_non_deterministic() {
@@ -456,6 +460,9 @@ void ConstantPoolCache::remove_resolved_field_entries_if_non_deterministic() {
                 cp->pool_holder()->name()->as_C_string(),
                 klass_name->as_C_string(), name->as_C_string(), signature->as_C_string(),
                 rfi->is_resolved(Bytecodes::_getstatic) || rfi->is_resolved(Bytecodes::_putstatic) ? " *** static" : "");
+      if (archived) {
+        archived_entries_cnt += 1;
+      }
     }
     ArchiveBuilder::alloc_stats()->record_field_cp_entry(archived, resolved && !archived);
   }
@@ -499,6 +506,7 @@ void ConstantPoolCache::remove_resolved_method_entries_if_non_deterministic() {
         log.print(" => %s%s",
                   resolved_klass->name()->as_C_string(),
                   (rme->is_resolved(Bytecodes::_invokestatic) ? " *** static" : ""));
+        archived_entries_cnt += 1;
       }
     }
     ArchiveBuilder::alloc_stats()->record_method_cp_entry(archived, resolved && !archived);
@@ -533,6 +541,9 @@ void ConstantPoolCache::remove_resolved_indy_entries_if_non_deterministic() {
                 cp_index, cp->pool_holder()->name()->as_C_string(), i);
       log.print(" %s %s.%s:%s", (archived ? "=>" : "  "), bsm_klass->as_C_string(),
                 bsm_name->as_C_string(), bsm_signature->as_C_string());
+      if (archived) {
+        archived_entries_cnt += 1;
+      }
     }
     ArchiveBuilder::alloc_stats()->record_indy_cp_entry(archived, resolved && !archived);
   }

@@ -174,6 +174,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   Klass*  _class_loader_klass;
   Symbol* _name;
   Symbol* _name_and_id;
+  bool    _is_aot_safe;
   JFR_ONLY(DEFINE_TRACE_ID_FIELD;)
 
   void set_next(ClassLoaderData* next);

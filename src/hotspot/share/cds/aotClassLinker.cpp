@@ -32,9 +32,11 @@
 #include "cds/lambdaFormInvokers.inline.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/dictionary.hpp"
+#include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmClasses.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/constantPool.inline.hpp"
 #include "oops/instanceKlass.hpp"
@@ -44,6 +46,12 @@
 AOTClassLinker::ClassesTable* AOTClassLinker::_vm_classes = nullptr;
 AOTClassLinker::ClassesTable* AOTClassLinker::_candidates = nullptr;
 GrowableArrayCHeap<InstanceKlass*, mtClassShared>* AOTClassLinker::_sorted_candidates = nullptr;
+
+static const unsigned INITIAL_TABLE_SIZE = 15889; // prime number
+static const unsigned MAX_TABLE_SIZE     = 1000000;
+typedef GrowableArrayCHeap<InstanceKlass*, mtClassShared> ClassList;
+typedef ResizeableHashTable<Symbol*, ClassList*, AnyObj::C_HEAP, mtClass> ClassLoaderIdToPrelinkedTable;
+ClassLoaderIdToPrelinkedTable* prelinked_table;
 
 #ifdef ASSERT
 bool AOTClassLinker::is_initialized() {
@@ -58,6 +66,8 @@ void AOTClassLinker::initialize() {
   _vm_classes = new (mtClass)ClassesTable();
   _candidates = new (mtClass)ClassesTable();
   _sorted_candidates = new GrowableArrayCHeap<InstanceKlass*, mtClassShared>(1000);
+
+  prelinked_table = new (mtClass) ClassLoaderIdToPrelinkedTable(INITIAL_TABLE_SIZE, MAX_TABLE_SIZE);
 
   for (auto id : EnumRange<vmClassID>{}) {
     add_vm_class(vmClasses::klass_at(id));
@@ -113,6 +123,28 @@ void AOTClassLinker::add_new_candidate(InstanceKlass* ik) {
   _candidates->put_when_absent(ik, true);
   _sorted_candidates->append(ik);
 
+  Symbol* loader_id;
+  if (ik->class_loader_data() == ClassLoaderData::the_null_class_loader_data()) { // bootloader
+    loader_id = SymbolTable::new_symbol("Bootloader");
+  } else {
+    loader_id = ik->class_loader_data()->name_and_id();
+  }
+  if (loader_id != nullptr) {
+    ClassList** class_list_ptr = prelinked_table->get(loader_id);
+    ClassList* class_list = nullptr;
+    if (class_list_ptr != nullptr) {
+      class_list = *class_list_ptr;
+    } else {
+      class_list = new ClassList(1000);
+      prelinked_table->put(loader_id, class_list);
+    }
+    class_list->append(ik);
+  } else {
+    if (log_is_enabled(Info, aot, link)) {
+      ResourceMark rm;
+      log_info(aot, link)("No classloader symbol for class %s", ik->external_name());
+    }
+  }
   if (log_is_enabled(Info, aot, link)) {
     ResourceMark rm;
     log_info(aot, link)("%s %s %p", class_category_name(ik), ik->external_name(), ik);
@@ -190,6 +222,63 @@ void AOTClassLinker::add_candidates() {
   }
 }
 
+static inline bool prelinked_table_equals(AOTLinkedClassTableForLoader* table, Symbol* loader_id, int len_unused) {
+  return table->loader_id() == loader_id;
+}
+
+class ArchivedPrelinkedTable : public OffsetCompactHashtable<Symbol*, AOTLinkedClassTableForLoader*,
+                                                             prelinked_table_equals> {};
+ArchivedPrelinkedTable _archived_prelinked_table;
+
+void AOTClassLinker::all_symbols_do(MetaspaceClosure* it) {
+  prelinked_table->iterate([&](Symbol* loader_id, ClassList* class_list) {
+    it->push(&loader_id);
+    return true;
+  });
+}
+
+void AOTClassLinker::serialize_prelinked_table_header(SerializeClosure* soc) {
+  _archived_prelinked_table.serialize_header(soc);
+}
+
+void AOTClassLinker::print_archived_prelinked_table() {
+  if (log_is_enabled(Info, aot, link)) {
+    ResourceMark rm;
+    _archived_prelinked_table.iterate([&](AOTLinkedClassTableForLoader* table) {
+      Array<InstanceKlass*>* class_list = table->class_list();
+      log_info(aot, link)("Class loader \"%s\" has %d classes in prelinked table", table->loader_id()->as_C_string(), class_list->length());
+      for (int i = 0; i < class_list->length(); i++) {
+        InstanceKlass* ik = class_list->at(i);
+        log_info(aot, link)("  %s", ik->external_name());
+      }
+    });
+  }
+}
+
+class CopyPrelinkTableToArchive : StackObj {
+private:
+  CompactHashtableWriter* _writer;
+  ArchiveBuilder* _builder;
+public:
+  CopyPrelinkTableToArchive(CompactHashtableWriter* writer) : _writer(writer),
+                                                              _builder(ArchiveBuilder::current())
+  {}
+
+  bool do_entry(Symbol* loader_id, ClassList* class_list) {
+    AOTLinkedClassTableForLoader* tableForLoader = (AOTLinkedClassTableForLoader*)ArchiveBuilder::ro_region_alloc(sizeof(AOTLinkedClassTableForLoader));
+    assert(_builder->has_been_archived(loader_id), "must be");
+    Symbol* buffered_sym = _builder->get_buffered_addr(loader_id);
+    tableForLoader->set_loader_id(buffered_sym);
+    tableForLoader->set_class_list(ArchiveUtils::archive_array(class_list));
+    ArchivePtrMarker::mark_pointer(tableForLoader->loader_id_addr());
+    ArchivePtrMarker::mark_pointer(tableForLoader->class_list_addr());
+    unsigned int hash = SystemDictionaryShared::hash_for_shared_dictionary((address)buffered_sym);
+    u4 delta = _builder->buffer_to_offset_u4((address)tableForLoader);
+    _writer->add(hash, delta);
+    return true;
+  }
+};
+
 void AOTClassLinker::write_to_archive() {
   assert(is_initialized(), "sanity");
   assert_at_safepoint();
@@ -200,6 +289,24 @@ void AOTClassLinker::write_to_archive() {
     table->set_boot2(write_classes(nullptr, false));
     table->set_platform(write_classes(SystemDictionary::java_platform_loader(), false));
     table->set_app(write_classes(SystemDictionary::java_system_loader(), false));
+
+    CompactHashtableStats stats;
+    CompactHashtableWriter writer(prelinked_table->number_of_entries(), &stats);
+    CopyPrelinkTableToArchive copy(&writer);
+    prelinked_table->iterate(&copy);
+    writer.dump(&_archived_prelinked_table, "archived prelinked table");
+
+    if (log_is_enabled(Info, aot, link)) {
+      ResourceMark rm;
+      prelinked_table->iterate([&](Symbol* loader_id, ClassList* class_list) {
+        log_info(aot, link)("Class loader \"%s\" has %d classes in prelinked table", loader_id->as_C_string(), class_list->length());
+        for (int i = 0; i < class_list->length(); i++) {
+          InstanceKlass* ik = class_list->at(i);
+          log_info(aot, link)("  %s", ik->external_name());
+        }
+        return true;
+      });
+    }
   }
 }
 

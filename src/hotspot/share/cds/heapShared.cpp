@@ -192,7 +192,7 @@ static ArchivableStaticFieldInfo archive_subgraph_entry_fields[] = {
   {"java/lang/module/Configuration",              "EMPTY_CONFIGURATION"},
   {"jdk/internal/math/FDBigInteger",              "archivedCaches"},
   {"java/lang/reflect/Proxy$ProxyBuilder",        "archivedData"},    // FIXME -- requires AOTClassLinking
-
+  //{"java/lang/ArchiveCustomLoaders",              "archivedCustomLoaders"},
 #ifndef PRODUCT
   {nullptr, nullptr}, // Extra slot for -XX:ArchiveHeapTestClass
 #endif

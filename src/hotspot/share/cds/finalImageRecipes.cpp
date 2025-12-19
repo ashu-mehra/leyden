@@ -164,6 +164,11 @@ void FinalImageRecipes::apply_recipes_for_constantpool(JavaThread* current) {
       InstanceKlass* ik = InstanceKlass::cast(_all_klasses->at(i));
       if (ik->is_loaded()) {
         ResourceMark rm(current);
+        LogStreamHandle(Trace, aot, resolve) log;
+        if (log.is_enabled()) {
+          log.print("Applying cp recipes for %s", ik->external_name());
+          log.print("\n");
+        }
         ConstantPool* cp = ik->constants();
         GrowableArray<bool> preresolve_list(cp->length(), cp->length(), false);
         for (int j = 0; j < cp_indices->length(); j++) {
@@ -178,6 +183,14 @@ void FinalImageRecipes::apply_recipes_for_constantpool(JavaThread* current) {
         if ((flags & CP_RESOLVE_INDY) != 0) {
           AOTConstantPoolResolver::preresolve_indy_cp_entries(current, ik, &preresolve_list);
         }
+      } else {
+        ResourceMark rm(current);
+        LogStreamHandle(Trace, aot, resolve) log;
+        if (log.is_enabled()) {
+          log.print("Skip applying cp recipes for %s - not loaded", ik->external_name());
+          log.print("\n");
+        }
+
       }
     }
   }

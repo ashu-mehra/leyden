@@ -79,6 +79,7 @@ void AOTLinkedClassBulkLoader::preload_classes_impl(TRAPS) {
   precond(CDSConfig::is_using_aot_linked_classes());
 
   ClassLoaderDataShared::restore_archived_modules_for_preloading_classes(THREAD);
+#if 1 
   Handle h_platform_loader(THREAD, SystemDictionary::java_platform_loader());
   Handle h_system_loader(THREAD, SystemDictionary::java_system_loader());
 
@@ -95,6 +96,21 @@ void AOTLinkedClassBulkLoader::preload_classes_impl(TRAPS) {
   initiate_loading(THREAD, "app", h_system_loader, table->boot2());
   initiate_loading(THREAD, "app", h_system_loader, table->platform());
   preload_classes_in_table(table->app(), "app", h_system_loader, CHECK);
+#endif
+#if 0
+  Array<InstanceKlass*>* class_list = SymbolTable::new_symbol("Bootloader");
+  preload_classes_in_table(class_list, "boot", Handle(), CHECK);
+
+  Handle h_platform_loader(THREAD, SystemDictionary::java_platform_loader());
+  ClassLoaderData* loader_data = java_lang_ClassLoader::loader_data(h_platform_loader());
+  class_list = AOTClassLinker::get_class_list(loader_data->name_and_id());
+  preload_classes_in_table(class_list, "plat", h_platform_loader, CHECK);
+
+  Handle h_system_loader(THREAD, SystemDictionary::java_system_loader());
+  loader_data = java_lang_ClassLoader::loader_data(h_system_loader());
+  class_list = AOTClassLinker::get_class_list(loader_data->name_and_id());
+  preload_classes_in_table(class_list, "app", h_system_loader, CHECK);
+#endif
 }
 
 void AOTLinkedClassBulkLoader::preload_classes_in_table(Array<InstanceKlass*>* classes,

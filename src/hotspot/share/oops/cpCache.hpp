@@ -192,7 +192,7 @@ class ConstantPoolCache: public MetaspaceObj {
   static ByteSize method_entries_offset()          { return byte_offset_of(ConstantPoolCache, _resolved_method_entries); }
 
 #if INCLUDE_CDS
-  void remove_unshareable_info();
+  int remove_unshareable_info();
 #endif
 
  public:
