@@ -30,9 +30,9 @@
 AOTLinkedClassTable AOTLinkedClassTable::_instance;
 
 void AOTLinkedClassTable::serialize(SerializeClosure* soc) {
-  soc->do_ptr((void**)&_boot1);
-  soc->do_ptr((void**)&_boot2);
-  soc->do_ptr((void**)&_platform);
-  soc->do_ptr((void**)&_app);
+  soc->do_ptr((void**)&_builtin_loader_classes);
+  soc->do_int(&_non_javabase_classes_start);
+  soc->do_int(&_platform_classes_start);
+  soc->do_int(&_app_classes_start);
 }
 

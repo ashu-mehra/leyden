@@ -195,17 +195,41 @@ void AOTClassLinker::write_to_archive() {
   assert_at_safepoint();
 
   if (CDSConfig::is_dumping_aot_linked_classes()) {
-    AOTLinkedClassTable* table = AOTLinkedClassTable::get();
-    table->set_boot1(write_classes(nullptr, true));
-    table->set_boot2(write_classes(nullptr, false));
-    table->set_platform(write_classes(SystemDictionary::java_platform_loader(), false));
-    table->set_app(write_classes(SystemDictionary::java_system_loader(), false));
+   write_classes();
   }
 }
 
-Array<InstanceKlass*>* AOTClassLinker::write_classes(oop class_loader, bool is_javabase) {
+void AOTClassLinker::write_classes() {
   ResourceMark rm;
   GrowableArray<InstanceKlass*> list;
+
+  AOTLinkedClassTable* table = AOTLinkedClassTable::get();
+  write_classes(nullptr, true, list);
+  int non_javabase_classes_start = list.length();
+  write_classes(nullptr, false, list);
+  int plat_classes_start = list.length();
+  write_classes(SystemDictionary::java_platform_loader(), false, list);
+  int app_classes_start = list.length();
+  write_classes(SystemDictionary::java_system_loader(), false, list);
+  if (list.length() == 0) {
+    table->set_builtin_loader_classes(nullptr);
+  } else {
+    table->set_builtin_loader_classes(ArchiveUtils::archive_array(&list));
+  }
+  if (log_is_enabled(Info, aot, link)) {
+    ResourceMark rm;
+    log_info(aot, link)("builtin_loader boundaries:");
+    log_info(aot, link)(" non_javabase_classes_start=%d", non_javabase_classes_start);
+    log_info(aot, link)(" plat_classes_start=%d", plat_classes_start);
+    log_info(aot, link)(" app_classes_start=%d", app_classes_start);
+    log_info(aot, link)("total=%d", list.length());
+  }
+
+  table->set_loader_boundaries(non_javabase_classes_start, plat_classes_start, app_classes_start);
+}
+
+void AOTClassLinker::write_classes(oop class_loader, bool is_javabase, GrowableArray<InstanceKlass*>& class_list) {
+  int count = 0;
 
   for (int i = 0; i < _sorted_candidates->length(); i++) {
     InstanceKlass* ik = _sorted_candidates->at(i);
@@ -216,15 +240,13 @@ Array<InstanceKlass*>* AOTClassLinker::write_classes(oop class_loader, bool is_j
       continue;
     }
 
-    list.append(ArchiveBuilder::current()->get_buffered_addr(ik));
+    class_list.append(ArchiveBuilder::current()->get_buffered_addr(ik));
+    count += 1;
   }
 
-  if (list.length() == 0) {
-    return nullptr;
-  } else {
-    const char* category = class_category_name(list.at(0));
-    log_info(aot, link)("wrote %d class(es) for category %s", list.length(), category);
-    return ArchiveUtils::archive_array(&list);
+  if (count != 0) {
+    const char* category = class_category_name(class_list.last());
+    log_info(aot, link)("wrote %d class(es) for category %s", count, category);
   }
 }
 
@@ -302,4 +324,11 @@ const char* AOTClassLinker::class_category_name(AOTLinkedClassCategory category)
   default:
       return "unreg";
   }
+}
+
+const char* AOTClassLinker::category_name(Handle loader) {
+  if (SystemDictionary::is_boot_class_loader(loader())) return "boot";
+  if (SystemDictionary::is_platform_class_loader(loader())) return "plat";
+  if (SystemDictionary::is_system_class_loader(loader())) return "app";
+  return "unreg";
 }

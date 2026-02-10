@@ -85,7 +85,8 @@ class AOTClassLinker :  AllStatic {
   static void add_vm_class(InstanceKlass* ik);
   static void add_new_candidate(InstanceKlass* ik);
 
-  static Array<InstanceKlass*>* write_classes(oop class_loader, bool is_javabase);
+  static void write_classes();
+  static void write_classes(oop class_loader, bool is_javabase, GrowableArray<InstanceKlass*>& class_list);
   static int count_public_classes(oop loader);
 
 public:
@@ -114,6 +115,7 @@ public:
   // Used in logging: "boot1", "boot2", "plat", "app" and "unreg";
   static const char* class_category_name(AOTLinkedClassCategory category);
   static const char* class_category_name(Klass* k);
+  static const char* category_name(Handle loader);
 };
 
 // AOT-linked classes are divided into different categories and are loaded

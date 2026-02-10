@@ -50,20 +50,16 @@ enum class AOTLinkedClassCategory : int;
 // executed. Future RFEs will move these calls to earlier stages.
 class AOTLinkedClassBulkLoader :  AllStatic {
   static void preload_classes_impl(TRAPS);
-  static void preload_classes_in_table(Array<InstanceKlass*>* classes,
-                                       const char* category_name, Handle loader, TRAPS);
-  static void initiate_loading(JavaThread* current, const char* category, Handle initiating_loader, Array<InstanceKlass*>* classes);
   static void link_classes_impl(TRAPS);
-  static void link_classes_in_table(Array<InstanceKlass*>* classes, TRAPS);
   static void init_non_javabase_classes_impl(TRAPS);
-  static void init_classes_for_loader(Handle class_loader, Array<InstanceKlass*>* classes, TRAPS);
+  static void init_classes_for_loader(Array<InstanceKlass*>* classes, int start_idx, int end_idx, TRAPS);
   static void replay_training_at_init(Array<InstanceKlass*>* classes, TRAPS) NOT_CDS_RETURN;
 
 #ifdef ASSERT
   static void validate_module_of_preloaded_classes();
-  static void validate_module_of_preloaded_classes_in_table(Array<InstanceKlass*>* classes,
-                                                            const char* category_name, Handle loader);
-  static void validate_module(Klass* k, const char* category_name, oop module_oop);
+  static void validate_module_of_preloaded_classes_in_table(Array<InstanceKlass*>* classes, int start_idx, int end_idx,
+                                                            Handle loader);
+  static void validate_module(Klass* k, oop module_oop);
 #endif
 
 public:
@@ -76,6 +72,10 @@ public:
 
   static void replay_training_at_init_for_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static void print_counters_on(outputStream* st) NOT_CDS_RETURN;
+
+  static void preload_classes_for_loader(Handle loader, Array<InstanceKlass*>* classes, int start_idx, int end_idx, TRAPS);
+  static void mark_as_initiating_loader(JavaThread* current, Handle initiating_loader,
+                                        Array<InstanceKlass*>* classes, int start_idx, int end_idx);
 };
 
 #endif // SHARE_CDS_AOTLINKEDCLASSBULKLOADER_HPP

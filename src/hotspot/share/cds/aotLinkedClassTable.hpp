@@ -41,30 +41,29 @@ class SerializeClosure;
 class AOTLinkedClassTable {
   static AOTLinkedClassTable _instance;
 
-  Array<InstanceKlass*>* _boot1; // boot classes in java.base module
-  Array<InstanceKlass*>* _boot2; // boot classes in all other (named and unnamed) modules,
-                                 // including classes from -Xbootclasspath/a
-  Array<InstanceKlass*>* _platform;
-  Array<InstanceKlass*>* _app;
+  Array<InstanceKlass*>* _builtin_loader_classes;
+  int _non_javabase_classes_start;
+  int _platform_classes_start;
+  int _app_classes_start;
 
 public:
   AOTLinkedClassTable() :
-    _boot1(nullptr), _boot2(nullptr),
-    _platform(nullptr), _app(nullptr) {}
-
+    _builtin_loader_classes(nullptr), _non_javabase_classes_start(0), _platform_classes_start(0), _app_classes_start(0) {}
   static AOTLinkedClassTable* get() {
     return &_instance;
   }
 
-  Array<InstanceKlass*>* boot1()    const { return _boot1;    }
-  Array<InstanceKlass*>* boot2()    const { return _boot2;    }
-  Array<InstanceKlass*>* platform() const { return _platform; }
-  Array<InstanceKlass*>* app()      const { return _app;      }
+  Array<InstanceKlass*>* builtin_loader_classes() const { return _builtin_loader_classes; }
+  void set_builtin_loader_classes(Array<InstanceKlass*>* value) { _builtin_loader_classes = value; }
 
-  void set_boot1   (Array<InstanceKlass*>* value) { _boot1    = value; }
-  void set_boot2   (Array<InstanceKlass*>* value) { _boot2    = value; }
-  void set_platform(Array<InstanceKlass*>* value) { _platform = value; }
-  void set_app     (Array<InstanceKlass*>* value) { _app      = value; }
+  int non_javabase_classes_start() const { return _non_javabase_classes_start; }
+  int platform_classes_start() const { return _platform_classes_start; }
+  int app_classes_start() const { return _app_classes_start; }
+  void set_loader_boundaries(int non_javabase_classes_start, int plat_classes_start, int app_classes_start) {
+    _non_javabase_classes_start = non_javabase_classes_start;
+    _platform_classes_start = plat_classes_start;
+    _app_classes_start = app_classes_start;
+  }
 
   void serialize(SerializeClosure* soc);
 };
