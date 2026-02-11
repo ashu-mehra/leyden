@@ -77,6 +77,8 @@ class AOTClassLinker :  AllStatic {
   // Classes that should be automatically loaded into system dictionary at VM start-up
   static ClassesTable* _candidates;
 
+  static AOTLinkedClassTable _class_table;
+
   // Sorted list such that super types come first.
   static GrowableArrayCHeap<InstanceKlass*, mtClassShared>* _sorted_candidates;
 

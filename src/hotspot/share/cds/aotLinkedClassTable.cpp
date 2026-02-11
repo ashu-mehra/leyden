@@ -36,3 +36,50 @@ void AOTLinkedClassTable::serialize(SerializeClosure* soc) {
   soc->do_int(&_app_classes_start);
 }
 
+
+void AOTLinkedClassTable::write_classes() {
+  write_classes(nullptr, true, list);
+  int non_javabase_classes_start = list.length();
+  write_classes(nullptr, false, list);
+  int plat_classes_start = list.length();
+  write_classes(systemdictionary::java_platform_loader(), false, list);
+  int app_classes_start = list.length();
+  write_classes(systemdictionary::java_system_loader(), false, list);
+  if (list.length() == 0) {
+    table->set_builtin_loader_classes(nullptr);
+  } else {
+    table->set_builtin_loader_classes(archiveutils::archive_array(&list));
+  }
+  if (log_is_enabled(info, aot, link)) {
+    resourcemark rm;
+    log_info(aot, link)("builtin_loader boundaries:");
+    log_info(aot, link)(" non_javabase_classes_start=%d", non_javabase_classes_start);
+    log_info(aot, link)(" plat_classes_start=%d", plat_classes_start);
+    log_info(aot, link)(" app_classes_start=%d", app_classes_start);
+    log_info(aot, link)("total=%d", list.length());
+  }
+
+  table->set_loader_boundaries(non_javabase_classes_start, plat_classes_start, app_classes_start);
+}
+
+void AOTLinkedClassTable::write_classes(GrowableArray<Klass*>* class_list, bool is_javabase) {
+  int count = 0;
+  for (int i = 0; i < class_list->length(); i++) {
+    InstanceKlass* ik = _sorted_candidates->at(i);
+    if (ik->class_loader() != class_loader) {
+      continue;
+    }
+    if ((ik->module() == ModuleEntryTable::javabase_moduleEntry()) != is_javabase) {
+      continue;
+    }
+
+    class_list.append(ArchiveBuilder::current()->get_buffered_addr(ik));
+    count += 1;
+  }
+
+  if (count != 0) {
+    const char* category = class_category_name(class_list.last());
+    log_info(aot, link)("wrote %d class(es) for category %s", count, category);
+  }
+}
+

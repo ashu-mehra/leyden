@@ -66,6 +66,8 @@ public:
   }
 
   void serialize(SerializeClosure* soc);
+
+  void write_classes(GrowableArray<Klass*>* class_list);
 };
 
 #endif // SHARE_CDS_AOTLINKEDCLASSTABLE_HPP
