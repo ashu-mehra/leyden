@@ -92,7 +92,6 @@ class CDSProtectionDomain : AllStatic {
   static OopHandle _shared_jar_manifests;
 
 public:
-  static void initialize(TRAPS);
   // Package handling:
   //
   // 1. For named modules in the runtime image

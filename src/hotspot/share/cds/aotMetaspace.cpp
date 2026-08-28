@@ -373,7 +373,10 @@ void AOTMetaspace::post_initialize(TRAPS) {
       dynamic_mapinfo->unmap_region(AOTMetaspace::bm);
     }
 
-    CDSProtectionDomain::initialize(CHECK);
+    int size = AOTClassLocationConfig::runtime()->length();
+    if (size > 0) {
+      CDSProtectionDomain::allocate_shared_data_arrays(size, CHECK);
+    }
   }
 }
 

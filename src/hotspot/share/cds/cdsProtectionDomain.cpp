@@ -157,13 +157,6 @@ static Handle get_pd_from_mod_entry(Handle class_loader, ModuleEntry* mod, TRAPS
   return protection_domain;
 }
 
-void CDSProtectionDomain::initialize(TRAPS) {
-  int size = AOTClassLocationConfig::runtime()->length();
-  if (size > 0) {
-    allocate_shared_data_arrays(size, CHECK);
-  }
-}
-
 void CDSProtectionDomain::exercise_runtime_cds_code(const char* dummy_manifest, const char* dummy_jar, TRAPS) {
   create_jar_manifest(dummy_manifest, strlen(dummy_manifest), CHECK);
   to_file_URL(dummy_jar, CHECK);
@@ -175,8 +168,8 @@ void CDSProtectionDomain::exercise_runtime_cds_code(const char* dummy_manifest, 
 Handle CDSProtectionDomain::init_security_info(Handle class_loader, InstanceKlass* ik, PackageEntry* pkg_entry, TRAPS) {
   int index = ik->shared_classpath_index();
   assert(index >= 0, "Sanity");
+  const AOTClassLocation* cl = AOTClassLocationConfig::runtime()->class_location_at(index);
   Symbol* class_name = ik->name();
-  AOTClassLocation* cl = AOTClassLocationConfig::runtime()->class_locations()->at(index);
   if (cl->is_modules_image()) {
     // For shared app/platform classes originated from the run-time image:
     //   The ProtectionDomains are cached in the corresponding ModuleEntries

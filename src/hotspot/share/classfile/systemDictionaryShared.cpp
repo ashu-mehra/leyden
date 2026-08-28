@@ -807,10 +807,6 @@ void SystemDictionaryShared::init_dumptime_info_from_preimage(InstanceKlass* k) 
   } else if (SystemDictionary::is_system_class_loader(k->class_loader())) {
     AOTClassLocationConfig::dumptime_set_has_app_classes();
   }
-
-  if (k->defined_by_other_loaders() && !k->defined_by_aot_safe_custom_loader()) {
-    SystemDictionaryShared::copy_unregistered_class_size_and_crc32(k);
-  }
 }
 
 // Check if a class or any of its supertypes has been redefined.
