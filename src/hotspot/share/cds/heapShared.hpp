@@ -241,7 +241,7 @@ private:
 
 public: // solaris compiler wants this for RunTimeKlassSubGraphInfoTable
   inline static bool record_equals_compact_hashtable_entry(
-       const ArchivedKlassSubGraphInfoRecord* value, const Klass* key, int len) {
+       const ArchivedKlassSubGraphInfoRecord* value, const Klass* key, int len_unused) {
     return (value->klass() == key);
   }
 

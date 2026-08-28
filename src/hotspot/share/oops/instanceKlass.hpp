@@ -345,7 +345,7 @@ class InstanceKlass: public Klass {
 
   // Stores id of the classloader if this klass is loaded by a
   // custom loader compatible with AOTCache.
-  Symbol*     _classloader_aot_id;
+  CDS_JAVA_HEAP_ONLY(Symbol* _classloader_aot_id;)
 
  public:
 
@@ -423,9 +423,9 @@ class InstanceKlass: public Klass {
   bool trust_final_fields()                { return _misc_flags.trust_final_fields(); }
   void set_trust_final_fields(bool value)  { _misc_flags.set_trust_final_fields(value); }
 
-  Symbol* classloader_aot_id() const             { return _classloader_aot_id; }
-  void set_classloader_aot_id(Symbol* aot_id)    { _classloader_aot_id = aot_id; }
-  bool defined_by_aot_safe_custom_loader() const { return defined_by_other_loaders() && _classloader_aot_id != nullptr; }
+  Symbol* classloader_aot_id() const             CDS_JAVA_HEAP_ONLY({ return _classloader_aot_id; }) NOT_CDS_JAVA_HEAP_RETURN_(nullptr)
+  void set_classloader_aot_id(Symbol* aot_id)    CDS_JAVA_HEAP_ONLY({ _classloader_aot_id = aot_id; }) NOT_CDS_JAVA_HEAP_RETURN
+  bool defined_by_aot_safe_custom_loader() const CDS_JAVA_HEAP_ONLY({ return defined_by_other_loaders() && _classloader_aot_id != nullptr; }) NOT_CDS_JAVA_HEAP_RETURN_(false)
 
 
   // Java itable

@@ -175,11 +175,11 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   Klass*  _class_loader_klass;
   Symbol* _name;
   Symbol* _name_and_id;
-#if INCLUDE_CDS
+#if INCLUDE_CDS_JAVA_HEAP
   Symbol* _aot_identity;
   // _aot_locations is only needed in training and assembly phase
   GrowableArrayCHeap<AOTClassLocation*, mtClassShared>* _aot_locations;
-#endif /* INCLUDE_CDS */
+#endif /* INCLUDE_CDS_JAVA_HEAP */
   JFR_ONLY(DEFINE_TRACE_ID_FIELD;)
 
   void set_next(ClassLoaderData* next);
@@ -367,12 +367,12 @@ private:
   const char* loader_name_and_id() const;
   Symbol* name_and_id() const { return _name_and_id; }
 
-  Symbol* aot_identity() const CDS_ONLY({ return _aot_identity; }) NOT_CDS_RETURN_(nullptr)
-  void set_aot_identity(Symbol* aot_id) NOT_CDS_RETURN;
-  Symbol* parent_aot_id() const NOT_CDS_RETURN_(nullptr);
-  bool is_aot_safe_custom_loader() const NOT_CDS_RETURN_(false);
+  Symbol* aot_identity() const CDS_JAVA_HEAP_ONLY({ return _aot_identity; }) NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  void set_aot_identity(Symbol* aot_id) NOT_CDS_JAVA_HEAP_RETURN;
+  Symbol* parent_aot_id() const NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  bool is_aot_safe_custom_loader() const NOT_CDS_JAVA_HEAP_RETURN_(false);
 
-  void set_classpath(const char* classpath) NOT_CDS_RETURN;
+  void set_classpath(const char* classpath) NOT_CDS_JAVA_HEAP_RETURN;
 
   GrowableArrayCHeap<AOTClassLocation*, mtClassShared>* aot_locations() const CDS_ONLY({ return _aot_locations; }) NOT_CDS_RETURN_(nullptr)
   void set_aot_locations(const char* classpath) NOT_CDS_RETURN;

@@ -275,8 +275,11 @@ ModuleEntry::ModuleEntry(Handle module_handle,
     _has_default_read_edges(false),
     _must_walk_reads(false),
     _is_open(is_open),
-    _is_patched(false),
-    _archived_module_index(-1) {
+    _is_patched(false)
+#if INCLUDE_CDS_JAVA_HEAP
+    , _archived_module_index(-1)
+#endif
+{
 
   // Initialize fields specific to a ModuleEntry
   if (_name == nullptr) {
@@ -465,7 +468,7 @@ void ModuleEntry::restore_archived_oops(ClassLoaderData* loader_data) {
   java_lang_Module::set_module_entry(module_handle(), this);
 
   // For AOT-safe custom loaders java.lang.Module would point to the scratch java.lang.ClassLoader object
-  // created during the assembly phase. Now that we jave the correct java.lang.ClassLoader object
+  // created during the assembly phase. Now that we have the correct java.lang.ClassLoader object
   // update java.lang.Module object to point to it.
   if (loader_data->is_aot_safe_custom_loader()) {
     assert(CustomLoaderSupport::is_scratch_loader(java_lang_Module::loader(module_handle())),

@@ -519,8 +519,6 @@ void Modules::check_archived_module_oop(oop orig_module_obj) {
       } else if (SystemDictionary::is_system_class_loader(loader_data->class_loader())) {
         assert(!_seen_system_unnamed_module, "only once");
         _seen_system_unnamed_module = true;
-      } else {
-        //ShouldNotReachHere();
       }
     }
   }

@@ -30,8 +30,8 @@ class Handle;
 
 class URLClassLoaderSupport {
 public:
-  static void initialize(TRAPS);
-  static Handle create_urlclassloader(Symbol* parent_id, Array<AOTClassLocation*>* cp_locations, TRAPS);
+  static void initialize(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
+  static Handle create_urlclassloader(Symbol* parent_id, Array<AOTClassLocation*>* cp_locations, TRAPS) NOT_CDS_JAVA_HEAP_RETURN_(Handle());
 };
 
 #endif // SHARE_CDS_URLCLASSLOADER_SUPPORT_HPP

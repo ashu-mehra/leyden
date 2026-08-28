@@ -156,9 +156,12 @@ ClassLoaderData::ClassLoaderData(Handle h_class_loader, bool has_class_mirror_ho
   _deallocate_list(nullptr),
   _next(nullptr),
   _unloading_next(nullptr),
-  _class_loader_klass(nullptr), _name(nullptr), _name_and_id(nullptr),
-  _aot_identity(aot_id),
-  _aot_locations(nullptr) {
+  _class_loader_klass(nullptr), _name(nullptr), _name_and_id(nullptr)
+#if INCLUDE_CDS_JAVA_HEAP
+  , _aot_identity(aot_id)
+  , _aot_locations(nullptr)
+#endif // INCLUDE_CDS_JAVA_HEAP
+{
 
   if (!h_class_loader.is_null()) {
     _class_loader = _handles.add(h_class_loader());
@@ -171,6 +174,7 @@ ClassLoaderData::ClassLoaderData(Handle h_class_loader, bool has_class_mirror_ho
     // and before calling anything that call class_loader().
     initialize_holder(h_class_loader);
 
+#if INCLUDE_CDS_JAVA_HEAP
     if (CDSConfig::supports_custom_loaders()) {
       if (SystemDictionary::is_platform_class_loader(h_class_loader())) {
         assert(_aot_identity == nullptr, "should not be set");
@@ -183,6 +187,7 @@ ClassLoaderData::ClassLoaderData(Handle h_class_loader, bool has_class_mirror_ho
         ClassLoaderAotIdTable::add_entry(_aot_identity, this);
       }
     }
+#endif // INCLUDE_CDS_JAVA_HEAP
 
     // A ClassLoaderData created solely for a non-strong hidden class should never
     // have a ModuleEntryTable or PackageEntryTable created for it.
@@ -202,7 +207,7 @@ ClassLoaderData::ClassLoaderData(Handle h_class_loader, bool has_class_mirror_ho
   JFR_ONLY(INIT_ID(this);)
 }
 
-#if INCLUDE_CDS
+#if INCLUDE_CDS_JAVA_HEAP
 
 void ClassLoaderData::set_aot_identity(Symbol* aot_id) {
   assert(aot_id != nullptr, "must not be null");
@@ -246,7 +251,7 @@ void ClassLoaderData::set_aot_locations(const char* classpath) {
   }
   _aot_locations = locations;
 }
-#endif /* INCLUDE_CDS */
+#endif /* INCLUDE_CDS_JAVA_HEAP */
 
 ClassLoaderData::ChunkedHandleList::~ChunkedHandleList() {
   Chunk* c = _head;
@@ -843,6 +848,10 @@ ClassLoaderData::~ClassLoaderData() {
   if (_name_and_id != nullptr) {
     _name_and_id->decrement_refcount();
   }
+#if INCLUDE_CDS_JAVA_HEAP
+  if (_aot_identity != nullptr) {
+    _aot_identity->decrement_refcount();
+  }
   if (_aot_locations != nullptr) {
     for (int i = 0; i < _aot_locations->length(); i++) {
       // AOTClassLocation is allocated using os::malloc() in AOTClassLocation::allocate(),
@@ -852,6 +861,7 @@ ClassLoaderData::~ClassLoaderData() {
     delete _aot_locations;
     _aot_locations = nullptr;
   }
+#endif // INCLUDE_CDS_JAVA_HEAP
 }
 
 // Returns true if this class loader data is for the app class loader

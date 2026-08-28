@@ -134,7 +134,9 @@ extern Mutex*   UnregisteredClassesTable_lock;   // UnregisteredClassesTableTabl
 extern Mutex*   LambdaFormInvokers_lock;         // Protecting LambdaFormInvokers::_lambdaform_lines
 extern Mutex*   ScratchObjects_lock;             // Protecting _scratch_xxx_table in heapShared.cpp
 extern Mutex*   FinalImageRecipes_lock;          // Protecting the tables used by FinalImageRecipes.
-extern Mutex*   CustomLoaderId_lock;             // lock to synchronize adding user-defined loader id to the global table
+#if INCLUDE_CDS_JAVA_HEAP
+extern Mutex*   ClassLoaderAotIdTable_lock;      // lock to synchronize addition of user-defined loader's AOT Id to the global table
+#endif // INCLUDE_CDS_JAVA_HEAP
 #endif // INCLUDE_CDS
 #if INCLUDE_JFR
 extern Mutex*   JfrStacktrace_lock;              // used to guard access to the JFR stacktrace table

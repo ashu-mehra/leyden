@@ -73,8 +73,8 @@ class Handle {
 
  public:
   // Constructors
-  inline Handle(Thread* thread, oop obj);
   Handle()                                       { _handle = nullptr; }
+  inline Handle(Thread* thread, oop obj);
 
   // General access
   oop     operator () () const                   { return obj(); }

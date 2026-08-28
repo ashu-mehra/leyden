@@ -3066,7 +3066,7 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
   if (CDSConfig::is_dumping_full_module_graph() && (defined_by_builtin_loader() || defined_by_aot_safe_custom_loader())) {
     it->push(&_package_entry);
   }
-  it->push(&_classloader_aot_id);
+  CDS_JAVA_HEAP_ONLY(it->push(&_classloader_aot_id);)
 }
 
 #if INCLUDE_CDS

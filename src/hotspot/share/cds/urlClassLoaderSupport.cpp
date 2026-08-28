@@ -22,6 +22,8 @@
  *
  */
 
+#if INCLUDE_CDS_JAVA_HEAP
+
 #include "cds/aotClassLocation.hpp"
 #include "cds/customLoaderSupport.hpp"
 #include "cds/urlClassLoaderSupport.hpp"
@@ -81,3 +83,5 @@ Handle URLClassLoaderSupport::create_urlclassloader(Symbol* parent_id, Array<AOT
   _urlclassloader_instance_list->append(cl_handle);
   return Handle(THREAD, cl_handle.resolve());
 }
+
+#endif // INCLUDE_CDS_JAVA_HEAP

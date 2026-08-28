@@ -2311,7 +2311,7 @@ WB_END
 WB_ENTRY(jboolean, WB_IsAOTSafeCustomLoader(JNIEnv* env, jobject wb, jobject loader))
   oop class_loader_oop = JNIHandles::resolve(loader);
   ClassLoaderData* cld = java_lang_ClassLoader::loader_data_acquire(class_loader_oop);
-return cld->is_aot_safe_custom_loader();
+  return cld->is_aot_safe_custom_loader();
 WB_END
 
 WB_ENTRY(void, WB_LinkClass(JNIEnv* env, jobject wb, jclass clazz))

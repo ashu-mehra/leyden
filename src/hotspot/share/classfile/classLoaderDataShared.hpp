@@ -86,11 +86,11 @@ public:
   static void restore_java_system_loader_from_archive(ClassLoaderData* loader_data);
   static ModuleEntry* archived_boot_unnamed_module();
   static ModuleEntry* archived_unnamed_module(ClassLoaderData* loader_data);
-#endif // INCLUDE_CDS_JAVA_HEAP
-  static bool is_full_module_graph_loaded() { return _full_module_graph_loaded; }
   static void restore_custom_loader_data_from_archive(ClassLoaderData* loader_data, CustomLoaderInfo* cl_info);
   static ArchivedClassLoaderData* get_archived_cld(Symbol* loader_id);
   static void set_archived_index_for(oop loader);
+#endif // INCLUDE_CDS_JAVA_HEAP
+  static bool is_full_module_graph_loaded() { return _full_module_graph_loaded; }
 };
 
 #endif // SHARE_CLASSFILE_CLASSLOADERDATASHARED_HPP

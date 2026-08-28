@@ -3530,6 +3530,7 @@ JVM_ENTRY(jobject, JVM_NewInstanceFromConstructor(JNIEnv *env, jobject c, jobjec
 JVM_END
 
 JVM_ENTRY(jboolean, JVM_RegisterURLClassLoaderForAOTLinking(JNIEnv *env, jobject loader, jobject parent, jstring classpath))
+#if INCLUDE_CDS_JAVA_HEAP
   if (CDSConfig::supports_custom_loaders()) {
     ResourceMark rm(THREAD);
     Symbol* parent_aot_id;
@@ -3551,7 +3552,7 @@ JVM_ENTRY(jboolean, JVM_RegisterURLClassLoaderForAOTLinking(JNIEnv *env, jobject
     Symbol* aot_id_sym = SymbolTable::new_symbol(aot_id);
 
     if (!ClassLoaderAotIdTable::reserve_id(aot_id_sym)) {
-      return false;
+      return JNI_FALSE;
     }
 
     Handle h_loader(THREAD, JNIHandles::resolve_non_null(loader));
@@ -3572,6 +3573,7 @@ JVM_ENTRY(jboolean, JVM_RegisterURLClassLoaderForAOTLinking(JNIEnv *env, jobject
     }
     return JNI_TRUE;
   }
+#endif // INCLUDE_CDS_JAVA_HEAP
   return JNI_FALSE;
 JVM_END
 

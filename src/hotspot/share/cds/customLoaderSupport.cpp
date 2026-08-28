@@ -22,6 +22,8 @@
  *
  */
 
+#if INCLUDE_CDS_JAVA_HEAP
+
 #include "cds/aotClassLocation.hpp"
 #include "cds/aotLogging.hpp"
 #include "cds/archiveBuilder.hpp"
@@ -53,7 +55,7 @@ void ClassLoaderAotIdTable::create_table() {
 }
 
 bool ClassLoaderAotIdTable::reserve_id(Symbol* id) {
-  MutexLocker mu(CustomLoaderId_lock, Mutex::_no_safepoint_check_flag);
+  MutexLocker mu(ClassLoaderAotIdTable_lock, Mutex::_no_safepoint_check_flag);
   bool created = false;
   _loader_id_table->put_if_absent(id, &created);
   return created;
@@ -251,3 +253,5 @@ bool CustomLoaderSupport::is_scratch_loader(oop loader) {
   });
   return found;
 }
+
+#endif // INCLUDE_CDS_JAVA_HEAP
